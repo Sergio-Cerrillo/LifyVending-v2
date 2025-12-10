@@ -36,7 +36,7 @@ export function Navigation() {
           <Link href="/" className="flex items-center gap-4 group">
             <div className="relative w-20 h-20 flex items-center justify-center transform group-hover:scale-110 transition-all duration-300">
               <Image
-                src="/LifyVending/logo.png"
+                src="/logo.png"
                 alt="Lify Vending Logo"
                 width={80}
                 height={80}

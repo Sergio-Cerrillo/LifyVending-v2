@@ -7,8 +7,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  basePath: '/LifyVending',
-  assetPrefix: '/LifyVending/',
   trailingSlash: true,
 }
 
