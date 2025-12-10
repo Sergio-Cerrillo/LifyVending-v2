@@ -1,9 +1,0 @@
-1:"$Sreact.fragment"
-2:I[13474,["/_next/static/chunks/14443ae9433626da.js","/_next/static/chunks/ee5203204ffb049b.js","/_next/static/chunks/a69678edbba453ec.js"],"Navigation"]
-3:I[67114,["/_next/static/chunks/14443ae9433626da.js","/_next/static/chunks/ee5203204ffb049b.js","/_next/static/chunks/a69678edbba453ec.js"],"CatalogoHero"]
-4:I[45534,["/_next/static/chunks/14443ae9433626da.js","/_next/static/chunks/ee5203204ffb049b.js","/_next/static/chunks/a69678edbba453ec.js"],"ProductosGrid"]
-5:I[76841,["/_next/static/chunks/14443ae9433626da.js","/_next/static/chunks/ee5203204ffb049b.js","/_next/static/chunks/a69678edbba453ec.js"],"Footer"]
-6:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/247eb132b7f7b574.js"],"OutletBoundary"]
-7:"$Sreact.suspense"
-0:{"buildId":"lG2jbScYrkNDZxASxAJuX","rsc":["$","$1","c",{"children":[["$","main",null,{"className":"min-h-screen","children":[["$","$L2",null,{}],["$","$L3",null,{}],["$","$L4",null,{}],["$","$L5",null,{}]]}],[["$","script","script-0",{"src":"/_next/static/chunks/ee5203204ffb049b.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/a69678edbba453ec.js","async":true}]],["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"loading":null,"isPartial":false}
-8:null
