@@ -17,10 +17,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/logo.png",
+        url: "/LifyVending/logo.png",
       },
     ],
-    apple: "/logo.png",
+    apple: "/LifyVending/logo.png",
   },
 }
 
