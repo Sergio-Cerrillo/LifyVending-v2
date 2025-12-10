@@ -11,10 +11,6 @@ export function CatalogoHero() {
               Catálogo de Productos
             </span>
           </h1>
-
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto font-light">
-            Descubre nuestra amplia variedad de productos
-          </p>
         </div>
       </div>
     </section>
