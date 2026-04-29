@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Menu, X } from "lucide-react"
+import { Menu, X, Lock } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
@@ -74,6 +74,18 @@ export function Navigation() {
                 Solicitar Información
               </Button>
             </Link>
+
+            <Link href="/login" title="AccesoAdmin">
+              <Button
+                variant="ghost"
+                size="lg"
+                className="ml-4 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transform hover:scale-105 transition-all duration-300 font-bold text-white"
+              >
+
+                <Lock className="h-4 w-4" />
+                Área Privada
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -103,12 +115,25 @@ export function Navigation() {
                   {item.label}
                 </Link>
               ))}
+
               <Link href="#contacto" className="w-full">
                 <Button
                   size="lg"
                   className="w-full bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg shadow-primary/30 font-bold text-white"
                 >
                   Solicitar Información
+                </Button>
+              </Link>
+
+              <Link href="/login" className="w-full">
+                <Button
+                  variant="outline"
+                  size="default"
+                  className="w-full border-2 border-muted-foreground/20 text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground hover:bg-muted/50 transition-all duration-300 font-medium"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Lock className="mr-2 h-4 w-4" />
+                  Acceso Admin
                 </Button>
               </Link>
             </div>

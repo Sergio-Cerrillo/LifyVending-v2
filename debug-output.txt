@@ -1,0 +1,9 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+🔐 Haciendo login...
+❌ Error: locator.fill: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('input[name="username"], input[id="id_username"], input[type="text"]').first()[22m
+
+    at debugButtons (/Users/sergiocerrillo/Desktop/www-Proyectos/NewLifyVending/scraper/debug-buttons.ts:17:25) {
+  name: 'TimeoutError'
+}

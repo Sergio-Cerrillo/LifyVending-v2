@@ -1,0 +1,254 @@
+'use client';
+
+import { useState } from 'react';
+import { useData } from '@/contexts/data-context';
+import { useAuth } from '@/contexts/auth-context';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { StatusBadge } from './status-badge';
+import { Plus, Search, Download, Check, X } from 'lucide-react';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { CreateCollectionSheet } from './create-collection-sheet';
+import { toast } from 'sonner';
+
+export function CollectionsPage() {
+  const { collections, machines, updateCollection } = useData();
+  const { hasRole } = useAuth();
+  const [search, setSearch] = useState('');
+  const [selectedMachine, setSelectedMachine] = useState<string>('all');
+
+  const getMachineName = (machineId: string) => {
+    const machine = machines.find((m) => m.id === machineId);
+    return machine ? `${machine.machineNumber} - ${machine.locationName}` : 'Desconocida';
+  };
+
+  const filteredCollections = collections.filter((collection) => {
+    if (selectedMachine !== 'all' && collection.machineId !== selectedMachine) {
+      return false;
+    }
+    if (search) {
+      const machineName = getMachineName(collection.machineId);
+      if (!machineName.toLowerCase().includes(search.toLowerCase())) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const totalCash = filteredCollections.reduce((sum, c) => sum + c.cashAmount, 0);
+  const totalCard = filteredCollections.reduce((sum, c) => sum + c.cardAmount, 0);
+  const totalCommission = filteredCollections.reduce((sum, c) => sum + (c.clientCommission || 0), 0);
+  const pendingCommissions = filteredCollections.filter(c => c.clientCommission && !c.commissionPaid).length;
+
+  const handleToggleCommissionPaid = (collection: any) => {
+    if (!hasRole(['admin', 'gestor'])) {
+      toast.error('No tiene permisos para esta acción');
+      return;
+    }
+
+    const isPaid = collection.commissionPaid;
+    
+    updateCollection(collection.id, {
+      commissionPaid: !isPaid,
+      commissionPaidDate: !isPaid ? new Date() : undefined,
+      commissionNotes: !isPaid ? `Pagado el ${format(new Date(), 'dd/MM/yyyy')}` : undefined,
+    });
+    
+    toast.success(isPaid ? 'Comisión marcada como pendiente' : 'Comisión marcada como pagada');
+  };
+  const totalAmount = filteredCollections.reduce((sum, c) => sum + c.totalAmount, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Recaudaciones</h1>
+          <p className="text-muted-foreground">
+            Control de recaudaciones por máquina
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Exportar CSV
+          </Button>
+          <CreateCollectionSheet
+            trigger={
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Nueva Recaudación
+              </Button>
+            }
+          />
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por máquina..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />5">
+        <div className="rounded-lg border p-4">
+          <div className="text-2xl font-bold">{filteredCollections.length}</div>
+          <div className="text-sm text-muted-foreground">Total Recaudaciones</div>
+        </div>
+        <div className="rounded-lg border p-4">
+          <div className="text-2xl font-bold">€{totalCash.toFixed(2)}</div>
+          <div className="text-sm text-muted-foreground">Total Efectivo</div>
+        </div>
+        <div className="rounded-lg border p-4">
+          <div className="text-2xl font-bold">€{totalCard.toFixed(2)}</div>
+          <div className="text-sm text-muted-foreground">Total Tarjeta</div>
+        </div>
+        <div className="rounded-lg border p-4">
+          <div className="text-2xl font-bold">€{totalAmount.toFixed(2)}</div>
+          <div className="text-sm text-muted-foreground">Total General</div>
+        </div>
+        <div className="rounded-lg border p-4">
+          <div className="text-2xl font-bold">€{totalCommission.toFixed(2)}</div>
+          <div className="text-sm text-muted-foreground">Comisiones ({pendingCommissions} pend.)
+        </Select>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-lg border p-4">
+          <div className="text-2xl font-bold">{filteredCollections.length}</div>
+          <div className="text-sm text-muted-foreground">Total Recaudaciones</div>
+        </div>
+        <div className="rounded-lg border p-4">
+          <div className className="text-right">Comisión</TableHead>
+              <TableHead>Estado Pago</TableHead>
+              <TableHead>Recaudado por</TableHead>
+              <TableHead>Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredCollections.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9rder p-4">
+          <div className="text-2xl font-bold">€{totalAmount.toFixed(2)}</div>
+          <div className="text-sm text-muted-foreground">Total General</div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Fecha</TableHead>
+              <TableHead>Máquina</TableHead>
+              <TableHead className="text-right">Efectivo</TableHead>
+              <TableHead className="text-right">Tarjeta</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead>Recaudado por</TableHead>
+              <TableHead>Notas</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredCollections.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  No se encont className="text-right">
+                      {collection.clientCommission ? (
+                        <span className="font-medium">€{collection.clientCommission.toFixed(2)}</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {collection.clientCommission ? (
+                        collection.commissionPaid ? (
+                          <StatusBadge status="PAGADA" variant="success" />
+                        ) : (
+                          <StatusBadge status="PENDIENTE" variant="warning" />
+                        )
+                      ) : (
+                        <span className="text-muted-foreground text-sm">Sin comisión</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{collection.collectedBy}</TableCell>
+                    <TableCell>
+                      {collection.clientCommission && hasRole(['admin', 'gestor']) && (
+                        <Button
+                          variant={collection.commissionPaid ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleToggleCommissionPaid(collection)}
+                        >
+                          {collection.commissionPaid ? (
+                            <>
+                              <Check className="h-4 w-4 mr-1" />
+                              Pagada
+                            </>
+                          ) : (
+                            <>
+                              <X className="h-4 w-4 mr-1" />
+                              Marcar Pagada
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      {collection.commissionPaid && collection.commissionNotes && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {collection.commissionNotes}
+                        </p>
+                      )}ions
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((collection) => (
+                  <TableRow key={collection.id}>
+                    <TableCell>
+                      {format(new Date(collection.date), 'dd/MM/yyyy HH:mm', {
+                        locale: es,
+                      })}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {getMachineName(collection.machineId)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      €{collection.cashAmount.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      €{collection.cardAmount.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold">
+                      €{collection.totalAmount.toFixed(2)}
+                    </TableCell>
+                    <TableCell>{collection.collectedBy}</TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {collection.notes || '-'}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}

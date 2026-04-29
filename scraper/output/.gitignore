@@ -1,0 +1,7 @@
+# Ignorar todos los archivos generados por el scraper
+*.json
+*.csv
+*.txt
+
+# Permitir el .gitignore
+!.gitignore
