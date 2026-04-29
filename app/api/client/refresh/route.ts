@@ -27,21 +27,3 @@ export async function POST(request: NextRequest) {
     { status: 410 } // 410 Gone
   );
 }
-
-
-    return NextResponse.json({
-      success: true,
-      scrapeRunId: scrapeRun.id,
-      machinesScraped: scrapeResult.totalMachines,
-      snapshotsCreated: snapshots.length,
-      scrapedAt: scrapeResult.scrapedAt
-    });
-
-  } catch (error: any) {
-    console.error('Error ejecutando refresh:', error);
-    return NextResponse.json(
-      { error: error.message || 'Error interno del servidor' },
-      { status: 500 }
-    );
-  }
-}
