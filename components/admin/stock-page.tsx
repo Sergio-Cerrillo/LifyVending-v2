@@ -84,23 +84,23 @@ export function StockPage() {
   const loadStatus = async () => {
     try {
       const response = await fetch('/api/admin/stock?action=status');
-      
+
       if (!response.ok) {
         console.error('Error loading status:', response.status);
         return;
       }
-      
+
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         console.error('Response is not JSON');
         return;
       }
-      
+
       const data = await response.json();
-      
+
       setIsScraping(false); // Ya no se hace scraping manual
       setLastScrape(data.lastScrape ? new Date(data.lastScrape) : null);
-      
+
       if (data.hasData) {
         loadData();
       }
@@ -114,18 +114,18 @@ export function StockPage() {
     try {
       const params = machineIds ? `?action=data&machines=${machineIds.join(',')}` : '?action=data';
       const response = await fetch(`/api/admin/stock${params}`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
       }
-      
+
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Response is not JSON');
       }
-      
+
       const data = await response.json();
-      
+
       if (machineIds) {
         setSummary(data.summary || []);
         setStats(data.stats || null);
@@ -210,10 +210,10 @@ export function StockPage() {
     if (!machine.products || machine.products.length === 0) {
       return 0;
     }
-    
+
     let totalRate = 0;
     let validProducts = 0;
-    
+
     for (const product of machine.products) {
       // Solo considerar productos con capacidad válida
       if (product.totalCapacity > 0) {
@@ -224,10 +224,10 @@ export function StockPage() {
         }
       }
     }
-    
+
     // Si no hay productos válidos, retornar 0
     if (validProducts === 0) return 0;
-    
+
     return totalRate / validProducts;
   };
 
@@ -243,13 +243,13 @@ export function StockPage() {
         );
         if (!matchesSearch) return false;
       }
-      
+
       // Filtro de carriles vacíos
       if (showOnlyEmptyLanes) {
         const hasEmptyLanes = machine.products.some(p => p.availableUnits === 0);
         if (!hasEmptyLanes) return false;
       }
-      
+
       return true;
     })
     .sort((a, b) => {
@@ -260,7 +260,7 @@ export function StockPage() {
         // Ordenar por prioridad (fillRate ascendente - más vacías primero)
         const fillRateA = calculateFillRate(a);
         const fillRateB = calculateFillRate(b);
-        
+
         return fillRateA - fillRateB;
       }
     });
@@ -420,19 +420,19 @@ export function StockPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={exportToCSV} 
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportToCSV}
                   className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900"
                 >
                   <Download className="mr-2 h-4 w-4" />
                   CSV
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={exportToJSON} 
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportToJSON}
                   className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900"
                 >
                   <Download className="mr-2 h-4 w-4" />
@@ -542,7 +542,7 @@ export function StockPage() {
                   : 'Seleccionar Todas'}
               </Button>
             </div>
-            
+
             {/* Botones de filtrado y ordenamiento */}
             <div className="flex flex-wrap gap-2">
               <div className="flex gap-2">
@@ -550,8 +550,8 @@ export function StockPage() {
                   variant={sortType === 'alphabetic' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSortType('alphabetic')}
-                  className={sortType === 'alphabetic' 
-                    ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
+                  className={sortType === 'alphabetic'
+                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                     : 'border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900'
                   }
                 >
@@ -561,8 +561,8 @@ export function StockPage() {
                   variant={sortType === 'priority' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSortType('priority')}
-                  className={sortType === 'priority' 
-                    ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
+                  className={sortType === 'priority'
+                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                     : 'border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900'
                   }
                 >
@@ -570,15 +570,15 @@ export function StockPage() {
                   Por Prioridad
                 </Button>
               </div>
-              
+
               <div className="h-6 w-px bg-zinc-200" />
-              
+
               <Button
                 variant={showOnlyEmptyLanes ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setShowOnlyEmptyLanes(!showOnlyEmptyLanes)}
-                className={showOnlyEmptyLanes 
-                  ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
+                className={showOnlyEmptyLanes
+                  ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                   : 'border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900'
                 }
               >
@@ -670,7 +670,7 @@ export function StockPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredMachines.map((machine) => {
                 const totalToReplenish = machine.products.reduce(
@@ -686,16 +686,15 @@ export function StockPage() {
                 const UrgencyIcon = urgencyBadge.icon;
 
                 return (
-                  <Card 
+                  <Card
                     key={machine.machineId}
-                    className={`relative transition-all duration-200 hover:shadow-md cursor-pointer group border flex flex-col ${
-                      isSelected 
-                        ? 'border-zinc-900 shadow-sm' 
+                    className={`relative transition-all duration-200 hover:shadow-md cursor-pointer group border flex flex-col ${isSelected
+                        ? 'border-zinc-900 shadow-sm'
                         : 'border-zinc-200 hover:border-zinc-400'
-                    }`}
+                      }`}
                   >
                     {/* Checkbox de selección */}
-                    <div 
+                    <div
                       className="absolute top-3 right-3 z-20"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -704,8 +703,8 @@ export function StockPage() {
                     >
                       <div className={`
                         p-1.5 rounded transition-all border flex items-center justify-center
-                        ${isSelected 
-                          ? 'bg-zinc-900 border-zinc-900' 
+                        ${isSelected
+                          ? 'bg-zinc-900 border-zinc-900'
                           : 'bg-white border-zinc-300 hover:bg-zinc-50'}
                       `}>
                         <Checkbox
@@ -740,7 +739,7 @@ export function StockPage() {
                           </div>
                         </div>
                       </CardHeader>
-                      
+
                       <CardContent className="space-y-3 relative flex-1 flex flex-col">
                         {/* Estadísticas con diseño moderno */}
                         <div className="space-y-2">
@@ -753,13 +752,13 @@ export function StockPage() {
                               {machine.products.length}
                             </Badge>
                           </div>
-                          
+
                           <div className="flex justify-between items-center bg-muted/30 p-2 rounded-lg">
                             <span className="text-sm text-muted-foreground flex items-center gap-1">
                               <TrendingUp className="h-3.5 w-3.5" />
                               A reponer
                             </span>
-                            <Badge 
+                            <Badge
                               className={totalToReplenish > 0 ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700'}
                             >
                               {totalToReplenish} unidades
@@ -770,7 +769,7 @@ export function StockPage() {
                             <span className="text-sm text-zinc-600">Nivel de llenado</span>
                             <div className="flex items-center gap-2">
                               <div className="w-16 h-2 bg-zinc-200 rounded-full overflow-hidden">
-                                <div 
+                                <div
                                   className={`h-full transition-all rounded-full ${urgencyBadge.progressColor}`}
                                   style={{ width: `${fillRate}%` }}
                                 />
@@ -783,9 +782,9 @@ export function StockPage() {
                         </div>
 
                         {/* Botón de ver detalles */}
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="w-full mt-auto border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -811,13 +810,13 @@ export function StockPage() {
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           {selectedMachineForDetails && (() => {
             const machineDetailsFillRate = calculateFillRate(selectedMachineForDetails);
-            
+
             const urgencyBadge = getUrgencyBadge(machineDetailsFillRate);
             const UrgencyIcon = urgencyBadge.icon;
             const hasOutOfStock = hasOutOfStockProducts(selectedMachineForDetails.products);
             const outOfStockCount = countOutOfStockProducts(selectedMachineForDetails.products);
             const outOfStockProducts = selectedMachineForDetails.products.filter(p => p.availableUnits === 0);
-            
+
             return (
               <>
                 <DialogHeader className="border-b pb-4">
@@ -842,148 +841,146 @@ export function StockPage() {
                   </div>
                 </DialogHeader>
 
-              <div className="space-y-4 mt-4">
-                {/* Resumen compacto */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-center">
-                    <Package className="h-5 w-5 mx-auto mb-1 text-primary" />
-                    <p className="text-2xl font-bold">{selectedMachineForDetails.products.length}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Productos</p>
+                <div className="space-y-4 mt-4">
+                  {/* Resumen compacto */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-center">
+                      <Package className="h-5 w-5 mx-auto mb-1 text-primary" />
+                      <p className="text-2xl font-bold">{selectedMachineForDetails.products.length}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium uppercase">Productos</p>
+                    </div>
+                    <div className="bg-red-500/5 border border-red-200 rounded-lg p-3 text-center">
+                      <TrendingUp className="h-5 w-5 mx-auto mb-1 text-red-600" />
+                      <p className="text-2xl font-bold text-red-600">
+                        {selectedMachineForDetails.products.reduce((sum, p) => sum + p.unitsToReplenish, 0)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-medium uppercase">A Reponer</p>
+                    </div>
+                    <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-3 text-center">
+                      <Box className="h-5 w-5 mx-auto mb-1 text-blue-600" />
+                      <p className="text-2xl font-bold">
+                        {selectedMachineForDetails.products.reduce((sum, p) => sum + p.totalCapacity, 0)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-medium uppercase">Capacidad</p>
+                    </div>
                   </div>
-                  <div className="bg-red-500/5 border border-red-200 rounded-lg p-3 text-center">
-                    <TrendingUp className="h-5 w-5 mx-auto mb-1 text-red-600" />
-                    <p className="text-2xl font-bold text-red-600">
-                      {selectedMachineForDetails.products.reduce((sum, p) => sum + p.unitsToReplenish, 0)}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">A Reponer</p>
-                  </div>
-                  <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-3 text-center">
-                    <Box className="h-5 w-5 mx-auto mb-1 text-blue-600" />
-                    <p className="text-2xl font-bold">
-                      {selectedMachineForDetails.products.reduce((sum, p) => sum + p.totalCapacity, 0)}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Capacidad</p>
-                  </div>
-                </div>
 
-                {/* Alerta de productos sin stock */}
-                {hasOutOfStock && (
-                  <div className="border-2 border-red-300 bg-red-50 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-sm text-red-900 break-words">
-                          {outOfStockCount} {outOfStockCount === 1 ? 'Producto sin stock' : 'Productos sin stock'}
-                        </h4>
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {outOfStockProducts.map((product, idx) => (
-                            <Badge key={idx} variant="destructive" className="text-xs font-medium break-words">
-                              {product.name}
-                            </Badge>
-                          ))}
+                  {/* Alerta de productos sin stock */}
+                  {hasOutOfStock && (
+                    <div className="border-2 border-red-300 bg-red-50 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-sm text-red-900 break-words">
+                            {outOfStockCount} {outOfStockCount === 1 ? 'Producto sin stock' : 'Productos sin stock'}
+                          </h4>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {outOfStockProducts.map((product, idx) => (
+                              <Badge key={idx} variant="destructive" className="text-xs font-medium break-words">
+                                {product.name}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <Separator />
+                  <Separator />
 
-                {/* Lista de productos */}
-                <div>
-                  <h3 className="font-bold text-base mb-3 flex items-center gap-2">
-                    <Package className="h-4 w-4" />
-                    Inventario Completo ({selectedMachineForDetails.products.length} productos)
-                  </h3>
-                  <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-2">
-                    {selectedMachineForDetails.products.map((product, idx) => {
-                      const needsReplenishment = product.unitsToReplenish > 0;
-                      const stockPercentage = (product.availableUnits / product.totalCapacity) * 100;
-                      const isOutOfStock = product.availableUnits === 0;
-                      
-                      return (
-                        <div
-                          key={idx} 
-                          className={`border-l-4 rounded-md p-3 transition-all ${
-                            isOutOfStock 
-                              ? 'border-red-500 bg-red-50' 
-                              : needsReplenishment 
-                                ? 'border-orange-400 bg-orange-50/50' 
-                                : 'border-green-500 bg-green-50/30'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            {/* Nombre y categoría */}
-                            <div className="flex-1 min-w-0 flex items-center gap-2">
-                              {isOutOfStock ? (
-                                <XCircle className="h-4 w-4 text-red-600 shrink-0" />
-                              ) : needsReplenishment ? (
-                                <AlertCircle className="h-4 w-4 text-orange-600 shrink-0" />
-                              ) : (
-                                <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-sm break-words leading-tight">{product.name}</p>
-                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                  {product.category && (
-                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                      {product.category}
-                                    </Badge>
-                                  )}
-                                  {product.line && (
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                      L{product.line}
-                                    </Badge>
-                                  )}
+                  {/* Lista de productos */}
+                  <div>
+                    <h3 className="font-bold text-base mb-3 flex items-center gap-2">
+                      <Package className="h-4 w-4" />
+                      Inventario Completo ({selectedMachineForDetails.products.length} productos)
+                    </h3>
+                    <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-2">
+                      {selectedMachineForDetails.products.map((product, idx) => {
+                        const needsReplenishment = product.unitsToReplenish > 0;
+                        const stockPercentage = (product.availableUnits / product.totalCapacity) * 100;
+                        const isOutOfStock = product.availableUnits === 0;
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`border-l-4 rounded-md p-3 transition-all ${isOutOfStock
+                                ? 'border-red-500 bg-red-50'
+                                : needsReplenishment
+                                  ? 'border-orange-400 bg-orange-50/50'
+                                  : 'border-green-500 bg-green-50/30'
+                              }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              {/* Nombre y categoría */}
+                              <div className="flex-1 min-w-0 flex items-center gap-2">
+                                {isOutOfStock ? (
+                                  <XCircle className="h-4 w-4 text-red-600 shrink-0" />
+                                ) : needsReplenishment ? (
+                                  <AlertCircle className="h-4 w-4 text-orange-600 shrink-0" />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-sm break-words leading-tight">{product.name}</p>
+                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                    {product.category && (
+                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        {product.category}
+                                      </Badge>
+                                    )}
+                                    {product.line && (
+                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                        L{product.line}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            
-                            {/* Stats y barra */}
-                            <div className="shrink-0 flex items-center gap-3">
-                              {/* Cantidad a reponer */}
-                              {needsReplenishment && (
-                                <div className="text-center bg-red-100 rounded px-2 py-1">
-                                  <div className="text-base font-bold text-red-600">+{product.unitsToReplenish}</div>
-                                  <div className="text-[9px] text-red-700">Reponer</div>
-                                </div>
-                              )}
-                              
-                              {/* Stock actual */}
-                              <div className="text-center">
-                                <div className="text-sm font-bold">
-                                  {product.availableUnits}/{product.totalCapacity}
-                                </div>
-                                <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden mt-1">
-                                  <div 
-                                    className={`h-full transition-all ${
-                                      stockPercentage >= 80 ? 'bg-green-500' :
-                                      stockPercentage >= 50 ? 'bg-yellow-400' :
-                                      stockPercentage > 0 ? 'bg-orange-500' :
-                                      'bg-red-600'
-                                    }`}
-                                    style={{ width: `${stockPercentage}%` }}
-                                  />
-                                </div>
-                                <div className={`text-[10px] font-semibold mt-0.5 ${
-                                  stockPercentage >= 80 ? 'text-green-600' :
-                                  stockPercentage >= 50 ? 'text-yellow-600' :
-                                  stockPercentage > 0 ? 'text-orange-600' :
-                                  'text-red-600'
-                                }`}>
-                                  {stockPercentage.toFixed(0)}%
+
+                              {/* Stats y barra */}
+                              <div className="shrink-0 flex items-center gap-3">
+                                {/* Cantidad a reponer */}
+                                {needsReplenishment && (
+                                  <div className="text-center bg-red-100 rounded px-2 py-1">
+                                    <div className="text-base font-bold text-red-600">+{product.unitsToReplenish}</div>
+                                    <div className="text-[9px] text-red-700">Reponer</div>
+                                  </div>
+                                )}
+
+                                {/* Stock actual */}
+                                <div className="text-center">
+                                  <div className="text-sm font-bold">
+                                    {product.availableUnits}/{product.totalCapacity}
+                                  </div>
+                                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden mt-1">
+                                    <div
+                                      className={`h-full transition-all ${stockPercentage >= 80 ? 'bg-green-500' :
+                                          stockPercentage >= 50 ? 'bg-yellow-400' :
+                                            stockPercentage > 0 ? 'bg-orange-500' :
+                                              'bg-red-600'
+                                        }`}
+                                      style={{ width: `${stockPercentage}%` }}
+                                    />
+                                  </div>
+                                  <div className={`text-[10px] font-semibold mt-0.5 ${stockPercentage >= 80 ? 'text-green-600' :
+                                      stockPercentage >= 50 ? 'text-yellow-600' :
+                                        stockPercentage > 0 ? 'text-orange-600' :
+                                          'text-red-600'
+                                    }`}>
+                                    {stockPercentage.toFixed(0)}%
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </>
-          )})()}
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>

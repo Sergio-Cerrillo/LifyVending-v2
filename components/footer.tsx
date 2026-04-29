@@ -2,6 +2,7 @@
 
 import { Mail, Phone, MapPin, Instagram } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 
 export function Footer() {
   return (
@@ -43,7 +44,7 @@ export function Footer() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground mb-1 font-light">Dirección</p>
-                      <p className="font-semibold text-lg">Calle Aragón, Local 378</p>
+                      <p className="font-semibold text-lg">Calle Mozart, Local 10A</p>
                       <p className="text-muted-foreground font-light">Islas Baleares 07008</p>
                     </div>
                   </div>
@@ -110,7 +111,7 @@ export function Footer() {
 
             <div className="glass rounded-2xl overflow-hidden h-[500px]">
               <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3075.0729448707444!2d2.6520!3d39.5696!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x1297925c0000000%3A0x0!2zMznCsDM0JzEwLjYiTiAywrAzOScwNy4yIkU!5e0!3m2!1ses!2ses!4v1234567890"
+                src="https://www.google.com/maps?q=Calle+Mozart+10A,+07008+Palma,+Baleares,+España&output=embed"
                 width="100%"
                 height="100%"
                 style={{ border: 0 }}
@@ -126,7 +127,7 @@ export function Footer() {
         <div className="border-t border-border pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-muted-foreground font-light">
-              © 2025 Lify Vending. Todos los derechos reservados.
+              © 2026 Lify Vending. Todos los derechos reservados.
             </p>
 
             <div className="flex items-center gap-6 text-sm font-light">
@@ -138,7 +139,30 @@ export function Footer() {
             </div>
 
             <div className="glass px-4 py-2 rounded-full text-xs font-medium">
-              Hecho con 💚 en Mallorca
+              <p className="text-muted-foreground text-sm text-center">
+                Desarrollado por:
+              </p>
+              <div className="flex gap-6 text-sm">
+                <Link
+                  href="https://scwebstudio.tech"
+                  className="group transition-opacity hover:opacity-80"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {/* Logo blanco para modo oscuro */}
+                  <img
+                    src="/logo-full-w.png"
+                    alt="SCWebStudio"
+                    className="h-20 w-auto hidden dark:block group-hover:scale-105 transition-transform"
+                  />
+                  {/* Logo oscuro para modo claro */}
+                  <img
+                    src="/logo-full-b.png"
+                    alt="SCWebStudio"
+                    className="h-20 w-auto block dark:hidden group-hover:scale-105 transition-transform"
+                  />
+                </Link>
+              </div>
             </div>
           </div>
         </div>
