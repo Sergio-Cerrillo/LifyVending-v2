@@ -4,9 +4,9 @@
  * PÁGINA ADMIN: RECAUDACIONES GENERALES
  * 
  * Vista general de todas las recaudaciones del sistema
- * - Botón para forzar scraping manual
  * - Tabla con todas las máquinas y sus recaudaciones
- * - Totales por periodo (diario, semanal, mensual)
+ * - Totales por periodo (diario, mensual)
+ * - Datos actualizados automáticamente cada hora via CRON
  */
 
 import { useEffect, useState } from 'react';
@@ -72,7 +72,6 @@ interface RevenueData {
 export default function AdminRevenueGeneralPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
-    const [scraping, setScraping] = useState(false);
     const [revenueData, setRevenueData] = useState<RevenueData | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'monthly'>('daily');
@@ -111,55 +110,6 @@ export default function AdminRevenueGeneralPage() {
             setError(err.message);
         } finally {
             setLoading(false);
-        }
-    }
-
-    async function handleForceScrape() {
-        try {
-            setScraping(true);
-            setError(null);
-
-            const { data: sessionData } = await supabase.auth.getSession();
-
-            if (!sessionData.session) {
-                router.push('/login');
-                return;
-            }
-
-            console.log('[FORCE-SCRAPE] Iniciando scraping manual...');
-
-            const response = await fetch('/api/admin/force-scrape', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${sessionData.session.access_token}`
-                }
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Error ejecutando scraping');
-            }
-
-            const result = await response.json();
-            console.log('[FORCE-SCRAPE] Resultado:', result);
-
-            toast.success('Scraping completado exitosamente', {
-                description: `Máquinas procesadas: ${result.machinesScraped} | Nuevas: ${result.summary?.machinesCreated || 0} | Actualizadas: ${result.summary?.machinesUpdated || 0}`,
-                duration: 5000
-            });
-
-            // Recargar datos
-            await loadRevenueData();
-
-        } catch (err: any) {
-            console.error('Error ejecutando scraping:', err);
-            setError(err.message);
-            toast.error('Error ejecutando scraping', {
-                description: err.message,
-                duration: 5000
-            });
-        } finally {
-            setScraping(false);
         }
     }
 
@@ -209,28 +159,8 @@ export default function AdminRevenueGeneralPage() {
                             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
                         </div>
                         <p className="text-sm text-zinc-600">
-                            Vista global de todas las máquinas del sistema
+                            Vista global de todas las máquinas del sistema • Actualización automática cada hora
                         </p>
-                    </div>
-
-                    <div className="flex gap-2">
-                        <Button
-                            onClick={handleForceScrape}
-                            disabled={scraping}
-                            className="bg-zinc-900 text-white hover:bg-zinc-800 transition-colors"
-                        >
-                            {scraping ? (
-                                <>
-                                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                                    Ejecutando...
-                                </>
-                            ) : (
-                                <>
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Actualizar
-                                </>
-                            )}
-                        </Button>
                     </div>
                 </div>
             </div>
@@ -243,50 +173,8 @@ export default function AdminRevenueGeneralPage() {
                 </Card>
             )}
 
-            {/* Skeleton mientras se ejecuta el scraping */}
-            {scraping && (
-                <LoadingCard
-                    title="Extrayendo datos de Orain-Frekuent"
-                    description="Esto puede tardar varios minutos"
-                >
-                    <div className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <Card className="border border-zinc-200">
-                                <CardContent className="pt-6">
-                                    <Skeleton className="h-4 w-32 mb-2" />
-                                    <Skeleton className="h-8 w-24 mb-1" />
-                                    <Skeleton className="h-3 w-20" />
-                                </CardContent>
-                            </Card>
-                            <Card className="border border-zinc-200">
-                                <CardContent className="pt-6">
-                                    <Skeleton className="h-4 w-32 mb-2" />
-                                    <Skeleton className="h-8 w-24 mb-1" />
-                                    <Skeleton className="h-3 w-20" />
-                                </CardContent>
-                            </Card>
-                        </div>
-                        <Card className="border border-zinc-200">
-                            <CardContent className="pt-6">
-                                <Skeleton className="h-6 w-48 mb-4" />
-                                <div className="space-y-2">
-                                    {[...Array(5)].map((_, i) => (
-                                        <div key={i} className="flex gap-4">
-                                            <Skeleton className="h-4 w-32" />
-                                            <Skeleton className="h-4 w-24" />
-                                            <Skeleton className="h-4 w-20 ml-auto" />
-                                            <Skeleton className="h-4 w-20" />
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </LoadingCard>
-            )}
-
             {/* Tarjetas de Totales - Separadas por fuente */}
-            {!scraping && (<>
+            {revenueData && (<>
                 {/* Totales Generales */}
                 <div className="grid gap-4 md:grid-cols-2">
                     <Card className="border border-zinc-200">
@@ -455,7 +343,7 @@ function MachineTable({ machines, period, formatCurrency, formatDate }: MachineT
                     {machines.length === 0 ? (
                         <TableRow>
                             <TableCell colSpan={7} className="text-center text-muted-foreground">
-                                No hay datos de recaudación. Ejecuta el scraping para obtener datos.
+                                No hay datos de recaudación disponibles. Los datos se actualizan automáticamente cada hora.
                             </TableCell>
                         </TableRow>
                     ) : (

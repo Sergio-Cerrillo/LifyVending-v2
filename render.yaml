@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: lify-scrapers
+    runtime: node
+    plan: free
+    buildCommand: pnpm install && pnpm add -D @playwright/test && npx playwright install --with-deps chromium && pnpm run build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        value: 0

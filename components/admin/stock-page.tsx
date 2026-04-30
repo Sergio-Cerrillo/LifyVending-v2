@@ -510,14 +510,18 @@ export function StockPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <PackageSearch className="h-16 w-16 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No hay datos de stock</h3>
+            <h3 className="text-lg font-semibold mb-2">No hay datos de stock disponibles</h3>
             <p className="text-muted-foreground text-center mb-4">
-              Ejecuta un scraping para obtener los datos de stock actualizados
+              Los datos de stock se actualizan automáticamente cada 30 minutos
             </p>
-            <Button onClick={() => runScraping('both')} disabled={isScraping}>
-              <Download className="mr-2 h-4 w-4" />
-              Ejecutar Scraping
-            </Button>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              {lastScrape ? (
+                <span>Última actualización: {format(lastScrape, 'dd/MM/yyyy HH:mm', { locale: es })}</span>
+              ) : (
+                <span>Esperando primera actualización automática</span>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
