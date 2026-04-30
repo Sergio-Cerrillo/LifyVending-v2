@@ -9,4 +9,6 @@ services:
       - key: NODE_VERSION
         value: 18
       - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
-        value: 0
+        value: 1
+      - key: PUPPETEER_SKIP_BROWSER_DOWNLOAD
+        value: 1

@@ -7,8 +7,7 @@
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
-    "scrape": "tsx scraper/index.ts",
-    "postinstall": "npx puppeteer browsers install chrome || echo 'Puppeteer Chromium install skipped'"
+    "scrape": "tsx scraper/index.ts"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
