@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
     const { data: machines, error: machinesError } = await supabaseAdmin
       .from('machines')
       .select('id, name, location, orain_machine_id, televend_machine_id')
-      .order('name');
+      .order('name')
+      .limit(2); // TEMPORAL: Solo 2 máquinas para probar
 
     if (machinesError) {
       console.error('[STOCK CRON v4] Database error:', machinesError);
