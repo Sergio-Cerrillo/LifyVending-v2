@@ -68,6 +68,9 @@ export function StockPage() {
   const [sortType, setSortType] = useState<'alphabetic' | 'priority'>('alphabetic');
   const [showOnlyEmptyLanes, setShowOnlyEmptyLanes] = useState(false);
 
+  // Check if manual scraping is enabled (only for local development)
+  const enableManualScraping = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING === 'true';
+
   // Cargar estado inicial
   useEffect(() => {
     loadStatus();
@@ -141,7 +144,35 @@ export function StockPage() {
     }
   };
 
-  // Función eliminada - el scraping ahora es automático cada 30 min vía CRON
+  const runScraping = async () => {
+    setIsScraping(true);
+    try {
+      toast.info('Iniciando scraping de stock...');
+      
+      const response = await fetch('/api/admin/stock?action=scrape', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      toast.success(`Scraping completado: ${data.machinesScraped || 0} máquinas actualizadas`);
+      
+      // Recargar datos
+      await loadStatus();
+      if (machines.length > 0 || data.machinesScraped > 0) {
+        await loadData();
+      }
+    } catch (error) {
+      toast.error('Error ejecutando scraping');
+      console.error('Error running scraping:', error);
+    } finally {
+      setIsScraping(false);
+    }
+  };
 
   const toggleMachine = (machineId: string) => {
     setSelectedMachines((prev) =>
@@ -370,6 +401,27 @@ export function StockPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
+            {enableManualScraping && (
+              <Button
+                variant="default"
+                size="default"
+                onClick={runScraping}
+                disabled={isScraping || isLoading}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white"
+              >
+                {isScraping ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Scrapeando...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Actualizar Stock
+                  </>
+                )}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="default"

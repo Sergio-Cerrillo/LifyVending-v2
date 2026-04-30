@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon } from 'lucide-react';
+import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon, Zap } from 'lucide-react';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
@@ -75,6 +75,10 @@ export default function AdminRevenueGeneralPage() {
     const [revenueData, setRevenueData] = useState<RevenueData | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'monthly'>('daily');
+    const [isScraping, setIsScraping] = useState(false);
+
+    // Check if manual scraping is enabled (only for local development)
+    const enableManualScraping = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING === 'true';
 
     useEffect(() => {
         loadRevenueData();
@@ -110,6 +114,43 @@ export default function AdminRevenueGeneralPage() {
             setError(err.message);
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function runScraping() {
+        try {
+            setIsScraping(true);
+            toast.info('Iniciando scraping de recaudaciones...');
+
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+            if (sessionError || !sessionData.session) {
+                router.push('/login');
+                return;
+            }
+
+            const response = await fetch('/api/admin/scrape', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${sessionData.session.access_token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Error ejecutando scraping');
+            }
+
+            const data = await response.json();
+            toast.success(`Scraping completado: ${data.machines_updated || 0} máquinas actualizadas`);
+            
+            // Recargar datos
+            await loadRevenueData();
+
+        } catch (err: any) {
+            console.error('Error ejecutando scraping:', err);
+            toast.error('Error ejecutando scraping');
+        } finally {
+            setIsScraping(false);
         }
     }
 
@@ -159,8 +200,41 @@ export default function AdminRevenueGeneralPage() {
                             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
                         </div>
                         <p className="text-sm text-zinc-600">
-                            Vista global de todas las máquinas del sistema • Actualización automática cada hora
+                            Vista global de todas las máquinas del sistema • Datos de base de datos
                         </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {enableManualScraping && (
+                            <Button
+                                variant="default"
+                                size="default"
+                                onClick={runScraping}
+                                disabled={isScraping || loading}
+                                className="bg-zinc-900 hover:bg-zinc-800 text-white"
+                            >
+                                {isScraping ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Scrapeando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Zap className="mr-2 h-4 w-4" />
+                                        Actualizar Recaudaciones
+                                    </>
+                                )}
+                            </Button>
+                        )}
+                        <Button
+                            variant="outline"
+                            size="default"
+                            onClick={loadRevenueData}
+                            disabled={loading || isScraping}
+                            className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors"
+                        >
+                            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                            Refrescar
+                        </Button>
                     </div>
                 </div>
             </div>
