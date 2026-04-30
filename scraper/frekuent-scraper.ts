@@ -27,7 +27,6 @@ import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import path from 'path';
 import os from 'os';
 import type { MachineStock, StockProduct } from '@/lib/types';
-import { launchBrowser } from './browser-helper';
 
 interface FrekuentConfig {
   user: string;
@@ -51,8 +50,20 @@ export class FrekuentScraper {
     
     const userDataDir = path.join(os.tmpdir(), 'frekuent-scraper-session');
     
-    this.browser = await launchBrowser({
+    this.browser = await chromium.launch({
       headless: this.config.headless,
+      args: [
+        '--disable-images',
+        '--disable-fonts',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--no-first-run',
+        '--no-default-browser-check',
+      ],
     });
 
     const sessionPath = path.join(os.tmpdir(), 'frekuent-session.json');
@@ -344,7 +355,19 @@ export class FrekuentScraper {
             const nameCell = cells[2]?.textContent?.trim() || '';
             
             const name = nameCell || deviceCell || `Máquina ${index + 1}`;
-            const id = checkbox?.getAttribute('id') || checkbox?.getAttribute('value') || `machine-${index}`;
+            
+            // Extraer ID de Frekuent del nombre (formato: "NOMBRE 5180ID: 67909" o similar)
+            let extractedId = null;
+            const idMatch = name.match(/ID:\s*(\d+)/i);
+            if (idMatch) {
+              extractedId = idMatch[1];
+            }
+            
+            // Intentar obtener del checkbox o usar el ID extraído o fallback
+            const id = checkbox?.getAttribute('id') || 
+                       checkbox?.getAttribute('value') || 
+                       extractedId ||
+                       `machine-${index}`;
             
             return {
               id,

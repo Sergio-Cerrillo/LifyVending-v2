@@ -49,6 +49,7 @@ import {
   Box,
   ArrowRight,
   Filter,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -67,9 +68,7 @@ export function StockPage() {
   const [search, setSearch] = useState('');
   const [sortType, setSortType] = useState<'alphabetic' | 'priority'>('alphabetic');
   const [showOnlyEmptyLanes, setShowOnlyEmptyLanes] = useState(false);
-
-  // Check if manual scraping is enabled (only for local development)
-  const enableManualScraping = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING === 'true';
+  const [showClearConfirmDialog, setShowClearConfirmDialog] = useState(false);
 
   // Cargar estado inicial
   useEffect(() => {
@@ -86,24 +85,24 @@ export function StockPage() {
 
   const loadStatus = async () => {
     try {
-      const response = await fetch('/api/admin/stock?action=status');
-
+      const response = await fetch('/api/stock?action=status');
+      
       if (!response.ok) {
         console.error('Error loading status:', response.status);
         return;
       }
-
+      
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         console.error('Response is not JSON');
         return;
       }
-
+      
       const data = await response.json();
-
-      setIsScraping(false); // Ya no se hace scraping manual
+      
+      setIsScraping(data.isRunning);
       setLastScrape(data.lastScrape ? new Date(data.lastScrape) : null);
-
+      
       if (data.hasData) {
         loadData();
       }
@@ -116,19 +115,19 @@ export function StockPage() {
     setIsLoading(true);
     try {
       const params = machineIds ? `?action=data&machines=${machineIds.join(',')}` : '?action=data';
-      const response = await fetch(`/api/admin/stock${params}`);
-
+      const response = await fetch(`/api/stock${params}`);
+      
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
       }
-
+      
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Response is not JSON');
       }
-
+      
       const data = await response.json();
-
+      
       if (machineIds) {
         setSummary(data.summary || []);
         setStats(data.stats || null);
@@ -144,33 +143,107 @@ export function StockPage() {
     }
   };
 
-  const runScraping = async () => {
+  const runScraping = async (source: 'both' | 'televend' | 'frekuent' = 'both') => {
     setIsScraping(true);
+    const sourceLabel = source === 'both' ? 'ambas fuentes' : source === 'televend' ? 'Televend' : 'Frekuent';
+    toast.info(`Iniciando scraping de ${sourceLabel}...`, {
+      description: 'Esto puede tardar varios minutos',
+    });
+
     try {
-      toast.info('Iniciando scraping de stock...');
-      
-      const response = await fetch('/api/admin/stock?action=scrape', {
+      const response = await fetch('/api/stock', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ source }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const error = await response.json();
+          throw new Error(error.error || 'Error durante el scraping');
+        } else {
+          throw new Error(`HTTP error ${response.status}`);
+        }
       }
 
-      const data = await response.json();
+      const result = await response.json();
       
-      toast.success(`Scraping completado: ${data.machinesScraped || 0} máquinas actualizadas`);
-      
-      // Recargar datos
-      await loadStatus();
-      if (machines.length > 0 || data.machinesScraped > 0) {
-        await loadData();
+      // Mostrar resultado con información de errores si los hay
+      if (result.stockSaveErrors && result.stockSaveErrors > 0) {
+        toast.warning('Scraping completado con errores', {
+          description: `${result.stockRecordsCreated} guardadas, ${result.stockSaveErrors} fallaron, ${result.unitsToReplenish} unidades a reponer`,
+          duration: 8000,
+        });
+      } else {
+        toast.success('Scraping completado', {
+          description: `${result.machineCount} máquinas, ${result.unitsToReplenish} unidades a reponer`,
+        });
       }
-    } catch (error) {
-      toast.error('Error ejecutando scraping');
-      console.error('Error running scraping:', error);
+
+      setLastScrape(new Date(result.scrapedAt));
+      setSelectedMachines([]); // Limpiar selección primero
+      await loadData(); // Cargar todas las máquinas
+    } catch (error: any) {
+      const errorMessage = error.message || 'Error desconocido';
+      
+      // Detectar si es un error de servidor externo
+      let toastTitle = 'Error durante el scraping';
+      let toastDescription = errorMessage;
+      
+      if (errorMessage.includes('502') || errorMessage.includes('503') || errorMessage.includes('Bad gateway')) {
+        toastTitle = 'Servidor temporalmente no disponible';
+        toastDescription = 'El servidor de Orain-Frekuent está experimentando problemas. Por favor, inténtalo de nuevo en unos minutos.';
+      } else if (errorMessage.includes('Error persistente')) {
+        toastTitle = 'No se pudo conectar al servidor';
+        toastDescription = 'El servidor de Orain-Frekuent no responde después de varios intentos. Por favor, verifica tu conexión e inténtalo más tarde.';
+      } else if (errorMessage.includes('TimeoutError') || errorMessage.includes('Timeout')) {
+        toastTitle = 'Tiempo de espera agotado';
+        toastDescription = 'La operación tardó demasiado. El servidor puede estar lento, inténtalo de nuevo.';
+      }
+      
+      toast.error(toastTitle, {
+        description: toastDescription,
+        duration: 6000,
+      });
     } finally {
       setIsScraping(false);
+    }
+  };
+
+  const clearStockData = async () => {
+    try {
+      toast.info('Vaciando tablas de stock...', {
+        description: 'Esto puede tardar unos segundos',
+      });
+
+      const response = await fetch('/api/stock', {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error vaciando tablas');
+      }
+
+      toast.success('Tablas vaciadas correctamente', {
+        description: 'Todos los datos de stock han sido eliminados',
+      });
+
+      // Limpiar estados locales
+      setMachines([]);
+      setSelectedMachines([]);
+      setSummary([]);
+      setStats(null);
+      setLastScrape(null);
+      setShowClearConfirmDialog(false);
+    } catch (error: any) {
+      toast.error('Error al vaciar tablas', {
+        description: error.message || 'Error desconocido',
+        duration: 6000,
+      });
     }
   };
 
@@ -241,10 +314,10 @@ export function StockPage() {
     if (!machine.products || machine.products.length === 0) {
       return 0;
     }
-
+    
     let totalRate = 0;
     let validProducts = 0;
-
+    
     for (const product of machine.products) {
       // Solo considerar productos con capacidad válida
       if (product.totalCapacity > 0) {
@@ -255,10 +328,10 @@ export function StockPage() {
         }
       }
     }
-
+    
     // Si no hay productos válidos, retornar 0
     if (validProducts === 0) return 0;
-
+    
     return totalRate / validProducts;
   };
 
@@ -274,13 +347,13 @@ export function StockPage() {
         );
         if (!matchesSearch) return false;
       }
-
+      
       // Filtro de carriles vacíos
       if (showOnlyEmptyLanes) {
         const hasEmptyLanes = machine.products.some(p => p.availableUnits === 0);
         if (!hasEmptyLanes) return false;
       }
-
+      
       return true;
     })
     .sort((a, b) => {
@@ -291,7 +364,7 @@ export function StockPage() {
         // Ordenar por prioridad (fillRate ascendente - más vacías primero)
         const fillRateA = calculateFillRate(a);
         const fillRateB = calculateFillRate(b);
-
+        
         return fillRateA - fillRateB;
       }
     });
@@ -351,7 +424,7 @@ export function StockPage() {
 
   // Componente de Skeleton para cargar
   const MachineCardSkeleton = () => (
-    <Card className="border border-zinc-200">
+    <Card className="border border-zinc-200 bg-white">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="space-y-2 flex-1">
@@ -389,7 +462,7 @@ export function StockPage() {
               </h1>
             </div>
             <p className="text-sm text-zinc-600">
-              Preparación de furgoneta de reparto · Actualización automática cada 30 minutos
+              Preparación de furgoneta de reparto
             </p>
             {lastScrape && (
               <div className="flex items-center gap-2 text-xs text-zinc-500 mt-2">
@@ -401,27 +474,6 @@ export function StockPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {enableManualScraping && (
-              <Button
-                variant="default"
-                size="default"
-                onClick={runScraping}
-                disabled={isScraping || isLoading}
-                className="bg-zinc-900 hover:bg-zinc-800 text-white"
-              >
-                {isScraping ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Scrapeando...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="mr-2 h-4 w-4" />
-                    Actualizar Stock
-                  </>
-                )}
-              </Button>
-            )}
             <Button
               variant="outline"
               size="default"
@@ -431,12 +483,70 @@ export function StockPage() {
                   loadData();
                 }
               }}
-              disabled={isLoading}
+              disabled={isLoading || isScraping}
               className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               Refrescar
             </Button>
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => setShowClearConfirmDialog(true)}
+              disabled={isLoading || isScraping || machines.length === 0}
+              className="border-red-300 hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Vaciar Tabla
+            </Button>
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => runScraping('both')} 
+                disabled={isScraping}
+                size="default"
+                className="bg-zinc-900 text-white hover:bg-zinc-800 transition-colors"
+              >
+                {isScraping ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Scraping...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    Scraping Total
+                  </>
+                )}
+              </Button>
+              <Button 
+                onClick={() => runScraping('televend')} 
+                disabled={isScraping}
+                size="default"
+                variant="outline"
+                className="border-zinc-300 hover:bg-zinc-100 transition-colors"
+              >
+                {isScraping ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="mr-2 h-4 w-4" />
+                )}
+                Solo Televend
+              </Button>
+              <Button 
+                onClick={() => runScraping('frekuent')} 
+                disabled={isScraping}
+                size="default"
+                variant="outline"
+                className="border-zinc-300 hover:bg-zinc-100 transition-colors"
+              >
+                {isScraping ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Package className="mr-2 h-4 w-4" />
+                )}
+                Solo Frekuent
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -472,19 +582,19 @@ export function StockPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={exportToCSV}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={exportToCSV} 
                   className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900"
                 >
                   <Download className="mr-2 h-4 w-4" />
                   CSV
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={exportToJSON}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={exportToJSON} 
                   className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900"
                 >
                   <Download className="mr-2 h-4 w-4" />
@@ -499,7 +609,7 @@ export function StockPage() {
       {/* Stats */}
       {stats && !isScraping && (
         <div className="grid gap-4 md:grid-cols-4">
-          <Card>
+          <Card className="bg-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Máquinas</CardTitle>
               <Package className="h-4 w-4 text-muted-foreground" />
@@ -511,7 +621,7 @@ export function StockPage() {
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">A Reponer</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -521,7 +631,7 @@ export function StockPage() {
               <p className="text-xs text-muted-foreground">unidades totales</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Capacidad</CardTitle>
               <Package className="h-4 w-4 text-muted-foreground" />
@@ -531,7 +641,7 @@ export function StockPage() {
               <p className="text-xs text-muted-foreground">unidades totales</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Tasa de Llenado</CardTitle>
               <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -559,21 +669,17 @@ export function StockPage() {
       )}
 
       {machines.length === 0 && !isLoading && !isScraping && (
-        <Card>
+        <Card className="bg-white">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <PackageSearch className="h-16 w-16 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No hay datos de stock disponibles</h3>
+            <h3 className="text-lg font-semibold mb-2">No hay datos de stock</h3>
             <p className="text-muted-foreground text-center mb-4">
-              Los datos de stock se actualizan automáticamente cada 30 minutos
+              Ejecuta un scraping para obtener los datos de stock actualizados
             </p>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              {lastScrape ? (
-                <span>Última actualización: {format(lastScrape, 'dd/MM/yyyy HH:mm', { locale: es })}</span>
-              ) : (
-                <span>Esperando primera actualización automática</span>
-              )}
-            </div>
+            <Button onClick={() => runScraping('both')} disabled={isScraping}>
+              <Download className="mr-2 h-4 w-4" />
+              Ejecutar Scraping
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -598,7 +704,7 @@ export function StockPage() {
                   : 'Seleccionar Todas'}
               </Button>
             </div>
-
+            
             {/* Botones de filtrado y ordenamiento */}
             <div className="flex flex-wrap gap-2">
               <div className="flex gap-2">
@@ -606,8 +712,8 @@ export function StockPage() {
                   variant={sortType === 'alphabetic' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSortType('alphabetic')}
-                  className={sortType === 'alphabetic'
-                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                  className={sortType === 'alphabetic' 
+                    ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
                     : 'border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900'
                   }
                 >
@@ -617,8 +723,8 @@ export function StockPage() {
                   variant={sortType === 'priority' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSortType('priority')}
-                  className={sortType === 'priority'
-                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                  className={sortType === 'priority' 
+                    ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
                     : 'border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900'
                   }
                 >
@@ -626,15 +732,15 @@ export function StockPage() {
                   Por Prioridad
                 </Button>
               </div>
-
+              
               <div className="h-6 w-px bg-zinc-200" />
-
+              
               <Button
                 variant={showOnlyEmptyLanes ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setShowOnlyEmptyLanes(!showOnlyEmptyLanes)}
-                className={showOnlyEmptyLanes
-                  ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                className={showOnlyEmptyLanes 
+                  ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
                   : 'border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900'
                 }
               >
@@ -651,7 +757,7 @@ export function StockPage() {
 
           {/* Resumen de productos (si hay máquinas seleccionadas) */}
           {showSummary && summary.length > 0 && (
-            <Card className="border-2">
+            <Card className="border-2 bg-white">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Package className="h-5 w-5" />
@@ -664,7 +770,7 @@ export function StockPage() {
               <CardContent>
                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                   {summary.map((item, index) => (
-                    <Card key={index} className="border-2 hover:shadow-md transition-shadow">
+                    <Card key={index} className="border-2 hover:shadow-md transition-shadow bg-white">
                       <CardContent className="pt-4">
                         <div className="space-y-3">
                           {/* Header del producto */}
@@ -726,7 +832,7 @@ export function StockPage() {
                 </p>
               </div>
             </div>
-
+            
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredMachines.map((machine) => {
                 const totalToReplenish = machine.products.reduce(
@@ -742,15 +848,16 @@ export function StockPage() {
                 const UrgencyIcon = urgencyBadge.icon;
 
                 return (
-                  <Card
+                  <Card 
                     key={machine.machineId}
-                    className={`relative transition-all duration-200 hover:shadow-md cursor-pointer group border flex flex-col ${isSelected
-                        ? 'border-zinc-900 shadow-sm'
+                    className={`relative transition-all duration-200 hover:shadow-md cursor-pointer group border flex flex-col bg-white ${
+                      isSelected 
+                        ? 'border-zinc-900 shadow-sm' 
                         : 'border-zinc-200 hover:border-zinc-400'
-                      }`}
+                    }`}
                   >
                     {/* Checkbox de selección */}
-                    <div
+                    <div 
                       className="absolute top-3 right-3 z-20"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -759,8 +866,8 @@ export function StockPage() {
                     >
                       <div className={`
                         p-1.5 rounded transition-all border flex items-center justify-center
-                        ${isSelected
-                          ? 'bg-zinc-900 border-zinc-900'
+                        ${isSelected 
+                          ? 'bg-zinc-900 border-zinc-900' 
                           : 'bg-white border-zinc-300 hover:bg-zinc-50'}
                       `}>
                         <Checkbox
@@ -795,7 +902,7 @@ export function StockPage() {
                           </div>
                         </div>
                       </CardHeader>
-
+                      
                       <CardContent className="space-y-3 relative flex-1 flex flex-col">
                         {/* Estadísticas con diseño moderno */}
                         <div className="space-y-2">
@@ -808,13 +915,13 @@ export function StockPage() {
                               {machine.products.length}
                             </Badge>
                           </div>
-
+                          
                           <div className="flex justify-between items-center bg-muted/30 p-2 rounded-lg">
                             <span className="text-sm text-muted-foreground flex items-center gap-1">
                               <TrendingUp className="h-3.5 w-3.5" />
                               A reponer
                             </span>
-                            <Badge
+                            <Badge 
                               className={totalToReplenish > 0 ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700'}
                             >
                               {totalToReplenish} unidades
@@ -825,7 +932,7 @@ export function StockPage() {
                             <span className="text-sm text-zinc-600">Nivel de llenado</span>
                             <div className="flex items-center gap-2">
                               <div className="w-16 h-2 bg-zinc-200 rounded-full overflow-hidden">
-                                <div
+                                <div 
                                   className={`h-full transition-all rounded-full ${urgencyBadge.progressColor}`}
                                   style={{ width: `${fillRate}%` }}
                                 />
@@ -838,9 +945,9 @@ export function StockPage() {
                         </div>
 
                         {/* Botón de ver detalles */}
-                        <Button
-                          variant="outline"
-                          size="sm"
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
                           className="w-full mt-auto border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -866,13 +973,13 @@ export function StockPage() {
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           {selectedMachineForDetails && (() => {
             const machineDetailsFillRate = calculateFillRate(selectedMachineForDetails);
-
+            
             const urgencyBadge = getUrgencyBadge(machineDetailsFillRate);
             const UrgencyIcon = urgencyBadge.icon;
             const hasOutOfStock = hasOutOfStockProducts(selectedMachineForDetails.products);
             const outOfStockCount = countOutOfStockProducts(selectedMachineForDetails.products);
             const outOfStockProducts = selectedMachineForDetails.products.filter(p => p.availableUnits === 0);
-
+            
             return (
               <>
                 <DialogHeader className="border-b pb-4">
@@ -897,146 +1004,182 @@ export function StockPage() {
                   </div>
                 </DialogHeader>
 
-                <div className="space-y-4 mt-4">
-                  {/* Resumen compacto */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-center">
-                      <Package className="h-5 w-5 mx-auto mb-1 text-primary" />
-                      <p className="text-2xl font-bold">{selectedMachineForDetails.products.length}</p>
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase">Productos</p>
-                    </div>
-                    <div className="bg-red-500/5 border border-red-200 rounded-lg p-3 text-center">
-                      <TrendingUp className="h-5 w-5 mx-auto mb-1 text-red-600" />
-                      <p className="text-2xl font-bold text-red-600">
-                        {selectedMachineForDetails.products.reduce((sum, p) => sum + p.unitsToReplenish, 0)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase">A Reponer</p>
-                    </div>
-                    <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-3 text-center">
-                      <Box className="h-5 w-5 mx-auto mb-1 text-blue-600" />
-                      <p className="text-2xl font-bold">
-                        {selectedMachineForDetails.products.reduce((sum, p) => sum + p.totalCapacity, 0)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase">Capacidad</p>
-                    </div>
+              <div className="space-y-4 mt-4">
+                {/* Resumen compacto */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-center">
+                    <Package className="h-5 w-5 mx-auto mb-1 text-primary" />
+                    <p className="text-2xl font-bold">{selectedMachineForDetails.products.length}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Productos</p>
                   </div>
+                  <div className="bg-red-500/5 border border-red-200 rounded-lg p-3 text-center">
+                    <TrendingUp className="h-5 w-5 mx-auto mb-1 text-red-600" />
+                    <p className="text-2xl font-bold text-red-600">
+                      {selectedMachineForDetails.products.reduce((sum, p) => sum + p.unitsToReplenish, 0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase">A Reponer</p>
+                  </div>
+                  <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-3 text-center">
+                    <Box className="h-5 w-5 mx-auto mb-1 text-blue-600" />
+                    <p className="text-2xl font-bold">
+                      {selectedMachineForDetails.products.reduce((sum, p) => sum + p.totalCapacity, 0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Capacidad</p>
+                  </div>
+                </div>
 
-                  {/* Alerta de productos sin stock */}
-                  {hasOutOfStock && (
-                    <div className="border-2 border-red-300 bg-red-50 rounded-lg p-3">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-sm text-red-900 break-words">
-                            {outOfStockCount} {outOfStockCount === 1 ? 'Producto sin stock' : 'Productos sin stock'}
-                          </h4>
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {outOfStockProducts.map((product, idx) => (
-                              <Badge key={idx} variant="destructive" className="text-xs font-medium break-words">
-                                {product.name}
-                              </Badge>
-                            ))}
-                          </div>
+                {/* Alerta de productos sin stock */}
+                {hasOutOfStock && (
+                  <div className="border-2 border-red-300 bg-red-50 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-sm text-red-900 break-words">
+                          {outOfStockCount} {outOfStockCount === 1 ? 'Producto sin stock' : 'Productos sin stock'}
+                        </h4>
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {outOfStockProducts.map((product, idx) => (
+                            <Badge key={idx} variant="destructive" className="text-xs font-medium break-words">
+                              {product.name}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  <Separator />
+                <Separator />
 
-                  {/* Lista de productos */}
-                  <div>
-                    <h3 className="font-bold text-base mb-3 flex items-center gap-2">
-                      <Package className="h-4 w-4" />
-                      Inventario Completo ({selectedMachineForDetails.products.length} productos)
-                    </h3>
-                    <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-2">
-                      {selectedMachineForDetails.products.map((product, idx) => {
-                        const needsReplenishment = product.unitsToReplenish > 0;
-                        const stockPercentage = (product.availableUnits / product.totalCapacity) * 100;
-                        const isOutOfStock = product.availableUnits === 0;
-
-                        return (
-                          <div
-                            key={idx}
-                            className={`border-l-4 rounded-md p-3 transition-all ${isOutOfStock
-                                ? 'border-red-500 bg-red-50'
-                                : needsReplenishment
-                                  ? 'border-orange-400 bg-orange-50/50'
-                                  : 'border-green-500 bg-green-50/30'
-                              }`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              {/* Nombre y categoría */}
-                              <div className="flex-1 min-w-0 flex items-center gap-2">
-                                {isOutOfStock ? (
-                                  <XCircle className="h-4 w-4 text-red-600 shrink-0" />
-                                ) : needsReplenishment ? (
-                                  <AlertCircle className="h-4 w-4 text-orange-600 shrink-0" />
-                                ) : (
-                                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-semibold text-sm break-words leading-tight">{product.name}</p>
-                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                    {product.category && (
-                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                        {product.category}
-                                      </Badge>
-                                    )}
-                                    {product.line && (
-                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                        L{product.line}
-                                      </Badge>
-                                    )}
-                                  </div>
+                {/* Lista de productos */}
+                <div>
+                  <h3 className="font-bold text-base mb-3 flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Inventario Completo ({selectedMachineForDetails.products.length} productos)
+                  </h3>
+                  <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-2">
+                    {selectedMachineForDetails.products.map((product, idx) => {
+                      const needsReplenishment = product.unitsToReplenish > 0;
+                      const stockPercentage = (product.availableUnits / product.totalCapacity) * 100;
+                      const isOutOfStock = product.availableUnits === 0;
+                      
+                      return (
+                        <div
+                          key={idx} 
+                          className={`border-l-4 rounded-md p-3 transition-all ${
+                            isOutOfStock 
+                              ? 'border-red-500 bg-red-50' 
+                              : needsReplenishment 
+                                ? 'border-orange-400 bg-orange-50/50' 
+                                : 'border-green-500 bg-green-50/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            {/* Nombre y categoría */}
+                            <div className="flex-1 min-w-0 flex items-center gap-2">
+                              {isOutOfStock ? (
+                                <XCircle className="h-4 w-4 text-red-600 shrink-0" />
+                              ) : needsReplenishment ? (
+                                <AlertCircle className="h-4 w-4 text-orange-600 shrink-0" />
+                              ) : (
+                                <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm break-words leading-tight">{product.name}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  {product.category && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      {product.category}
+                                    </Badge>
+                                  )}
+                                  {product.line && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                      L{product.line}
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
-
-                              {/* Stats y barra */}
-                              <div className="shrink-0 flex items-center gap-3">
-                                {/* Cantidad a reponer */}
-                                {needsReplenishment && (
-                                  <div className="text-center bg-red-100 rounded px-2 py-1">
-                                    <div className="text-base font-bold text-red-600">+{product.unitsToReplenish}</div>
-                                    <div className="text-[9px] text-red-700">Reponer</div>
-                                  </div>
-                                )}
-
-                                {/* Stock actual */}
-                                <div className="text-center">
-                                  <div className="text-sm font-bold">
-                                    {product.availableUnits}/{product.totalCapacity}
-                                  </div>
-                                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden mt-1">
-                                    <div
-                                      className={`h-full transition-all ${stockPercentage >= 80 ? 'bg-green-500' :
-                                          stockPercentage >= 50 ? 'bg-yellow-400' :
-                                            stockPercentage > 0 ? 'bg-orange-500' :
-                                              'bg-red-600'
-                                        }`}
-                                      style={{ width: `${stockPercentage}%` }}
-                                    />
-                                  </div>
-                                  <div className={`text-[10px] font-semibold mt-0.5 ${stockPercentage >= 80 ? 'text-green-600' :
-                                      stockPercentage >= 50 ? 'text-yellow-600' :
-                                        stockPercentage > 0 ? 'text-orange-600' :
-                                          'text-red-600'
-                                    }`}>
-                                    {stockPercentage.toFixed(0)}%
-                                  </div>
+                            </div>
+                            
+                            {/* Stats y barra */}
+                            <div className="shrink-0 flex items-center gap-3">
+                              {/* Cantidad a reponer */}
+                              {needsReplenishment && (
+                                <div className="text-center bg-red-100 rounded px-2 py-1">
+                                  <div className="text-base font-bold text-red-600">+{product.unitsToReplenish}</div>
+                                  <div className="text-[9px] text-red-700">Reponer</div>
+                                </div>
+                              )}
+                              
+                              {/* Stock actual */}
+                              <div className="text-center">
+                                <div className="text-sm font-bold">
+                                  {product.availableUnits}/{product.totalCapacity}
+                                </div>
+                                <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden mt-1">
+                                  <div 
+                                    className={`h-full transition-all ${
+                                      stockPercentage >= 80 ? 'bg-green-500' :
+                                      stockPercentage >= 50 ? 'bg-yellow-400' :
+                                      stockPercentage > 0 ? 'bg-orange-500' :
+                                      'bg-red-600'
+                                    }`}
+                                    style={{ width: `${stockPercentage}%` }}
+                                  />
+                                </div>
+                                <div className={`text-[10px] font-semibold mt-0.5 ${
+                                  stockPercentage >= 80 ? 'text-green-600' :
+                                  stockPercentage >= 50 ? 'text-yellow-600' :
+                                  stockPercentage > 0 ? 'text-orange-600' :
+                                  'text-red-600'
+                                }`}>
+                                  {stockPercentage.toFixed(0)}%
                                 </div>
                               </div>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </>
-            )
-          })()}
+              </div>
+            </>
+          )})()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación para vaciar tabla */}
+      <Dialog open={showClearConfirmDialog} onOpenChange={setShowClearConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              ¿Vaciar todas las tablas de stock?
+            </DialogTitle>
+            <DialogDescription>
+              Esta acción eliminará TODOS los datos de stock guardados en la base de datos.
+              <br /><br />
+              <strong>Importante:</strong> Esto no afecta a los datos de las máquinas, solo a los datos de stock.
+              Puedes volver a ejecutar el scraping para obtener datos actualizados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowClearConfirmDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={clearStockData}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Sí, Vaciar Tabla
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

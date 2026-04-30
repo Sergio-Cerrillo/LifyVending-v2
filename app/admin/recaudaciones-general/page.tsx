@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon, Zap } from 'lucide-react';
+import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon, Zap, Clock } from 'lucide-react';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
@@ -76,6 +76,7 @@ export default function AdminRevenueGeneralPage() {
     const [error, setError] = useState<string | null>(null);
     const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'monthly'>('daily');
     const [isScraping, setIsScraping] = useState(false);
+    const [lastUpdate, setLastUpdate] = useState<string | null>(null);
 
     // Check if manual scraping is enabled (only for local development)
     const enableManualScraping = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING === 'true';
@@ -91,10 +92,16 @@ export default function AdminRevenueGeneralPage() {
 
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
+            console.log('[RECAUDACIONES] Sesión:', !!sessionData.session, 'Error:', sessionError?.message);
+
             if (sessionError || !sessionData.session) {
+                console.error('[RECAUDACIONES] Sin sesión válida, redirigiendo a login');
+                toast.error('Sesión expirada. Por favor, inicia sesión de nuevo.');
                 router.push('/login');
                 return;
             }
+
+            console.log('[RECAUDACIONES] Haciendo petición a /api/admin/revenue');
 
             const response = await fetch('/api/admin/revenue', {
                 headers: {
@@ -102,16 +109,25 @@ export default function AdminRevenueGeneralPage() {
                 }
             });
 
+            console.log('[RECAUDACIONES] Respuesta:', response.status, response.statusText);
+
             if (!response.ok) {
-                throw new Error('Error cargando recaudaciones');
+                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+                console.error('[RECAUDACIONES] Error del servidor:', errorData);
+                throw new Error(errorData.error || `Error HTTP ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('[RECAUDACIONES] Datos recibidos:', data.count, 'máquinas');
             setRevenueData(data);
+            setLastUpdate(data.lastUpdate);
 
         } catch (err: any) {
-            console.error('Error cargando recaudaciones:', err);
+            console.error('[RECAUDACIONES] Error completo:', err);
             setError(err.message);
+            toast.error('Error cargando recaudaciones', {
+                description: err.message
+            });
         } finally {
             setLoading(false);
         }
@@ -137,18 +153,24 @@ export default function AdminRevenueGeneralPage() {
             });
 
             if (!response.ok) {
-                throw new Error('Error ejecutando scraping');
+                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+                console.error('[SCRAPE] Error del servidor:', errorData);
+                throw new Error(errorData.error || `Error HTTP ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('[SCRAPE] Resultado:', data);
             toast.success(`Scraping completado: ${data.machines_updated || 0} máquinas actualizadas`);
             
             // Recargar datos
             await loadRevenueData();
 
         } catch (err: any) {
-            console.error('Error ejecutando scraping:', err);
-            toast.error('Error ejecutando scraping');
+            console.error('[SCRAPE] Error completo:', err);
+            toast.error('Error ejecutando scraping', {
+                description: err.message || 'Error desconocido',
+                duration: 6000
+            });
         } finally {
             setIsScraping(false);
         }
@@ -198,10 +220,26 @@ export default function AdminRevenueGeneralPage() {
                         <div className="flex items-center gap-3 mb-2">
                             <EuroIcon className="h-7 w-7 text-zinc-900" />
                             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
+                            {!enableManualScraping && (
+                                <Badge variant="outline" className="text-xs">
+                                    Solo lectura
+                                </Badge>
+                            )}
+                            {enableManualScraping && (
+                                <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800 border-yellow-300">
+                                    Modo Desarrollo
+                                </Badge>
+                            )}
                         </div>
                         <p className="text-sm text-zinc-600">
                             Vista global de todas las máquinas del sistema • Datos de base de datos
                         </p>
+                        {lastUpdate && (
+                            <p className="text-xs text-zinc-500 mt-1">
+                                <Clock className="inline h-3 w-3 mr-1" />
+                                Última actualización: {formatDate(lastUpdate)}
+                            </p>
+                        )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {enableManualScraping && (
@@ -251,7 +289,7 @@ export default function AdminRevenueGeneralPage() {
             {revenueData && (<>
                 {/* Totales Generales */}
                 <div className="grid gap-4 md:grid-cols-2">
-                    <Card className="border border-zinc-200">
+                    <Card className="border border-zinc-200 bg-white">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium text-zinc-600">Total Diario (Hoy)</CardTitle>
                             <DollarSign className="h-4 w-4 text-zinc-900" />
@@ -266,7 +304,7 @@ export default function AdminRevenueGeneralPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="border border-zinc-200">
+                    <Card className="border border-zinc-200 bg-white">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium text-zinc-600">Total Mensual</CardTitle>
                             <TrendingUp className="h-4 w-4 text-zinc-900" />
@@ -349,7 +387,7 @@ export default function AdminRevenueGeneralPage() {
             </>)}
 
             {/* Tabla de Máquinas */}
-            {!scraping && (<Card className="border border-zinc-200">
+            {!isScraping && (<Card className="border border-zinc-200 bg-white">
                 <CardHeader>
                     <CardTitle className="text-zinc-900">Detalle por Máquina</CardTitle>
                     <CardDescription className="text-zinc-600">
@@ -402,21 +440,21 @@ interface MachineTableProps {
 
 function MachineTable({ machines, period, formatCurrency, formatDate }: MachineTableProps) {
     return (
-        <div className="rounded-md border">
+        <div className="rounded-lg border border-zinc-200 overflow-hidden bg-white">
             <Table>
                 <TableHeader>
-                    <TableRow>
-                        <TableHead>Máquina</TableHead>
-                        <TableHead>Fuente</TableHead>
-                        <TableHead>Ubicación</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead>Última Actualización</TableHead>
+                    <TableRow className="bg-zinc-50 border-b border-zinc-200 hover:bg-zinc-50">
+                        <TableHead className="font-semibold text-zinc-900">Máquina</TableHead>
+                        <TableHead className="font-semibold text-zinc-900">Fuente</TableHead>
+                        <TableHead className="font-semibold text-zinc-900">Ubicación</TableHead>
+                        <TableHead className="text-right font-semibold text-zinc-900">Total</TableHead>
+                        <TableHead className="font-semibold text-zinc-900">Última Actualización</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {machines.length === 0 ? (
-                        <TableRow>
-                            <TableCell colSpan={7} className="text-center text-muted-foreground">
+                        <TableRow className="hover:bg-white">
+                            <TableCell colSpan={7} className="text-center text-zinc-500 py-12">
                                 No hay datos de recaudación disponibles. Los datos se actualizan automáticamente cada hora.
                             </TableCell>
                         </TableRow>
@@ -426,24 +464,27 @@ function MachineTable({ machines, period, formatCurrency, formatDate }: MachineT
                             const isOrain = machine.source === 'orain';
 
                             return (
-                                <TableRow key={machine.id}>
-                                    <TableCell className="font-medium">{machine.name}</TableCell>
+                                <TableRow 
+                                    key={machine.id}
+                                    className="border-b border-zinc-100 hover:bg-zinc-50/50 transition-colors"
+                                >
+                                    <TableCell className="font-medium text-zinc-900">{machine.name}</TableCell>
                                     <TableCell>
                                         <Badge
                                             variant="outline"
                                             className={isOrain
-                                                ? "bg-blue-50 text-blue-700 border-blue-300"
-                                                : "bg-purple-50 text-purple-700 border-purple-300"
+                                                ? "bg-blue-100 text-blue-800 border-blue-300 font-medium"
+                                                : "bg-purple-100 text-purple-800 border-purple-300 font-medium"
                                             }
                                         >
                                             {isOrain ? 'Orain-Frekuent' : 'Televend'}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell>{machine.location || 'Sin ubicación'}</TableCell>
-                                    <TableCell className="text-right font-bold">
+                                    <TableCell className="text-zinc-700">{machine.location || 'Sin ubicación'}</TableCell>
+                                    <TableCell className="text-right font-bold text-zinc-900 text-base">
                                         {formatCurrency(data.total)}
                                     </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
+                                    <TableCell className="text-sm text-zinc-600">
                                         {formatDate(data.updatedAt)}
                                     </TableCell>
                                 </TableRow>

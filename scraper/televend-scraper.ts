@@ -2,7 +2,6 @@ import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import path from 'path';
 import os from 'os';
 import type { MachineStock, StockProduct } from '@/lib/types';
-import { launchBrowser } from './browser-helper';
 
 interface TelevendConfig {
   username: string;
@@ -23,8 +22,20 @@ export class TelevendScraper {
   async initialize() {
     console.log('🚀 [TELEVEND] Inicializando navegador...');
     
-    this.browser = await launchBrowser({
+    this.browser = await chromium.launch({
       headless: this.config.headless,
+      args: [
+        '--disable-images',
+        '--disable-fonts',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--no-first-run',
+        '--no-default-browser-check',
+      ],
     });
 
     // MODO INCÓGNITO: No cargar sesión guardada para forzar login fresco

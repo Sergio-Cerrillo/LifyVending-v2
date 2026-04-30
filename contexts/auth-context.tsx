@@ -28,20 +28,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user) {
           // Obtener perfil
-          const { data: profile } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('role, display_name')
             .eq('id', session.user.id)
             .single();
 
           if (profile) {
-            setCurrentUser({
+            const user = {
               id: session.user.id,
               email: session.user.email || '',
               name: profile.display_name || session.user.email || '',
               role: profile.role as UserRole,
               permissions: session.user.user_metadata?.permissions || [],
-            });
+            };
+            
+            setCurrentUser(user);
+          } else {
+            console.error('No se encontró perfil para el usuario');
           }
         }
       } catch (error) {

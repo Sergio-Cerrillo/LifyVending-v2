@@ -10,27 +10,51 @@ export async function GET(request: NextRequest) {
   try {
     // Verificar autenticación
     const authHeader = request.headers.get('authorization');
+    
+    console.log('[REVENUE API] Auth header presente:', !!authHeader);
+    
     if (!authHeader) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+      console.error('[REVENUE API] No se proporcionó token de autorización');
+      return NextResponse.json({ error: 'No autorizado - Token faltante' }, { status: 401 });
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    console.log('[REVENUE API] Usuario autenticado:', user?.id, 'Error:', authError?.message);
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+      console.error('[REVENUE API] Error de autenticación:', authError?.message);
+      return NextResponse.json({ 
+        error: 'No autorizado - Token inválido',
+        details: authError?.message 
+      }, { status: 401 });
     }
 
     // Verificar que sea admin
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (profile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 });
+    console.log('[REVENUE API] Perfil del usuario:', profile?.role, 'Error:', profileError?.message);
+
+    if (profileError || !profile) {
+      console.error('[REVENUE API] Error obteniendo perfil:', profileError?.message);
+      return NextResponse.json({ 
+        error: 'Error obteniendo perfil de usuario',
+        details: profileError?.message 
+      }, { status: 500 });
+    }
+
+    if (profile.role !== 'admin') {
+      console.error('[REVENUE API] Usuario sin permisos de admin:', user.id, 'Rol:', profile.role);
+      return NextResponse.json({ 
+        error: 'Permisos insuficientes',
+        userRole: profile.role,
+        requiredRole: 'admin'
+      }, { status: 403 });
     }
 
     // Obtener todas las máquinas con sus datos de recaudación
@@ -100,6 +124,16 @@ export async function GET(request: NextRequest) {
       { daily: 0, monthly: 0 }
     );
 
+    // Encontrar la fecha de última actualización más reciente
+    const allUpdateDates = formattedMachines
+      .flatMap((m: any) => [m.daily.updatedAt, m.monthly.updatedAt, m.lastScraped])
+      .filter(Boolean)
+      .map((date: string) => new Date(date).getTime());
+    
+    const lastUpdate = allUpdateDates.length > 0 
+      ? new Date(Math.max(...allUpdateDates)).toISOString()
+      : null;
+
     return NextResponse.json({
       machines: formattedMachines,
       totals,
@@ -107,7 +141,8 @@ export async function GET(request: NextRequest) {
       totalsTelevend,
       count: formattedMachines.length,
       countOrain: formattedMachines.filter((m: any) => m.source === 'orain').length,
-      countTelevend: formattedMachines.filter((m: any) => m.source === 'televend').length
+      countTelevend: formattedMachines.filter((m: any) => m.source === 'televend').length,
+      lastUpdate
     });
 
   } catch (error: any) {
