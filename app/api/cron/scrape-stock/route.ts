@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { TelevendScraper } from '@/scraper/televend-scraper';
 
-// Cliente Supabase con service_role para operaciones sin RLS
+// CRON JOB: Stock Scraping (v4 - Fresh rebuild)
+// Called by cron-job.org every 8 hours
+
 function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,96 +18,58 @@ function getSupabaseAdmin() {
   );
 }
 
-/**
- * CRON JOB: Scraping automático de STOCK cada 30 minutos
- * 
- * Este endpoint es llamado por cron-job.org cada 30 minutos
- * 
- * Flujo:
- * 1. Valida token de seguridad (CRON_SECRET)
- * 2. Obtiene lista de máquinas activas
- * 3. Inicializa scraper de Televend y hace login
- * 4. Para cada máquina:
- *    a. Scrape stock desde Televend
- *    b. UPSERT en machine_stock_current (actualiza si existe, crea si no)
- *    c. DELETE productos antiguos de esa máquina
- *    d. INSERT nuevos productos
- * 5. Retorna resultado con estadísticas
- * 
- * Notas:
- * - NO guarda histórico - solo mantiene el snapshot más reciente
- * - UPSERT garantiza que solo hay 1 registro por máquina
- * - DELETE CASCADE elimina productos automáticamente al actualizar
- * - Si una máquina falla, continúa con las siguientes
- * 
- * Seguridad:
- * - Requiere header Authorization: Bearer <CRON_SECRET>
- * - Solo cron-job.org debe conocer este secret
- */
 export async function GET(request: NextRequest) {
-  console.log('[CRON STOCK v3] Iniciando scraping automático de stock...');
+  console.log('[STOCK CRON v4] Starting automatic stock scraping...');
 
-  // ============================================
-  // 1. VALIDAR TOKEN DE SEGURIDAD
-  // ============================================
+  // Validate authorization
   const authHeader = request.headers.get('authorization');
   const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
   
   if (!process.env.CRON_SECRET) {
-    console.error('[CRON STOCK v3] ERROR: CRON_SECRET no está configurado');
-    return NextResponse.json(
-      { error: 'Server misconfigured' },
-      { status: 500 }
-    );
+    console.error('[STOCK CRON v4] ERROR: CRON_SECRET not configured');
+    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
   }
 
   if (authHeader !== expectedAuth) {
-    console.warn('[CRON STOCK v3] Intento de acceso no autorizado');
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
+    console.warn('[STOCK CRON v4] Unauthorized access attempt');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const startTime = Date.now();
   const supabaseAdmin = getSupabaseAdmin();
 
   try {
-    // ============================================
-    // 2. OBTENER MÁQUINAS ACTIVAS
-    // ============================================
-    console.log('[CRON STOCK v3] Obteniendo lista de máquinas activas...');
+    // Fetch all machines (NO deleted_at filter)
+    console.log('[STOCK CRON v4] Fetching active machines...');
     
-    const { data: activeMachines, error: machinesError } = await supabaseAdmin
+    const { data: machines, error: machinesError } = await supabaseAdmin
       .from('machines')
       .select('id, name, location, orain_machine_id, televend_machine_id')
       .order('name');
 
     if (machinesError) {
-      console.error('[CRON STOCK v3] Error obteniendo máquinas:', machinesError);
+      console.error('[STOCK CRON v4] Database error:', machinesError);
       return NextResponse.json(
         { error: 'Database error', details: machinesError.message },
         { status: 500 }
       );
     }
 
-    if (!activeMachines || activeMachines.length === 0) {
-      console.log('[CRON STOCK v3] No hay máquinas activas para scrapear');
+    if (!machines || machines.length === 0) {
+      console.log('[STOCK CRON v4] No machines found');
       return NextResponse.json({
         success: true,
-        message: 'No active machines to scrape',
+        message: 'No machines to scrape',
         machinesScraped: 0,
         machinesFailed: 0,
         duration: Date.now() - startTime
       });
     }
 
-    console.log(`[CRON STOCK v3] ${activeMachines.length} máquinas activas encontradas`);
+    console.log(`[STOCK CRON v4] Found ${machines.length} machines`);
 
-    // ============================================
-    // 3. INICIALIZAR SCRAPER TELEVEND
-    // ============================================
-    console.log('[CRON STOCK v3] Inicializando scraper de Televend...');
+    // Initialize Televend scraper
+    console.log('[STOCK CRON v4] Initializing Televend scraper...');
     
     const televend = new TelevendScraper({
       username: process.env.TELEVEND_USERNAME!,
@@ -117,28 +81,23 @@ export async function GET(request: NextRequest) {
     await televend.login();
     await televend.navigateToMachines();
 
-    console.log('[CRON STOCK] ✅ Login exitoso en Televend');
+    console.log('[STOCK CRON v4] ✅ Televend login successful');
 
-    // ============================================
-    // 4. SCRAPE Y ALMACENAR STOCK POR MÁQUINA
-    // ============================================
+    // Process each machine
     let successCount = 0;
     let failCount = 0;
     const errors: Array<{ machineId: string; machineName: string; error: string }> = [];
 
-    for (const machine of activeMachines) {
+    for (const machine of machines) {
       try {
-        console.log(`[CRON STOCK] Procesando: ${machine.name} (ID: ${machine.id})`);
+        console.log(`[STOCK CRON v4] Processing: ${machine.name} (ID: ${machine.id})`);
 
-        // Construir URL de la máquina en Televend
-        // Asumiendo que la URL sigue el patrón:
-        // https://app.televendcloud.com/companies/4949/machines/{id}
         const machineUrl = machine.televend_machine_id 
           ? `https://app.televendcloud.com/companies/4949/machines/${machine.televend_machine_id}`
           : null;
 
         if (!machineUrl) {
-          console.warn(`[CRON STOCK] ⚠️  Máquina ${machine.name} no tiene televend_machine_id, saltando...`);
+          console.warn(`[STOCK CRON v4] ⚠️  Machine ${machine.name} has no televend_machine_id, skipping...`);
           failCount++;
           errors.push({
             machineId: machine.id,
@@ -148,7 +107,7 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // Scrape stock de la máquina
+        // Scrape stock data
         const stockData = await televend.extractStockForMachine({
           id: machine.id,
           name: machine.name,
@@ -156,7 +115,7 @@ export async function GET(request: NextRequest) {
         });
 
         if (!stockData || !stockData.products || stockData.products.length === 0) {
-          console.warn(`[CRON STOCK] ⚠️  No se obtuvieron productos para ${machine.name}`);
+          console.warn(`[STOCK CRON v4] ⚠️  No products found for ${machine.name}`);
           failCount++;
           errors.push({
             machineId: machine.id,
@@ -166,15 +125,13 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // Calcular estadísticas
+        // Calculate statistics
         const totalProducts = stockData.products.length;
         const totalCapacity = stockData.products.reduce((sum, p) => sum + (p.totalCapacity || 0), 0);
         const totalAvailable = stockData.products.reduce((sum, p) => sum + (p.availableUnits || 0), 0);
         const totalToReplenish = stockData.products.reduce((sum, p) => sum + (p.unitsToReplenish || 0), 0);
 
-        // ============================================
-        // 4a. UPSERT en machine_stock_current
-        // ============================================
+        // UPSERT machine stock record
         const { data: stockRecord, error: stockError } = await supabaseAdmin
           .from('machine_stock_current')
           .upsert({
@@ -194,7 +151,7 @@ export async function GET(request: NextRequest) {
           .single();
 
         if (stockError) {
-          console.error(`[CRON STOCK] Error upserting stock para ${machine.name}:`, stockError);
+          console.error(`[STOCK CRON v4] Error upserting stock for ${machine.name}:`, stockError);
           failCount++;
           errors.push({
             machineId: machine.id,
@@ -204,22 +161,17 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // ============================================
-        // 4b. BORRAR productos antiguos
-        // ============================================
+        // Delete old products
         const { error: deleteError } = await supabaseAdmin
           .from('stock_products_current')
           .delete()
           .eq('stock_id', stockRecord.id);
 
         if (deleteError) {
-          console.error(`[CRON STOCK] Error eliminando productos antiguos para ${machine.name}:`, deleteError);
-          // Continuar de todos modos para insertar nuevos
+          console.error(`[STOCK CRON v4] Error deleting old products for ${machine.name}:`, deleteError);
         }
 
-        // ============================================
-        // 4c. INSERTAR nuevos productos
-        // ============================================
+        // Insert new products
         const productsToInsert = stockData.products.map(p => ({
           stock_id: stockRecord.id,
           product_name: p.name,
@@ -235,7 +187,7 @@ export async function GET(request: NextRequest) {
           .insert(productsToInsert);
 
         if (productsError) {
-          console.error(`[CRON STOCK] Error insertando productos para ${machine.name}:`, productsError);
+          console.error(`[STOCK CRON v4] Error inserting products for ${machine.name}:`, productsError);
           failCount++;
           errors.push({
             machineId: machine.id,
@@ -245,11 +197,11 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        console.log(`[CRON STOCK] ✅ ${machine.name}: ${totalProducts} productos, ${totalToReplenish} a reponer`);
+        console.log(`[STOCK CRON v4] ✅ ${machine.name}: ${totalProducts} products, ${totalToReplenish} to replenish`);
         successCount++;
 
       } catch (error: any) {
-        console.error(`[CRON STOCK] Error procesando ${machine.name}:`, error);
+        console.error(`[STOCK CRON v4] Error processing ${machine.name}:`, error);
         failCount++;
         errors.push({
           machineId: machine.id,
@@ -259,26 +211,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ============================================
-    // 5. CERRAR SCRAPER
-    // ============================================
+    // Cleanup
     await televend.close();
-    console.log('[CRON STOCK] Scraper cerrado');
+    console.log('[STOCK CRON v4] Scraper closed');
 
-    // ============================================
-    // 6. RESULTADO FINAL
-    // ============================================
+    // Return results
     const duration = Date.now() - startTime;
     const durationMinutes = (duration / 1000 / 60).toFixed(2);
 
-    console.log(`[CRON STOCK] ✅ Completado en ${durationMinutes} minutos`);
-    console.log(`[CRON STOCK] Exitosas: ${successCount}, Fallidas: ${failCount}`);
+    console.log(`[STOCK CRON v4] ✅ Completed in ${durationMinutes} minutes`);
+    console.log(`[STOCK CRON v4] Success: ${successCount}, Failed: ${failCount}`);
 
     return NextResponse.json({
       success: true,
       machinesScraped: successCount,
       machinesFailed: failCount,
-      totalMachines: activeMachines.length,
+      totalMachines: machines.length,
       duration,
       durationMinutes: parseFloat(durationMinutes),
       timestamp: new Date().toISOString(),
@@ -286,7 +234,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('[CRON STOCK] Error fatal:', error);
+    console.error('[STOCK CRON v4] Fatal error:', error);
     
     return NextResponse.json(
       {
