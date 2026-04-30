@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
     const { data: activeMachines, error: machinesError } = await supabaseAdmin
       .from('machines')
       .select('id, name, location, orain_machine_id, televend_machine_id')
-      .is('deleted_at', null)
       .order('name');
 
     if (machinesError) {
