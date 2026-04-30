@@ -20,7 +20,7 @@ export async function launchBrowser(config: BrowserConfig): Promise<Browser> {
     console.log(`🔑 API Key presente: ${browserlessApiKey.substring(0, 8)}...${browserlessApiKey.substring(browserlessApiKey.length - 4)}`);
     
     const browser = await chromium.connect({
-      wsEndpoint: `wss://production-sfo.browserless.io?token=${browserlessApiKey}`,
+      wsEndpoint: `wss://chrome.browserless.io?token=${browserlessApiKey}`,
       timeout: 60000, // Aumentado a 60 segundos
     });
 
