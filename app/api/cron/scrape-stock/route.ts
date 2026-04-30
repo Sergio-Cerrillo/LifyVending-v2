@@ -41,7 +41,7 @@ const supabaseAdmin = createClient(
  * - Solo Vercel Cron debe conocer este secret
  */
 export async function GET(request: NextRequest) {
-  console.log('[CRON STOCK] Iniciando scraping automático de stock...');
+  console.log('[CRON STOCK] Iniciando scraping automático de stock... v2');
 
   // ============================================
   // 1. VALIDAR TOKEN DE SEGURIDAD
