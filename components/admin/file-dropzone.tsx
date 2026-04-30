@@ -201,7 +201,7 @@ export function FileDropzone({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{file.name}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-zinc-500">
                   {formatFileSize(file.size)}
                 </p>
               </div>

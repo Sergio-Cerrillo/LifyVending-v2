@@ -400,7 +400,7 @@ export default function AdminClientDetailPage() {
       </div>
 
       {/* Link a Dashboard */}
-      <Card className="bg-muted/30 border-dashed">
+      <Card className="bg-zinc-50/50 border-dashed border-zinc-300">
         <CardHeader>
           <CardTitle>Dashboard del Cliente</CardTitle>
           <CardDescription>
@@ -431,7 +431,7 @@ export default function AdminClientDetailPage() {
             <div className="space-y-3">
               <div>
                 <Label htmlFor="hidePercent" className="text-base font-semibold">Porcentaje Oculto (%)</Label>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-zinc-500 mt-1">
                   Este porcentaje se RESTA de la recaudación bruta
                 </p>
               </div>
@@ -445,8 +445,8 @@ export default function AdminClientDetailPage() {
                 onChange={(e) => setCommissionHidePercent(parseFloat(e.target.value) || 0)}
                 className="text-lg font-medium"
               />
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm">
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                <p className="text-sm text-amber-900">
                   <strong>Ejemplo:</strong><br />
                   Si bruto = 100€ y % oculto = {commissionHidePercent}%<br />
                   → Cliente ve: {formatCurrency(100 * (1 - commissionHidePercent / 100))}
@@ -458,7 +458,7 @@ export default function AdminClientDetailPage() {
             <div className="space-y-3">
               <div>
                 <Label htmlFor="paymentPercent" className="text-base font-semibold">Porcentaje Comisión - Pago (%)</Label>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-zinc-500 mt-1">
                   Solo informativo, NO afecta los cálculos del dashboard
                 </p>
               </div>
@@ -472,8 +472,8 @@ export default function AdminClientDetailPage() {
                 onChange={(e) => setCommissionPaymentPercent(parseFloat(e.target.value) || 0)}
                 className="text-lg font-medium"
               />
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm">
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <p className="text-sm text-blue-900">
                   <strong>Info:</strong><br />
                   El cliente recibirá el {commissionPaymentPercent}% en el pago.<br />
                   Este valor es solo para tu referencia.
@@ -496,7 +496,7 @@ export default function AdminClientDetailPage() {
               </CardDescription>
             </div>
             <div className="flex flex-col gap-2">
-              <Badge variant="secondary" className="text-sm">
+              <Badge className="text-sm bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold">
                 {selectedMachineIds.size} de {allMachines.length} seleccionadas
               </Badge>
               <div className="flex gap-2">
@@ -524,7 +524,7 @@ export default function AdminClientDetailPage() {
         </CardHeader>
         <CardContent>
           {allMachines.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
+            <p className="text-center text-zinc-500 py-8">
               No hay máquinas disponibles en el sistema.
             </p>
           ) : (
@@ -565,7 +565,7 @@ export default function AdminClientDetailPage() {
                         )}
                       </div>
                       {machine.location && (
-                        <div className="text-sm text-muted-foreground">{machine.location}</div>
+                        <div className="text-sm text-zinc-600">{machine.location}</div>
                       )}
                     </label>
                     {isSelected && (

@@ -127,19 +127,19 @@ export function ScrapingForm({ initialData }: ScrapingFormProps) {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <div className="text-sm text-muted-foreground">Total Ejecuciones</div>
+                <div className="text-sm text-zinc-600 font-medium">Total Ejecuciones</div>
                 <div className="text-2xl font-bold">{scrapingStatus.total_runs}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Exitosas</div>
+                <div className="text-sm text-zinc-600 font-medium">Exitosas</div>
                 <div className="text-2xl font-bold text-green-600">{scrapingStatus.successful_runs}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Fallidas</div>
+                <div className="text-sm text-zinc-600 font-medium">Fallidas</div>
                 <div className="text-2xl font-bold text-red-600">{scrapingStatus.failed_runs}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Tasa de Éxito</div>
+                <div className="text-sm text-zinc-600 font-medium">Tasa de Éxito</div>
                 <div className="text-2xl font-bold">{scrapingStatus.success_rate.toFixed(1)}%</div>
               </div>
             </div>

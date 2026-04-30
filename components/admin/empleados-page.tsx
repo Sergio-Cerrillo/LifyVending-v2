@@ -197,50 +197,60 @@ export function EmpleadosPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Gestión de Empleados</h1>
-                    <p className="text-muted-foreground mt-2">
-                        Administra los usuarios que tienen acceso al sistema
-                    </p>
+            {/* Header mejorado */}
+            <div className="bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 border border-emerald-100 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl shadow-lg">
+                                <UserPlus className="h-6 w-6 text-white" />
+                            </div>
+                            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Gestión de Empleados</h1>
+                        </div>
+                        <p className="text-sm font-semibold text-zinc-600 ml-14">
+                            Administra empleados y operadores del sistema
+                        </p>
+                    </div>
+                    <Button
+                        onClick={openCreateDialog}
+                        className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold"
+                    >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Nuevo Empleado
+                    </Button>
                 </div>
-                <Button onClick={openCreateDialog}>
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Crear Empleado
-                </Button>
             </div>
 
-            {/* Search */}
-            <Card>
+            {/* Search bar */}
+            <Card className="bg-white border-emerald-100 shadow-sm">
                 <CardContent className="pt-6">
                     <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
                         <Input
                             placeholder="Buscar por nombre o email..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="pl-8"
+                            className="pl-10 border-emerald-200 focus:border-emerald-400"
                         />
                     </div>
                 </CardContent>
             </Card>
 
             {/* Employee Table */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Empleados ({filteredEmployees.length})</CardTitle>
-                    <CardDescription>
+            <Card className="bg-white border-emerald-100 shadow-md">
+                <CardHeader className="bg-gradient-to-br from-emerald-50/50 to-teal-50/50 border-b border-emerald-100">
+                    <CardTitle className="text-zinc-900 font-bold">Empleados ({filteredEmployees.length})</CardTitle>
+                    <CardDescription className="text-zinc-600 font-medium">
                         Lista de todos los usuarios con acceso al sistema
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
                         <div className="flex justify-center items-center py-12">
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
                         </div>
                     ) : filteredEmployees.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
+                        <div className="text-center py-12 text-zinc-500 font-medium">
                             {search ? 'No se encontraron empleados' : 'No hay empleados creados'}
                         </div>
                     ) : (
@@ -261,7 +271,7 @@ export function EmpleadosPage() {
                                         <TableCell className="font-medium">{employee.name}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
-                                                <Mail className="h-4 w-4 text-muted-foreground" />
+                                                <Mail className="h-4 w-4 text-emerald-500" />
                                                 {employee.email}
                                             </div>
                                         </TableCell>
@@ -335,7 +345,7 @@ export function EmpleadosPage() {
                                 value={formData.password}
                                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                             />
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-zinc-500 font-medium">
                                 La contraseña debe tener al menos 8 caracteres
                             </p>
                         </div>
@@ -356,7 +366,7 @@ export function EmpleadosPage() {
                                             <Shield className="h-4 w-4 text-blue-600" />
                                             <div>
                                                 <div className="font-medium">Operador</div>
-                                                <div className="text-xs text-muted-foreground">
+                                                <div className="text-xs text-zinc-500">
                                                     Acceso solo a Stock de máquinas
                                                 </div>
                                             </div>
@@ -367,7 +377,7 @@ export function EmpleadosPage() {
                                             <Shield className="h-4 w-4 text-red-600" />
                                             <div>
                                                 <div className="font-medium">Administrador</div>
-                                                <div className="text-xs text-muted-foreground">
+                                                <div className="text-xs text-zinc-500">
                                                     Acceso completo al sistema
                                                 </div>
                                             </div>

@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StatusBadge, getMachineStatusVariant } from './status-badge';
-import { Plus, Search, Edit, MapPin, CheckCircle2, XCircle, FileCheck, MoreVertical, Download } from 'lucide-react';
+import { Plus, Search, Edit, MapPin, CheckCircle2, XCircle, FileCheck, MoreVertical, Download, Package } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CreateMachineSheet } from './create-machine-sheet';
@@ -79,17 +79,22 @@ export function MachinesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-zinc-200 pb-6 mb-6">
+      <div className="bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 border border-emerald-100 rounded-2xl p-6 shadow-sm mb-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Máquinas</h1>
-            <p className="text-sm text-zinc-600 mt-1">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl shadow-lg">
+                <Package className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Máquinas</h1>
+            </div>
+            <p className="text-sm font-semibold text-zinc-700 ml-14">
               Gestión del parque de máquinas vending
             </p>
           </div>
           <CreateMachineSheet
             trigger={
-              <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
+              <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
                 <Plus className="mr-2 h-4 w-4" />
                 Nueva Máquina
               </Button>
@@ -99,7 +104,7 @@ export function MachinesPage() {
       </div>      <div className="flex flex-col gap-4 md:flex-row md:items-end">
         <div className="flex-1">
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
             <Input
               placeholder="Buscar por número, ubicación, marca o modelo..."
               value={search}
@@ -173,7 +178,7 @@ export function MachinesPage() {
           <TableBody>
             {filteredMachines.length === 0 ? (
               <TableRow>1
-                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-zinc-500">
                   No se encontraron máquinas
                 </TableCell>
               </TableRow>
@@ -192,7 +197,7 @@ export function MachinesPage() {
                   <TableCell>
                     <div>
                       <div className="font-medium">{machine.brand}</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-zinc-600">
                         {machine.model}
                       </div>
                     </div>
@@ -200,7 +205,7 @@ export function MachinesPage() {
                   <TableCell>
                     <div>
                       <div className="font-medium">{machine.locationName}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-1">
+                      <div className="text-sm text-zinc-600 flex items-center gap-1">
                         <MapPin className="h-3 w-3" />
                         {machine.locationAddress}
                       </div>
@@ -277,25 +282,25 @@ export function MachinesPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border p-4">
           <div className="text-2xl font-bold">{machines.length}</div>
-          <div className="text-sm text-muted-foreground">Total Máquinas</div>
+          <div className="text-sm text-zinc-600 font-medium">Total Máquinas</div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-2xl font-bold">
             {machines.filter((m) => m.status === 'ACTIVA').length}
           </div>
-          <div className="text-sm text-muted-foreground">Activas</div>
+          <div className="text-sm text-zinc-600 font-medium">Activas</div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-2xl font-bold">
             {machines.filter((m) => m.hasCardReader).length}
           </div>
-          <div className="text-sm text-muted-foreground">Con Lector Tarjeta</div>
+          <div className="text-sm text-zinc-600 font-medium">Con Lector Tarjeta</div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-2xl font-bold">
             {machines.filter((m) => m.hasTelemetry).length}
           </div>
-          <div className="text-sm text-muted-foreground">Con Telemetría</div>
+          <div className="text-sm text-zinc-600 font-medium">Con Telemetría</div>
         </div>
       </div>
     </div>

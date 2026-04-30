@@ -163,7 +163,7 @@ export function UploadDocumentSheet({ trigger }: UploadDocumentSheetProps) {
                 <SelectItem value="ABONADA">Factura Abonada (Cliente)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-zinc-500">
               Recibida: facturas de proveedores. Abonada: facturas emitidas a clientes.
             </p>
           </div>

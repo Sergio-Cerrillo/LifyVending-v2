@@ -143,16 +143,18 @@ export function DashboardOverviewPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="border-b border-zinc-200 pb-6">
+            <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm mb-6">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
-                            <BarChart3 className="h-7 w-7 text-zinc-900" />
-                            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+                            <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg shadow-lg">
+                                <BarChart3 className="h-6 w-6 text-white" />
+                            </div>
+                            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">
                                 Dashboard General
                             </h1>
                         </div>
-                        <p className="text-sm text-zinc-600">
+                        <p className="text-sm font-medium text-zinc-700 ml-14">
                             {stats?.lastUpdate
                                 ? `Última actualización: ${format(new Date(stats.lastUpdate), "d 'de' MMMM 'a las' HH:mm", { locale: es })}`
                                 : 'Panel de control del negocio'}
@@ -161,7 +163,7 @@ export function DashboardOverviewPage() {
                     <Button
                         onClick={() => loadData(true)}
                         disabled={refreshing || loading}
-                        className="bg-zinc-900 text-white hover:bg-zinc-800 transition-colors"
+                        className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold transition-colors"
                     >
                         <RefreshCw className={`mr-2 h-4 w-4 ${(refreshing || loading) ? 'animate-spin' : ''}`} />
                         Actualizar
@@ -195,7 +197,7 @@ export function DashboardOverviewPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-sm text-muted-foreground mb-4">{error}</p>
+                        <p className="text-sm text-zinc-500 mb-4">{error}</p>
                         <Button onClick={() => loadData(true)} variant="outline">
                             <RefreshCw className="mr-2 h-4 w-4" />
                             Reintentar
@@ -291,7 +293,7 @@ export function DashboardOverviewPage() {
                                                 {stats.activeMachines}
                                             </p>
                                         </div>
-                                        <div className="h-12 w-12 rounded-lg bg-zinc-900 flex items-center justify-center">
+                                        <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
                                             <CheckCircle className="h-6 w-6 text-white" />
                                         </div>
                                     </div>
@@ -305,13 +307,69 @@ export function DashboardOverviewPage() {
 
                     {/* Desglose de pagos - Fila 2 */}
                     <div className="grid gap-6 md:grid-cols-3">
+                        {/* Pagos con Tarjeta (Hoy) */}
+                        <Card className="border border-zinc-200 bg-white hover:border-zinc-400 transition-all duration-200">
+                            <CardHeader>
+                                <CardTitle className="text-sm font-medium text-zinc-600 flex items-center gap-2">
+                                    <CreditCard className="h-4 w-4" />
+                                    Tarjeta (Hoy)
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-2">
+                                    <div className="flex items-end justify-between">
+                                        <div>
+                                            <p className="text-2xl font-bold text-zinc-900">
+                                                {stats.daily.totalCard.toFixed(2)} €
+                                            </p>
+                                        </div>
+                                        <div className="h-10 w-10 rounded-lg bg-blue-500 flex items-center justify-center">
+                                            <CreditCard className="h-5 w-5 text-white" />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs font-medium text-zinc-600">
+                                        {stats.daily.totalRevenue > 0
+                                            ? `${((stats.daily.totalCard / stats.daily.totalRevenue) * 100).toFixed(1)}% del total`
+                                            : 'Sin datos'}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
 
+                        {/* Pagos en Efectivo (Hoy) */}
+                        <Card className="border border-zinc-200 bg-white hover:border-zinc-400 transition-all duration-200">
+                            <CardHeader>
+                                <CardTitle className="text-sm font-medium text-zinc-600 flex items-center gap-2">
+                                    <Banknote className="h-4 w-4" />
+                                    Efectivo (Hoy)
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-2">
+                                    <div className="flex items-end justify-between">
+                                        <div>
+                                            <p className="text-2xl font-bold text-zinc-900">
+                                                {stats.daily.totalCash.toFixed(2)} €
+                                            </p>
+                                        </div>
+                                        <div className="h-10 w-10 rounded-lg bg-emerald-500 flex items-center justify-center">
+                                            <Banknote className="h-5 w-5 text-white" />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs font-medium text-zinc-600">
+                                        {stats.daily.totalRevenue > 0
+                                            ? `${((stats.daily.totalCash / stats.daily.totalRevenue) * 100).toFixed(1)}% del total`
+                                            : 'Sin datos'}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
 
                         {/* Info actualización */}
                         <Card className="border border-zinc-200">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 text-zinc-900">
-                                    <div className="h-8 w-8 rounded-lg bg-zinc-900 flex items-center justify-center">
+                                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-md">
                                         <Clock className="h-4 w-4 text-white" />
                                     </div>
                                     Última Actualización

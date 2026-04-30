@@ -262,19 +262,25 @@ export default function AdminClientsPage() {
   }
 
   return (
-    <div className="container mx-auto p-8 space-y-8">
-      {/* Header */}
-      <div className="flex justify-between items-center border-b border-zinc-200 pb-6 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Gestión de Clientes</h1>
-          <p className="text-sm text-zinc-600 mt-1">
-            Administra los clientes y sus configuraciones
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Header mejorado */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg shadow-lg">
+                <Building className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Gestión de Clientes</h1>
+            </div>
+            <p className="text-sm font-medium text-zinc-700 ml-14">
+              Administra los clientes y sus configuraciones
+            </p>
+          </div>
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="lg" className="bg-zinc-900 text-white hover:bg-zinc-800">
+            <Button size="lg" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
               <Plus className="w-4 h-4 mr-2" />
               Nuevo Cliente
             </Button>
@@ -341,7 +347,7 @@ export default function AdminClientsPage() {
                   value={newClient.commissionHidePercent}
                   onChange={(e) => setNewClient({ ...newClient, commissionHidePercent: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-zinc-500">
                   Porcentaje que se RESTARÁ de la recaudación bruta (ej: 30% → si bruto = 100€, cliente ve 70€)
                 </p>
               </div>
@@ -357,7 +363,7 @@ export default function AdminClientsPage() {
                   value={newClient.commissionPaymentPercent}
                   onChange={(e) => setNewClient({ ...newClient, commissionPaymentPercent: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-zinc-500">
                   Porcentaje que el cliente recibirá en el pago (solo informativo, no afecta cálculos)
                 </p>
               </div>
@@ -374,20 +380,21 @@ export default function AdminClientsPage() {
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
                 disabled={creating}
-                className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900"
+                className="border-emerald-200 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 font-semibold"
               >
                 Cancelar
               </Button>
               <Button
                 onClick={handleCreateClient}
                 disabled={creating || !newClient.email || !newClient.password}
-                className="bg-zinc-900 text-white hover:bg-zinc-800"
+                className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold"
               >
                 {creating ? 'Creando...' : 'Crear Cliente'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Error global */}
@@ -409,7 +416,7 @@ export default function AdminClientsPage() {
         </CardHeader>
         <CardContent>
           {clients.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
+            <p className="text-center text-zinc-500 py-8">
               No hay clientes registrados
             </p>
           ) : (
@@ -417,15 +424,15 @@ export default function AdminClientsPage() {
               {clients.map((client) => (
                 <div
                   key={client.id}
-                  className="flex items-center justify-between p-5 border border-zinc-200 rounded-lg hover:border-zinc-900 hover:shadow-sm transition-all duration-200"
+                  className="flex items-center justify-between p-5 border border-zinc-200 rounded-lg hover:border-emerald-300 hover:shadow-sm transition-all duration-200"
                 >
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-3">
                       <h3 className="font-semibold text-zinc-900">{client.company_name || client.email}</h3>
-                      <Badge variant="secondary" className="bg-black text-white text-xs">
+                      <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-xs font-semibold">
                         {client.commissionHidePercent}% oculto
                       </Badge>
-                      <Badge variant="outline" className="bg-emerald-300 border-zinc-200 text-zinc-600 text-xs">
+                      <Badge variant="outline" className="bg-emerald-100 border-emerald-200 text-emerald-700 text-xs font-semibold">
                         {client.commissionPaymentPercent}% comisión
                       </Badge>
                     </div>
@@ -449,7 +456,7 @@ export default function AdminClientsPage() {
                       </Button>
                     </Link>
                     <Link href={`/admin/clients/${client.id}`}>
-                      <Button variant="ghost" size="sm" className="border border-zinc-200 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors">
+                      <Button variant="ghost" size="sm" className="border border-emerald-200 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-colors font-semibold">
                         <Settings className="w-4 h-4 mr-2" />
                         Configurar
                       </Button>

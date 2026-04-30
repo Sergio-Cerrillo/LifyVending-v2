@@ -159,7 +159,7 @@ export function DocumentsPage() {
             <Button 
               variant="outline" 
               onClick={handleBulkDownload}
-              className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900"
+              className="border-emerald-200 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 font-semibold"
             >
               <Download className="mr-2 h-4 w-4" />
               Descargar Selección ({selectedDocuments.length})
@@ -167,7 +167,7 @@ export function DocumentsPage() {
           )}
           <UploadDocumentSheet
             trigger={
-              <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
+              <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
                 <Plus className="mr-2 h-4 w-4" />
                 Subir Documento
               </Button>
@@ -181,7 +181,7 @@ export function DocumentsPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-end">
         <div className="flex-1">
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
             <Input
               placeholder="Buscar por título, procedencia o número..."
               value={search}
@@ -232,15 +232,15 @@ export function DocumentsPage() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border bg-card p-6">
+        <div className="rounded-lg border border-zinc-200 bg-white p-6">
           <div className="text-3xl font-bold">{documents.length}</div>
-          <div className="text-sm text-muted-foreground mt-1">Total Documentos</div>
+          <div className="text-sm text-zinc-600 font-medium mt-1">Total Documentos</div>
         </div>
-        <div className="rounded-lg border bg-card p-6">
+        <div className="rounded-lg border border-zinc-200 bg-white p-6">
           <div className="text-3xl font-bold text-orange-600">
             {documents.filter((d) => d.statusAccounting === 'PENDIENTE').length}
           </div>
-          <div className="text-sm text-muted-foreground mt-1">
+          <div className="text-sm text-zinc-600 font-medium mt-1">
             Pendientes de Contabilizar
           </div>
         </div>
@@ -273,7 +273,7 @@ export function DocumentsPage() {
           <TableBody>
             {filteredDocuments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-zinc-500">
                   No se encontraron documentos
                 </TableCell>
               </TableRow>

@@ -8,10 +8,10 @@ interface StatusBadgeProps {
 
 const variantStyles = {
   default: 'bg-zinc-100 text-zinc-700 border border-zinc-200',
-  success: 'bg-zinc-900 text-white border border-zinc-900',
-  warning: 'bg-zinc-400 text-white border border-zinc-400',
-  danger: 'bg-zinc-700 text-white border border-zinc-700',
-  info: 'bg-zinc-200 text-zinc-800 border border-zinc-300',
+  success: 'bg-emerald-500 text-white border border-emerald-500 shadow-sm',
+  warning: 'bg-amber-500 text-white border border-amber-500 shadow-sm',
+  danger: 'bg-red-500 text-white border border-red-500 shadow-sm',
+  info: 'bg-blue-500 text-white border border-blue-500 shadow-sm',
 };
 
 export function StatusBadge({ status, variant = 'default', className }: StatusBadgeProps) {

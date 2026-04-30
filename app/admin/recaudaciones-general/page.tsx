@@ -213,29 +213,31 @@ export default function AdminRevenueGeneralPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header minimalista */}
-            <div className="border-b border-zinc-200 pb-6">
+            {/* Header mejorado */}
+            <div className="bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 border border-emerald-100 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
-                            <EuroIcon className="h-7 w-7 text-zinc-900" />
-                            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
+                            <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl shadow-lg">
+                                <EuroIcon className="h-6 w-6 text-white" />
+                            </div>
+                            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
                             {!enableManualScraping && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700">
                                     Solo lectura
                                 </Badge>
                             )}
                             {enableManualScraping && (
-                                <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800 border-yellow-300">
+                                <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200 font-semibold">
                                     Modo Desarrollo
                                 </Badge>
                             )}
                         </div>
-                        <p className="text-sm text-zinc-600">
+                        <p className="text-sm font-semibold text-zinc-700 ml-14">
                             Vista global de todas las máquinas del sistema • Datos de base de datos
                         </p>
                         {lastUpdate && (
-                            <p className="text-xs text-zinc-500 mt-1">
+                            <p className="text-xs font-medium text-emerald-600 mt-2 ml-14">
                                 <Clock className="inline h-3 w-3 mr-1" />
                                 Última actualización: {formatDate(lastUpdate)}
                             </p>
@@ -248,7 +250,7 @@ export default function AdminRevenueGeneralPage() {
                                 size="default"
                                 onClick={runScraping}
                                 disabled={isScraping || loading}
-                                className="bg-zinc-900 hover:bg-zinc-800 text-white"
+                                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-md font-semibold"
                             >
                                 {isScraping ? (
                                     <>
@@ -268,7 +270,7 @@ export default function AdminRevenueGeneralPage() {
                             size="default"
                             onClick={loadRevenueData}
                             disabled={loading || isScraping}
-                            className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors"
+                            className="border-emerald-300 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-colors font-semibold"
                         >
                             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                             Refrescar
@@ -289,31 +291,35 @@ export default function AdminRevenueGeneralPage() {
             {revenueData && (<>
                 {/* Totales Generales */}
                 <div className="grid gap-4 md:grid-cols-2">
-                    <Card className="border border-zinc-200 bg-white">
+                    <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white shadow-md hover:shadow-lg transition-shadow">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-zinc-600">Total Diario (Hoy)</CardTitle>
-                            <DollarSign className="h-4 w-4 text-zinc-900" />
+                            <CardTitle className="text-sm font-semibold text-zinc-700">Total Diario (Hoy)</CardTitle>
+                            <div className="p-2 bg-emerald-100 rounded-lg">
+                                <DollarSign className="h-5 w-5 text-emerald-600" />
+                            </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-semibold text-zinc-900">
+                            <div className="text-4xl font-bold text-zinc-900">
                                 {formatCurrency(revenueData?.totals.daily || 0)}
                             </div>
-                            <p className="text-xs text-zinc-500 mt-1">
+                            <p className="text-xs font-semibold text-zinc-600 mt-1">
                                 {revenueData?.count || 0} máquinas
                             </p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border border-zinc-200 bg-white">
+                    <Card className="border-2 border-teal-200 bg-gradient-to-br from-teal-50/50 to-white shadow-md hover:shadow-lg transition-shadow">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-zinc-600">Total Mensual</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-zinc-900" />
+                            <CardTitle className="text-sm font-semibold text-zinc-700">Total Mensual</CardTitle>
+                            <div className="p-2 bg-teal-100 rounded-lg">
+                                <TrendingUp className="h-5 w-5 text-teal-600" />
+                            </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-semibold text-zinc-900">
+                            <div className="text-4xl font-bold text-zinc-900">
                                 {formatCurrency(revenueData?.totals.monthly || 0)}
                             </div>
-                            <p className="text-xs text-zinc-500 mt-1">
+                            <p className="text-xs font-semibold text-zinc-600 mt-1">
                                 Combinado
                             </p>
                         </CardContent>

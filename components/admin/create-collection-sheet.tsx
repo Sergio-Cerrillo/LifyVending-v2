@@ -182,10 +182,10 @@ export function CreateCollectionSheet({ trigger }: CreateCollectionSheetProps) {
             </div>
 
             {/* Total */}
-            <div className="rounded-lg bg-muted p-4">
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
               <div className="flex justify-between items-center">
-                <span className="font-medium">Total:</span>
-                <span className="text-2xl font-bold">€{totalAmount.toFixed(2)}</span>
+                <span className="font-semibold text-zinc-700">Total:</span>
+                <span className="text-2xl font-bold text-emerald-700">€{totalAmount.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -202,7 +202,7 @@ export function CreateCollectionSheet({ trigger }: CreateCollectionSheetProps) {
               onChange={(e) => setFormData({ ...formData, clientCommission: e.target.value })}
               placeholder="0.00"
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-zinc-500">
               Importe de comisión pactado con el cliente
             </p>
           </div>

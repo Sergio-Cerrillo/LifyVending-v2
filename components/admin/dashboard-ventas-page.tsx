@@ -86,7 +86,7 @@ export function DashboardVentasPage() {
           <Button 
             onClick={() => loadData(true)} 
             disabled={refreshing || loading}
-            className="bg-zinc-900 text-white hover:bg-zinc-800 transition-colors"
+            className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold transition-colors"
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${(refreshing || loading) ? 'animate-spin' : ''}`} />
             Actualizar
@@ -198,7 +198,7 @@ export function DashboardVentasPage() {
                             {metrics.ticketMedio.change.toFixed(2)}%
                           </div>
                         </div>
-                        <div className="h-12 w-12 rounded-lg bg-zinc-900 flex items-center justify-center">
+                        <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg">
                           <Euro className="h-6 w-6 text-white" />
                         </div>
                       </div>
@@ -229,7 +229,7 @@ export function DashboardVentasPage() {
                             {metrics.mediaVentasEuros.change.toFixed(2)}%
                           </div>
                         </div>
-                        <div className="h-12 w-12 rounded-lg bg-zinc-900 flex items-center justify-center">
+                        <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
                           <Euro className="h-6 w-6 text-white" />
                         </div>
                       </div>
@@ -260,7 +260,7 @@ export function DashboardVentasPage() {
                             {metrics.mediaVentasUnidades.change.toFixed(2)}%
                           </div>
                         </div>
-                        <div className="h-12 w-12 rounded-lg bg-zinc-900 flex items-center justify-center">
+                        <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-lg">
                           <ShoppingCart className="h-6 w-6 text-white" />
                         </div>
                       </div>
@@ -274,7 +274,7 @@ export function DashboardVentasPage() {
                   <Card className="border border-zinc-200">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-zinc-900">
-                        <div className="h-8 w-8 rounded-lg bg-zinc-900 flex items-center justify-center">
+                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-md">
                           <Euro className="h-4 w-4 text-white" />
                         </div>
                         Total Ventas (€)
@@ -295,7 +295,7 @@ export function DashboardVentasPage() {
                               <div key={idx} className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">
                                   <div className="flex items-center gap-2">
-                                    <div className="h-3 w-3 rounded-full bg-zinc-900"></div>
+                                    <div className="h-3 w-3 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500"></div>
                                     <span className="font-medium text-zinc-900">{item.label}</span>
                                   </div>
                                   <div className="flex items-center gap-3">
@@ -309,7 +309,7 @@ export function DashboardVentasPage() {
                                 </div>
                                 <div className="h-2 bg-zinc-100 rounded-full overflow-hidden">
                                   <div
-                                    className="h-full rounded-full transition-all duration-500 ease-out bg-zinc-900"
+                                    className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-emerald-500 to-teal-500"
                                     style={{ width: `${percentage}%` }}
                                   ></div>
                                 </div>
@@ -325,7 +325,7 @@ export function DashboardVentasPage() {
                   <Card className="border border-zinc-200">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-zinc-900">
-                        <div className="h-8 w-8 rounded-lg bg-zinc-900 flex items-center justify-center">
+                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
                           <ShoppingCart className="h-4 w-4 text-white" />
                         </div>
                         Total Ventas (#)
@@ -346,7 +346,7 @@ export function DashboardVentasPage() {
                               <div key={idx} className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">
                                   <div className="flex items-center gap-2">
-                                    <div className="h-3 w-3 rounded-full bg-zinc-900"></div>
+                                    <div className="h-3 w-3 rounded-full bg-gradient-to-br from-purple-500 to-purple-600"></div>
                                     <span className="font-medium text-zinc-900">{item.label}</span>
                                   </div>
                                   <div className="flex items-center gap-3">
@@ -360,7 +360,7 @@ export function DashboardVentasPage() {
                                 </div>
                                 <div className="h-2 bg-zinc-100 rounded-full overflow-hidden">
                                   <div
-                                    className="h-full rounded-full transition-all duration-500 ease-out bg-zinc-900"
+                                    className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-purple-500 to-purple-600"
                                     style={{ width: `${percentage}%` }}
                                   ></div>
                                 </div>

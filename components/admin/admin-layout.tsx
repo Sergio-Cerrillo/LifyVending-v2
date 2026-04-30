@@ -93,7 +93,7 @@ function Sidebar({ className }: { className?: string }) {
   });
 
   return (
-    <div className={cn('pb-12 min-h-screen bg-white', className)}>
+    <div className={cn('pb-12 min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50', className)}>
       <div className="space-y-4 py-6">
         <div className="px-4 py-2">
           <div className="mb-8 flex flex-col items-center text-center">
@@ -107,18 +107,18 @@ function Sidebar({ className }: { className?: string }) {
                 priority
               />
             </div>
-            <p className="-mt-20 text-xs text-zinc-500">Panel de Administración</p>
+            <p className="-mt-20 text-xs font-semibold text-emerald-700">Panel de Administración</p>
           </div>
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {filteredNavItems.map((item) => (
               <Link key={item.href} href={item.href}>
                 <Button
                   variant="ghost"
                   className={cn(
-                    "w-full justify-start text-sm font-medium transition-all duration-200",
+                    "w-full justify-start text-sm font-medium transition-all duration-200 rounded-lg",
                     pathname === item.href
-                      ? 'bg-zinc-900 text-white hover:bg-zinc-800'
-                      : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm'
+                      : 'text-zinc-700 hover:bg-white hover:text-emerald-600 hover:shadow-sm'
                   )}
                 >
                   {item.icon}
@@ -143,17 +143,17 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   // Mostrar loader mientras carga el usuario, pero no bloquear toda la UI
   if (loading) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen bg-gradient-to-br from-zinc-50 via-white to-emerald-50/30 light">
         {/* Skeleton del sidebar */}
-        <aside className="hidden lg:block w-64 border-r border-zinc-200 bg-white">
+        <aside className="hidden lg:block w-64 border-r border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-blue-50 shadow-sm">
           <div className="space-y-4 py-6">
             <div className="px-4 py-2">
               <div className="mb-8 flex flex-col items-center">
-                <div className="w-48 h-32 bg-zinc-200 animate-pulse rounded"></div>
+                <div className="w-48 h-32 bg-emerald-100 animate-pulse rounded-lg"></div>
               </div>
               <div className="space-y-2">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-10 bg-zinc-200 animate-pulse rounded"></div>
+                  <div key={i} className="h-10 bg-white/60 animate-pulse rounded-lg"></div>
                 ))}
               </div>
             </div>
@@ -163,8 +163,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         {/* Contenido con loader */}
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Cargando sesión...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent mx-auto mb-4"></div>
+            <p className="text-zinc-700 font-medium">Cargando sesión...</p>
           </div>
         </div>
       </div>
@@ -177,16 +177,16 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2">Acceso denegado</h1>
-          <p className="text-muted-foreground">Debe iniciar sesión para acceder</p>
+          <p className="text-zinc-500">Debe iniciar sesión para acceder</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen light">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block w-64 border-r border-zinc-200 bg-white">
+      <aside className="hidden lg:block w-64 border-r border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-blue-50 shadow-sm">
         <Sidebar />
       </aside>
 
@@ -200,14 +200,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col bg-zinc-50">
+      <div className="flex-1 flex flex-col bg-gradient-to-br from-zinc-50 via-white to-emerald-50/30">
         {/* Top Bar */}
-        <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white">
-          <div className="flex h-14 items-center gap-4 px-6">
+        <header className="sticky top-0 z-40 border-b border-emerald-100 bg-white/95 backdrop-blur-sm shadow-sm">
+          <div className="flex h-16 items-center gap-4 px-6">
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden hover:bg-zinc-900 hover:text-white transition-colors"
+              className="lg:hidden hover:bg-emerald-500 hover:text-white transition-colors rounded-lg"
               onClick={() => setSidebarOpen(true)}
             >
               <Menu className="h-5 w-5" />
@@ -217,15 +217,15 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex flex-col items-end">
-                <p className="text-sm font-medium text-zinc-900">{currentUser.name}</p>
-                <p className="text-xs text-zinc-500 capitalize">
+                <p className="text-sm font-semibold text-zinc-900">{currentUser.name}</p>
+                <p className="text-xs font-medium text-emerald-600 capitalize">
                   {currentUser.role}
                 </p>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="hover:bg-zinc-900 hover:text-white transition-colors"
+                className="hover:bg-emerald-100 hover:text-emerald-600 transition-colors rounded-lg"
               >
                 <User className="h-4 w-4" />
               </Button>
@@ -233,7 +233,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="icon"
                 onClick={logout}
-                className="hover:bg-zinc-900 hover:text-white transition-colors"
+                className="hover:bg-red-100 hover:text-red-600 transition-colors rounded-lg"
               >
                 <LogOut className="h-4 w-4" />
               </Button>

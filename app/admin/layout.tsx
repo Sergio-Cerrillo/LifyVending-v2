@@ -11,11 +11,13 @@ export default function AdminRootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthProvider>
-      <DataProvider>
-        <AdminLayout>{children}</AdminLayout>
-        <DevUserSwitcher />
-      </DataProvider>
-    </AuthProvider>
+    <div className="light" data-theme="light">
+      <AuthProvider>
+        <DataProvider>
+          <AdminLayout>{children}</AdminLayout>
+          <DevUserSwitcher />
+        </DataProvider>
+      </AuthProvider>
+    </div>
   );
 }

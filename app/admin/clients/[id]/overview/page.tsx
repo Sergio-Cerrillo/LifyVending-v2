@@ -160,7 +160,7 @@ export default function AdminClientOverviewPage() {
           </div>
         </div>
         <Link href={`/admin/clients/${clientId}`}>
-          <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
+          <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
             <Settings className="w-4 h-4 mr-2" />
             Configurar Cliente
           </Button>
@@ -175,31 +175,31 @@ export default function AdminClientOverviewPage() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="text-sm text-muted-foreground">Email</p>
+              <p className="text-sm text-zinc-600 font-medium">Email</p>
               <p className="font-medium">{overview.client.email}</p>
             </div>
             {overview.client.displayName && (
               <div>
-                <p className="text-sm text-muted-foreground">Nombre</p>
+                <p className="text-sm text-zinc-600 font-medium">Nombre</p>
                 <p className="font-medium">{overview.client.displayName}</p>
               </div>
             )}
             {overview.client.companyName && (
               <div>
-                <p className="text-sm text-muted-foreground">Empresa</p>
+                <p className="text-sm text-zinc-600 font-medium">Empresa</p>
                 <p className="font-medium">{overview.client.companyName}</p>
               </div>
             )}
             <div>
-              <p className="text-sm text-muted-foreground">Porcentaje Oculto</p>
+              <p className="text-sm text-zinc-600 font-medium">Porcentaje Oculto</p>
               <p className="font-medium">{overview.client.commissionHidePercent}%</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Comisión Pago</p>
+              <p className="text-sm text-zinc-600 font-medium">Comisión Pago</p>
               <p className="font-medium">{overview.client.commissionPaymentPercent}%</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Máquinas Asignadas</p>
+              <p className="text-sm text-zinc-600 font-medium">Máquinas Asignadas</p>
               <p className="font-medium">{overview.machines.length}</p>
             </div>
           </div>
@@ -230,7 +230,7 @@ export default function AdminClientOverviewPage() {
                       {formatCurrency(overview.revenue.daily.total_gross)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-muted-foreground">
+                  <div className="flex items-center justify-between text-zinc-600">
                     <span className="text-sm">Oculto ({overview.client.commissionHidePercent}%):</span>
                     <span className="font-medium">
                       -{calculateDifference(overview.revenue.daily.total_gross, overview.revenue.daily.total_net)}
@@ -248,9 +248,9 @@ export default function AdminClientOverviewPage() {
 
             {/* Monthly */}
             {overview.revenue.monthly && (
-              <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
+              <div className="space-y-2 p-4 bg-blue-50/50 rounded-lg border border-blue-100">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm text-muted-foreground">MENSUAL</h3>
+                  <h3 className="font-semibold text-sm text-zinc-700 uppercase">MENSUAL</h3>
                   <Badge variant="outline">{overview.revenue.monthly.machine_count} máquinas</Badge>
                 </div>
                 <div className="space-y-2">
@@ -260,7 +260,7 @@ export default function AdminClientOverviewPage() {
                       {formatCurrency(overview.revenue.monthly.total_gross)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-muted-foreground">
+                  <div className="flex items-center justify-between text-zinc-600">
                     <span className="text-sm">Oculto ({overview.client.commissionHidePercent}%):</span>
                     <span className="font-medium">
                       -{calculateDifference(overview.revenue.monthly.total_gross, overview.revenue.monthly.total_net)}
@@ -289,7 +289,7 @@ export default function AdminClientOverviewPage() {
         </CardHeader>
         <CardContent>
           {overview.machines.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
+            <p className="text-center text-zinc-500 py-8">
               No hay máquinas asignadas a este cliente.
             </p>
           ) : (
@@ -297,11 +297,11 @@ export default function AdminClientOverviewPage() {
               {overview.machines.map((machine) => (
                 <div
                   key={machine.id}
-                  className="p-3 border rounded-lg bg-muted/30"
+                  className="p-3 border rounded-lg bg-zinc-50/50 border-zinc-200"
                 >
                   <div className="font-medium">{machine.name}</div>
                   {machine.location && (
-                    <div className="text-sm text-muted-foreground mt-1">{machine.location}</div>
+                    <div className="text-sm text-zinc-600 mt-1">{machine.location}</div>
                   )}
                 </div>
               ))}

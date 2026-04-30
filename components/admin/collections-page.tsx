@@ -115,22 +115,27 @@ export function CollectionsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-zinc-200 pb-6 mb-6">
+      <div className="bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 border border-emerald-100 rounded-2xl p-6 shadow-sm mb-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Recaudaciones</h1>
-            <p className="text-sm text-zinc-600 mt-1">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl shadow-lg">
+                <DollarSign className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Recaudaciones</h1>
+            </div>
+            <p className="text-sm font-semibold text-zinc-700 ml-14">
               Control de recaudaciones por máquina
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="border-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-900">
+            <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 font-semibold">
               <Download className="mr-2 h-4 w-4" />
               Exportar CSV
             </Button>
             <CreateCollectionSheet
               trigger={
-                <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
+                <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
                   <Plus className="mr-2 h-4 w-4" />
                   Nueva Recaudación
                 </Button>
@@ -144,7 +149,7 @@ export function CollectionsPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-end">
         <div className="flex-1">
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
             <Input
               placeholder="Buscar por máquina..."
               value={search}
@@ -173,15 +178,15 @@ export function CollectionsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-lg border p-4">
           <div className="text-2xl font-bold">{filteredCollections.length}</div>
-          <div className="text-sm text-muted-foreground">Total Recaudaciones</div>
+          <div className="text-sm text-zinc-600 font-medium">Total Recaudaciones</div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-2xl font-bold">€{totalAmount.toFixed(2)}</div>
-          <div className="text-sm text-muted-foreground">Total General</div>
+          <div className="text-sm text-zinc-600 font-medium">Total General</div>
         </div>
         <div className="rounded-lg border p-4">
           <div className="text-2xl font-bold">€{totalCommission.toFixed(2)}</div>
-          <div className="text-sm text-muted-foreground">Comisiones ({pendingCommissions} pend.)</div>
+          <div className="text-sm text-zinc-600 font-medium">Comisiones ({pendingCommissions} pend.)</div>
         </div>
       </div>
 
@@ -202,7 +207,7 @@ export function CollectionsPage() {
           <TableBody>
             {filteredCollections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-zinc-500">
                   No se encontraron recaudaciones
                 </TableCell>
               </TableRow>
@@ -226,7 +231,7 @@ export function CollectionsPage() {
                       {collection.clientCommission ? (
                         <span className="font-medium">€{collection.clientCommission.toFixed(2)}</span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <span className="text-zinc-400">-</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -237,7 +242,7 @@ export function CollectionsPage() {
                           <StatusBadge status="PENDIENTE" variant="warning" />
                         )
                       ) : (
-                        <span className="text-muted-foreground text-sm">Sin comisión</span>
+                        <span className="text-zinc-500 text-sm">Sin comisión</span>
                       )}
                     </TableCell>
                     <TableCell>{collection.collectedBy}</TableCell>
@@ -263,7 +268,7 @@ export function CollectionsPage() {
                           </Button>
                         )}
                         {collection.commissionPaid && collection.commissionNotes && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-zinc-500">
                             {collection.commissionNotes}
                           </p>
                         )}

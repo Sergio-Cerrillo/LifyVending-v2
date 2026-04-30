@@ -91,18 +91,23 @@ export function PayrollsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="border-b border-zinc-200 pb-6 mb-6">
+      {/* Header mejorado */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Nóminas</h1>
-            <p className="text-sm text-zinc-600 mt-1">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg shadow-lg">
+                <Download className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Gestión de Nóminas</h1>
+            </div>
+            <p className="text-sm font-medium text-zinc-700 ml-14">
               Gestión de nóminas de empleados
             </p>
           </div>
           <UploadPayrollSheet
             trigger={
-              <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
+              <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
                 <Plus className="mr-2 h-4 w-4" />
                 Subir Nómina
               </Button>
@@ -132,8 +137,8 @@ export function PayrollsPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold text-lg">{employee.name}</h3>
-                  <p className="text-sm text-muted-foreground">{employee.position}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-sm text-zinc-600">{employee.position}</p>
+                  <p className="text-xs text-zinc-500 mt-1">
                     DNI: {employee.dni}
                   </p>
                 </div>
@@ -144,7 +149,7 @@ export function PayrollsPage() {
               </div>
               <div className="mt-3 pt-3 border-t">
                 <div className="text-sm">
-                  <span className="text-muted-foreground">Nóminas subidas: </span>
+                  <span className="text-zinc-600">Nóminas subidas: </span>
                   <span className="font-medium">
                     {payrolls.filter((p) => p.employeeId === employee.id).length}
                   </span>
@@ -173,19 +178,19 @@ export function PayrollsPage() {
         <div className="grid gap-4 md:grid-cols-4">
           <div className="rounded-lg border p-4">
             <div className="text-2xl font-bold">{filteredPayrolls.length}</div>
-            <div className="text-sm text-muted-foreground">Total Nóminas</div>
+            <div className="text-sm text-zinc-600 font-medium">Total Nóminas</div>
           </div>
           <div className="rounded-lg border p-4">
             <div className="text-2xl font-bold">€{totalGross.toFixed(2)}</div>
-            <div className="text-sm text-muted-foreground">Total Bruto</div>
+            <div className="text-sm text-zinc-600 font-medium">Total Bruto</div>
           </div>
           <div className="rounded-lg border p-4">
             <div className="text-2xl font-bold">€{totalNet.toFixed(2)}</div>
-            <div className="text-sm text-muted-foreground">Total Neto</div>
+            <div className="text-sm text-zinc-600 font-medium">Total Neto</div>
           </div>
           <div className="rounded-lg border p-4">
             <div className="text-2xl font-bold">€{totalCost.toFixed(2)}</div>
-            <div className="text-sm text-muted-foreground">Coste Empresa</div>
+            <div className="text-sm text-zinc-600 font-medium">Coste Empresa</div>
           </div>
         </div>
 
@@ -207,7 +212,7 @@ export function PayrollsPage() {
             <TableBody>
               {filteredPayrolls.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-zinc-500">
                     No se encontraron nóminas
                   </TableCell>
                 </TableRow>
@@ -280,8 +285,8 @@ export function PayrollsPage() {
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-2xl">{employee.name}</h3>
-                <p className="text-muted-foreground mt-1">{employee.position}</p>
-                <p className="text-sm text-muted-foreground mt-2">
+                <p className="text-zinc-600 mt-1">{employee.position}</p>
+                <p className="text-sm text-zinc-500 mt-2">
                   DNI: {employee.dni}
                 </p>
               </div>
@@ -311,19 +316,19 @@ export function PayrollsPage() {
           <div className="grid gap-4 md:grid-cols-4">
             <div className="rounded-lg border p-4">
               <div className="text-2xl font-bold">{filteredPayrolls.length}</div>
-              <div className="text-sm text-muted-foreground">Total Nóminas</div>
+              <div className="text-sm text-zinc-600 font-medium">Total Nóminas</div>
             </div>
             <div className="rounded-lg border p-4">
               <div className="text-2xl font-bold">€{totalGross.toFixed(2)}</div>
-              <div className="text-sm text-muted-foreground">Total Bruto</div>
+              <div className="text-sm text-zinc-600 font-medium">Total Bruto</div>
             </div>
             <div className="rounded-lg border p-4">
               <div className="text-2xl font-bold">€{totalNet.toFixed(2)}</div>
-              <div className="text-sm text-muted-foreground">Total Neto</div>
+              <div className="text-sm text-zinc-600 font-medium">Total Neto</div>
             </div>
             <div className="rounded-lg border p-4">
               <div className="text-2xl font-bold">€{totalCost.toFixed(2)}</div>
-              <div className="text-sm text-muted-foreground">Coste Empresa</div>
+              <div className="text-sm text-zinc-600 font-medium">Coste Empresa</div>
             </div>
           </div>
 
@@ -344,7 +349,7 @@ export function PayrollsPage() {
               <TableBody>
                 {filteredPayrolls.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-zinc-500">
                       No se encontraron nóminas para este empleado
                     </TableCell>
                   </TableRow>
