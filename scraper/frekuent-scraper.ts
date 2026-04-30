@@ -27,6 +27,7 @@ import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import path from 'path';
 import os from 'os';
 import type { MachineStock, StockProduct } from '@/lib/types';
+import { launchBrowser } from './browser-helper';
 
 interface FrekuentConfig {
   user: string;
@@ -50,20 +51,8 @@ export class FrekuentScraper {
     
     const userDataDir = path.join(os.tmpdir(), 'frekuent-scraper-session');
     
-    this.browser = await chromium.launch({
+    this.browser = await launchBrowser({
       headless: this.config.headless,
-      args: [
-        '--disable-images',
-        '--disable-fonts',
-        '--disable-extensions',
-        '--disable-plugins',
-        '--disable-background-networking',
-        '--disable-default-apps',
-        '--disable-sync',
-        '--disable-translate',
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
     });
 
     const sessionPath = path.join(os.tmpdir(), 'frekuent-session.json');
