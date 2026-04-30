@@ -3,25 +3,27 @@ import { createClient } from '@supabase/supabase-js';
 import { TelevendScraper } from '@/scraper/televend-scraper';
 
 // Cliente Supabase con service_role para operaciones sin RLS
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
     }
-  }
-);
+  );
+}
 
 /**
  * CRON JOB: Scraping automático de STOCK cada 30 minutos
  * 
- * Este endpoint es llamado por Vercel Cron cada 30 minutos
+ * Este endpoint es llamado por cron-job.org cada 30 minutos
  * 
  * Flujo:
  * 1. Valida token de seguridad (CRON_SECRET)
- * 2. Obtiene lista de máquinas activas (deleted_at IS NULL)
+ * 2. Obtiene lista de máquinas activas
  * 3. Inicializa scraper de Televend y hace login
  * 4. Para cada máquina:
  *    a. Scrape stock desde Televend
@@ -38,10 +40,10 @@ const supabaseAdmin = createClient(
  * 
  * Seguridad:
  * - Requiere header Authorization: Bearer <CRON_SECRET>
- * - Solo Vercel Cron debe conocer este secret
+ * - Solo cron-job.org debe conocer este secret
  */
 export async function GET(request: NextRequest) {
-  console.log('[CRON STOCK] Iniciando scraping automático de stock... v2');
+  console.log('[CRON STOCK v3] Iniciando scraping automático de stock...');
 
   // ============================================
   // 1. VALIDAR TOKEN DE SEGURIDAD
@@ -50,7 +52,7 @@ export async function GET(request: NextRequest) {
   const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
   
   if (!process.env.CRON_SECRET) {
-    console.error('[CRON STOCK] ERROR: CRON_SECRET no está configurado');
+    console.error('[CRON STOCK v3] ERROR: CRON_SECRET no está configurado');
     return NextResponse.json(
       { error: 'Server misconfigured' },
       { status: 500 }
@@ -58,7 +60,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (authHeader !== expectedAuth) {
-    console.warn('[CRON STOCK] Intento de acceso no autorizado');
+    console.warn('[CRON STOCK v3] Intento de acceso no autorizado');
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401 }
@@ -66,12 +68,13 @@ export async function GET(request: NextRequest) {
   }
 
   const startTime = Date.now();
+  const supabaseAdmin = getSupabaseAdmin();
 
   try {
     // ============================================
     // 2. OBTENER MÁQUINAS ACTIVAS
     // ============================================
-    console.log('[CRON STOCK] Obteniendo lista de máquinas activas...');
+    console.log('[CRON STOCK v3] Obteniendo lista de máquinas activas...');
     
     const { data: activeMachines, error: machinesError } = await supabaseAdmin
       .from('machines')
@@ -79,7 +82,7 @@ export async function GET(request: NextRequest) {
       .order('name');
 
     if (machinesError) {
-      console.error('[CRON STOCK] Error obteniendo máquinas:', machinesError);
+      console.error('[CRON STOCK v3] Error obteniendo máquinas:', machinesError);
       return NextResponse.json(
         { error: 'Database error', details: machinesError.message },
         { status: 500 }
@@ -87,7 +90,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!activeMachines || activeMachines.length === 0) {
-      console.log('[CRON STOCK] No hay máquinas activas para scrapear');
+      console.log('[CRON STOCK v3] No hay máquinas activas para scrapear');
       return NextResponse.json({
         success: true,
         message: 'No active machines to scrape',
@@ -97,12 +100,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`[CRON STOCK] ${activeMachines.length} máquinas activas encontradas`);
+    console.log(`[CRON STOCK v3] ${activeMachines.length} máquinas activas encontradas`);
 
     // ============================================
     // 3. INICIALIZAR SCRAPER TELEVEND
     // ============================================
-    console.log('[CRON STOCK] Inicializando scraper de Televend...');
+    console.log('[CRON STOCK v3] Inicializando scraper de Televend...');
     
     const televend = new TelevendScraper({
       username: process.env.TELEVEND_USERNAME!,
