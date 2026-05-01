@@ -69,8 +69,8 @@ export async function GET(request: NextRequest) {
 
     // Formatear datos (solo daily y monthly, weekly eliminado)
     const formattedMachines = (machines || []).map((machine: any) => {
-      // Determinar la fuente de la máquina
-      const source = machine.orain_machine_id ? 'orain' : 'televend';
+      // Determinar la fuente de la máquina (checar ambos orain_machine_id y frekuent_machine_id)
+      const source = (machine.orain_machine_id || machine.frekuent_machine_id) ? 'orain' : 'televend';
       
       return {
         id: machine.id,

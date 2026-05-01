@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon, Zap, Clock } from 'lucide-react';
+import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon, Zap, Clock, Trash2, AlertTriangle } from 'lucide-react';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
@@ -28,6 +28,13 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 interface MachineRevenue {
     id: string;
@@ -77,6 +84,7 @@ export default function AdminRevenueGeneralPage() {
     const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'monthly'>('daily');
     const [isScraping, setIsScraping] = useState(false);
     const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+    const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
 
     // Check if manual scraping is enabled (only for local development)
     const enableManualScraping = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING === 'true';
@@ -145,6 +153,8 @@ export default function AdminRevenueGeneralPage() {
                 return;
             }
 
+            console.log('[SCRAPE] Haciendo petición a /api/admin/scrape');
+
             const response = await fetch('/api/admin/scrape', {
                 method: 'POST',
                 headers: {
@@ -152,8 +162,24 @@ export default function AdminRevenueGeneralPage() {
                 }
             });
 
+            console.log('[SCRAPE] Respuesta recibida:', {
+                ok: response.ok,
+                status: response.status,
+                statusText: response.statusText
+            });
+
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+                const responseText = await response.text();
+                console.log('[SCRAPE] Respuesta cruda:', responseText);
+                
+                let errorData: any = { error: 'Error desconocido' };
+                try {
+                    errorData = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('[SCRAPE] Error parseando respuesta:', e);
+                    errorData = { error: 'Respuesta no válida del servidor', raw: responseText };
+                }
+                
                 console.error('[SCRAPE] Error del servidor:', errorData);
                 throw new Error(errorData.error || `Error HTTP ${response.status}`);
             }
@@ -173,6 +199,47 @@ export default function AdminRevenueGeneralPage() {
             });
         } finally {
             setIsScraping(false);
+        }
+    }
+
+    async function deleteAllMachines() {
+        try {
+            setShowDeleteAllDialog(false);
+            toast.info('Eliminando todas las máquinas...');
+
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+            if (sessionError || !sessionData.session) {
+                router.push('/login');
+                return;
+            }
+
+            const response = await fetch('/api/admin/machines', {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${sessionData.session.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ deleteAll: true })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+                throw new Error(errorData.error || `Error HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            toast.success(`${data.count || 0} máquinas eliminadas correctamente`);
+            
+            // Recargar datos
+            await loadRevenueData();
+
+        } catch (err: any) {
+            console.error('[DELETE ALL] Error:', err);
+            toast.error('Error eliminando máquinas', {
+                description: err.message || 'Error desconocido',
+                duration: 6000
+            });
         }
     }
 
@@ -275,6 +342,18 @@ export default function AdminRevenueGeneralPage() {
                             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                             Refrescar
                         </Button>
+                        {enableManualScraping && revenueData && (
+                            <Button
+                                variant="destructive"
+                                size="default"
+                                onClick={() => setShowDeleteAllDialog(true)}
+                                disabled={loading || isScraping}
+                                className="bg-red-600 hover:bg-red-700 text-white shadow-md font-semibold"
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Borrar Todas las Máquinas
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -290,7 +369,7 @@ export default function AdminRevenueGeneralPage() {
             {/* Tarjetas de Totales - Separadas por fuente */}
             {revenueData && (<>
                 {/* Totales Generales */}
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2 w-full">
                     <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white shadow-md hover:shadow-lg transition-shadow">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-semibold text-zinc-700">Total Diario (Hoy)</CardTitle>
@@ -327,7 +406,7 @@ export default function AdminRevenueGeneralPage() {
                 </div>
 
                 {/* Tarjetas separadas por fuente */}
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2 w-full">
                     {/* Orain-Frekuent - Este mes */}
                     <Card className="border-2 border-blue-200 bg-blue-50/30">
                         <CardHeader className="pb-3">
@@ -433,6 +512,50 @@ export default function AdminRevenueGeneralPage() {
                     </Tabs>
                 </CardContent>
             </Card>)}
+
+            {/* Dialog de confirmación para borrar todas las máquinas */}
+            <Dialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
+                <DialogContent className="light">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-600">
+                            <AlertTriangle className="h-5 w-5" />
+                            ¿Borrar todas las máquinas?
+                        </DialogTitle>
+                        <DialogDescription>
+                            Esta acción eliminará <strong>TODAS las máquinas</strong> de la base de datos, incluyendo:
+                        </DialogDescription>
+                        <div className="text-sm text-muted-foreground">
+                            <ul className="list-disc list-inside mt-2 space-y-1">
+                                <li>Datos de recaudaciones</li>
+                                <li>Historial de stock</li>
+                                <li>Configuraciones de máquinas</li>
+                            </ul>
+                            <div className="mt-3">
+                                <strong className="text-red-600">⚠️ Esta acción NO se puede deshacer.</strong>
+                            </div>
+                            <div className="mt-3">
+                                Puedes volver a ejecutar el scraping para obtener las máquinas de nuevo.
+                            </div>
+                        </div>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-2 mt-4">
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowDeleteAllDialog(false)}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={deleteAllMachines}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Sí, Borrar Todo
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -979,7 +979,7 @@ export function StockPage() {
 
       {/* Dialog de detalles de máquina */}
       <Dialog open={!!selectedMachineForDetails} onOpenChange={(open) => !open && setSelectedMachineForDetails(null)}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto light">
           {selectedMachineForDetails && (() => {
             const machineDetailsFillRate = calculateFillRate(selectedMachineForDetails);
             

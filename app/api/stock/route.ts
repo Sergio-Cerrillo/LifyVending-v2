@@ -4,6 +4,7 @@ import { TelevendScraper } from '@/scraper/televend-scraper';
 import { aggregateStock, getStockStats } from '@/scraper/aggregate';
 import type { MachineStock } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
+import { generateFrekuentId, generateTelevendId } from '@/lib/machine-id-utils';
 
 // Cliente Supabase con service_role para operaciones sin RLS
 const supabaseAdmin = createClient(
@@ -271,10 +272,10 @@ export async function POST(request: NextRequest) {
       const machineId = machineStock.machineId;
       const machineName = machineStock.machineName;
       
-      // Determinar fuente (Frekuent o Televend)
+      // Determinar fuente (Frekuent o Televend) y NORMALIZAR IDs
       const isTelevend = machineId.startsWith('televend_');
-      const frekuent_machine_id = isTelevend ? null : machineId;
-      const televend_machine_id = isTelevend ? machineId : null;
+      const frekuent_machine_id = isTelevend ? null : generateFrekuentId(machineName);
+      const televend_machine_id = isTelevend ? generateTelevendId(machineName) : null;
 
       let existingMachine = null;
 

@@ -92,31 +92,31 @@ export function Navigation() {
           <div className="lg:hidden flex items-center gap-4">
             <ModeToggle />
             <button
-              className="glass p-3 rounded-lg hover:scale-110 transition-transform"
+              className="glass p-3 rounded-lg hover:scale-110 transition-transform border border-foreground/20"
               onClick={() => setIsOpen(!isOpen)}
               aria-label="Toggle menu"
             >
-              {isOpen ? <X size={24} /> : <Menu size={24} />}
+              {isOpen ? <X size={24} className="text-foreground" /> : <Menu size={24} className="text-foreground" />}
             </button>
           </div>
         </div>
 
         {/* Mobile Slide Menu */}
         {isOpen && (
-          <div className="lg:hidden mt-6 glass rounded-2xl p-6 animate-slide-up">
-            <div className="space-y-4">
+          <div className="lg:hidden mt-6 glass rounded-2xl p-6 animate-slide-up max-w-sm mx-auto">
+            <div className="space-y-3">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-primary/10 transition-colors font-medium"
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-primary/10 transition-colors font-medium text-foreground"
                   onClick={() => setIsOpen(false)}
                 >
                   {item.label}
                 </Link>
               ))}
 
-              <Link href="#contacto" className="w-full">
+              <Link href="#contacto" className="w-full block">
                 <Button
                   size="lg"
                   className="w-full bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg shadow-primary/30 font-bold text-white"
@@ -125,7 +125,7 @@ export function Navigation() {
                 </Button>
               </Link>
 
-              <Link href="/login" className="w-full">
+              <Link href="/login" className="w-full block">
                 <Button
                   variant="outline"
                   size="default"

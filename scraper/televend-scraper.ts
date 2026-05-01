@@ -1012,6 +1012,7 @@ export class TelevendScraper {
 
     const machines = await this.getMachineList();
     const results: MachineStock[] = [];
+    let failedMachines: string[] = [];
 
     for (let i = 0; i < machines.length; i++) {
       const machine = machines[i];
@@ -1023,6 +1024,8 @@ export class TelevendScraper {
       const stock = await this.extractStockForMachine(machine);
       if (stock) {
         results.push(stock);
+      } else {
+        failedMachines.push(machine.name);
       }
 
       // Volver a la lista de máquinas
@@ -1042,7 +1045,21 @@ export class TelevendScraper {
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`\n✅ [TELEVEND] Scraping de stock completado en ${duration}s`);
-    console.log(`📊 [TELEVEND] Total: ${results.length} máquinas`);
+    console.log(`📊 [TELEVEND] Total: ${results.length}/${machines.length} máquinas exitosas`);
+    
+    if (failedMachines.length > 0) {
+      console.warn(`⚠️ [TELEVEND] ${failedMachines.length} máquinas fallaron:`);
+      failedMachines.forEach(name => console.warn(`   - ${name}`));
+      
+      // Alertar si más del 20% falló
+      const failureRate = (failedMachines.length / machines.length) * 100;
+      if (failureRate > 20) {
+        console.error(`❌ [TELEVEND] ALERTA: ${failureRate.toFixed(1)}% de máquinas fallaron. Posibles causas:`);
+        console.error('   - Problemas de red o timeouts');
+        console.error('   - Cambios en la estructura de la UI');
+        console.error('   - Servidor de Televend lento');
+      }
+    }
 
     return results;
   }

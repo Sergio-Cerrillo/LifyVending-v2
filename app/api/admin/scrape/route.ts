@@ -50,20 +50,44 @@ export async function POST(request: NextRequest) {
     // Llamar al endpoint del CRON con el secret correcto
     const cronUrl = `${siteUrl}/api/cron/scrape-machines`;
     
+    console.log('[ADMIN-SCRAPE] Haciendo petición a:', cronUrl);
+    console.log('[ADMIN-SCRAPE] Authorization header configurado:', !!process.env.CRON_SECRET);
+    
     const cronResponse = await fetch(cronUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${process.env.CRON_SECRET}`
-      }
+      },
+      // Aumentar timeout a 10 minutos (600000ms) porque el scraping puede tardar 5-6 minutos
+      signal: AbortSignal.timeout(600000)
+    });
+
+    console.log('[ADMIN-SCRAPE] Respuesta del CRON:', {
+      status: cronResponse.status,
+      statusText: cronResponse.statusText,
+      ok: cronResponse.ok
     });
 
     if (!cronResponse.ok) {
-      const errorData = await cronResponse.json().catch(() => ({}));
-      console.error('[ADMIN-SCRAPE] Error del CRON:', {
-        status: cronResponse.status,
-        statusText: cronResponse.statusText,
-        error: errorData
-      });
+      const contentType = cronResponse.headers.get('content-type');
+      console.log('[ADMIN-SCRAPE] Content-Type:', contentType);
+      
+      let errorData: any = {};
+      const responseText = await cronResponse.text();
+      console.log('[ADMIN-SCRAPE] Respuesta cruda:', responseText.substring(0, 500));
+      
+      if (contentType?.includes('application/json')) {
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          console.error('[ADMIN-SCRAPE] Error parseando JSON:', e);
+          errorData = { error: 'Respuesta no es JSON válido', raw: responseText };
+        }
+      } else {
+        errorData = { error: 'Respuesta no es JSON', raw: responseText };
+      }
+      
+      console.error('[ADMIN-SCRAPE] Error del CRON:', errorData);
       throw new Error(errorData.error || `Error del CRON: ${cronResponse.status} ${cronResponse.statusText}`);
     }
 

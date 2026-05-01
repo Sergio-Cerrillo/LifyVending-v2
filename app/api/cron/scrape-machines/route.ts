@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { scrapeFrekuentRevenueMultiple, scrapeFrekuentRevenueMock } from '@/scraper/frekuent-revenue-scraper';
 import { TelevendScraper } from '@/scraper/televend-scraper';
+import { generateFrekuentId, generateTelevendId } from '@/lib/machine-id-utils';
 
 // Cliente Supabase con service_role para operaciones sin RLS
 const supabaseAdmin = createClient(
@@ -246,11 +247,11 @@ export async function GET(request: NextRequest) {
     for (const [machineName, machineData] of machinesMap.entries()) {
       const { location, periods, source } = machineData;
       
-      // Determinar IDs según la fuente
-      const frekuent_machine_id = source === 'frekuent' ? machineName : null;
-      const televend_machine_id = source === 'televend' ? `televend_${machineName.replace(/[^a-zA-Z0-9]/g, '_')}` : null;
+      // Determinar IDs según la fuente (NORMALIZADO para evitar duplicados)
+      const frekuent_machine_id = source === 'frekuent' ? generateFrekuentId(machineName) : null;
+      const televend_machine_id = source === 'televend' ? generateTelevendId(machineName) : null;
 
-      // Buscar si la máquina ya existe (por cualquier ID)
+      // Buscar si la máquina ya existe (por cualquier ID normalizado)
       let existingMachine = null;
       
       if (frekuent_machine_id) {
