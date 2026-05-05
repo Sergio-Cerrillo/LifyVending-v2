@@ -17,10 +17,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage(null); // Limpiar errores anteriores
 
     try {
       // Login con Supabase
@@ -29,13 +31,58 @@ export default function LoginPage() {
         password,
       });
 
-      if (error) throw error;
-
-      if (!data.user) {
-        throw new Error('No se pudo autenticar');
+      // Manejo específico de errores de autenticación
+      if (error) {
+        // Log solo en desarrollo (opcional para debugging)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[LOGIN] Error de autenticación:', error.message);
+        }
+        
+        // Mensajes de error personalizados según el tipo
+        if (error.message.includes('Invalid login credentials') || 
+            error.message.includes('Invalid email or password')) {
+          const msg = 'Email o contraseña incorrectos';
+          setErrorMessage(msg);
+          toast.error(msg, {
+            description: 'Por favor verifica tus credenciales e intenta de nuevo',
+            duration: 4000
+          });
+          return;
+        } else if (error.message.includes('Email not confirmed')) {
+          const msg = 'Email no confirmado';
+          setErrorMessage(msg);
+          toast.error(msg, {
+            description: 'Por favor confirma tu email antes de iniciar sesión',
+            duration: 4000
+          });
+          return;
+        } else if (error.message.includes('Too many requests')) {
+          const msg = 'Demasiados intentos';
+          setErrorMessage(msg);
+          toast.error(msg, {
+            description: 'Por favor espera unos minutos antes de intentar de nuevo',
+            duration: 5000
+          });
+          return;
+        } else {
+          setErrorMessage('Error al iniciar sesión');
+          toast.error('Error al iniciar sesión', {
+            description: error.message,
+            duration: 4000
+          });
+          return;
+        }
       }
 
-      console.log('Usuario autenticado:', data.user.id, data.user.email);
+      if (!data.user) {
+        const msg = 'No se pudo obtener la información del usuario';
+        setErrorMessage(msg);
+        toast.error('Error al iniciar sesión', {
+          description: msg,
+          duration: 4000
+        });
+        return;
+      }
 
       // Obtener perfil para verificar rol
       const { data: profile, error: profileError } = await supabase
@@ -44,34 +91,61 @@ export default function LoginPage() {
         .eq('id', data.user.id)
         .single();
 
-      console.log('Resultado query profiles:', { profile, profileError });
-
       // Si no existe perfil, el usuario no está autorizado
       if (profileError || !profile) {
-        console.error('Perfil no encontrado para usuario:', data.user.id);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[LOGIN] Perfil no encontrado para usuario:', data.user.id);
+        }
+        console.error('[LOGIN] Perfil no encontrado para usuario:', data.user.id);
+        
         // Cerrar sesión ya que no tiene perfil válido
         await supabase.auth.signOut();
-        throw new Error(
-          'Usuario no autorizado. Por favor contacta al administrador para obtener acceso.'
-        );
+        
+        const msg = 'Tu cuenta no tiene un perfil asignado';
+        setErrorMessage(msg);
+        toast.error('Usuario no autorizado', {
+          description: msg + '. Contacta al administrador.',
+          duration: 5000
+        });
+        return;
       }
+
+      console.log('[LOGIN] Perfil encontrado, rol:', profile.role);
 
       // Redirigir según rol
+      // Redirigir según rol
       if (profile.role === 'admin') {
+        toast.success('Bienvenido, administrador');
         router.push('/admin/dashboard');
       } else if (profile.role === 'client') {
+        toast.success('Bienvenido');
         router.push('/client/dashboard');
       } else if (profile.role === 'operador') {
+        toast.success('Bienvenido, operador');
         router.push('/admin/inicio'); // Operadores van a página de inicio
       } else {
-        throw new Error('Rol de usuario no válido');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[LOGIN] Rol no válido:', profile.role);
+        }
+        toast.error(msg, {
+          description: 'Contacta al administrador para resolver este problema',
+          duration: 4000
+        });
+        return;
       }
 
-      toast.success('Sesión iniciada correctamente');
     } catch (error: any) {
-      console.error('Error en login:', error);
-      toast.error(error.message || 'Error al iniciar sesión');
+      // Captura de errores inesperados
+      setErrorMessage('Error inesperado al iniciar sesión');
+      toast.error('Error inesperado', {
+        description: 'Error inesperado al iniciar sesión. Intenta de nuevo.',
+        duration: 4000
+      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[LOGIN] Error inesperado:', error);
+      }
     } finally {
+      // SIEMPRE liberar el estado de loading
       setLoading(false);
     }
   };
@@ -112,6 +186,27 @@ export default function LoginPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Mensaje de error visible */}
+            {errorMessage && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0">
+                    <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-red-800">
+                      Error de autenticación
+                    </h3>
+                    <p className="text-sm text-red-700 mt-1">
+                      {errorMessage}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-sm font-medium">
@@ -124,7 +219,10 @@ export default function LoginPage() {
                     type="email"
                     placeholder="tu@email.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setErrorMessage(null); // Limpiar error al escribir
+                    }}
                     className="pl-10 border-2"
                     required
                     disabled={loading}
@@ -143,7 +241,10 @@ export default function LoginPage() {
                     type="password"
                     placeholder="Tu contraseña"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setErrorMessage(null); // Limpiar error al escribir
+                    }}
                     className="pl-10 border-2"
                     required
                     disabled={loading}

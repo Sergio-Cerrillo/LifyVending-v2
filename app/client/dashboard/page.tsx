@@ -54,12 +54,7 @@ interface DashboardData {
       lastUpdate: string | null;
     };
   };
-  lastScrape: {
-    id: string;
-    status: string;
-    startedAt: string;
-    finishedAt: string | null;
-  } | null;
+  lastUpdate: string | null;
 }
 
 export default function ClientDashboardPage() {
@@ -133,27 +128,6 @@ export default function ClientDashboardPage() {
     }).format(date);
   }
 
-  /**
-   * Formatea la fecha como tiempo relativo (hace X minutos/horas)
-   */
-  function formatRelativeTime(dateString: string | null): string {
-    if (!dateString) return 'Nunca';
-
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'Hace un momento';
-    if (diffMins < 60) return `Hace ${diffMins} min`;
-    if (diffHours < 24) return `Hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
-    if (diffDays < 7) return `Hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
-
-    return formatDate(dateString);
-  }
-
   if (loading) {
     return <LoadingScreen message="Cargando dashboard..." />;
   }
@@ -208,6 +182,37 @@ export default function ClientDashboardPage() {
         </div>
       </div>
 
+      {/* Actualización automática */}
+      <Card className="border-emerald-200 bg-emerald-50/50">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-full bg-emerald-100">
+              <Clock className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-emerald-900 mb-1">Actualización Automática</h3>
+              <p className="text-sm text-emerald-800 mb-2">
+                Los datos de recaudación se actualizan automáticamente <strong>cada día alrededor de las 09:00</strong> de la mañana.
+              </p>
+              {data.lastUpdate && (
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-emerald-200">
+                  <span className="text-xs font-medium text-emerald-700">Última actualización:</span>
+                  <span className="text-xs text-emerald-900 font-semibold">
+                    {formatDate(data.lastUpdate)}
+                  </span>
+                  <Badge
+                    variant="default"
+                    className="text-xs bg-emerald-600"
+                  >
+                    ✓ Sincronizado
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Información importante */}
       <Card className="border-blue-200 bg-blue-50/50">
         <CardContent className="">
@@ -225,35 +230,6 @@ export default function ClientDashboardPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Última actualización automática */}
-      {data.lastScrape && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-full bg-primary/10">
-                  <Clock className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {formatRelativeTime(data.lastScrape.finishedAt || data.lastScrape.startedAt)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Última actualización • Automático cada hora
-                  </p>
-                </div>
-              </div>
-              <Badge
-                variant={data.lastScrape.status === 'completed' ? 'default' : 'secondary'}
-                className="text-xs"
-              >
-                {data.lastScrape.status === 'completed' ? '✓ Sincronizado' : data.lastScrape.status}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Cards de recaudación */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -294,12 +270,12 @@ export default function ClientDashboardPage() {
         </Card>
       </div>
 
-      {/* Lista de máquinas */}
+      {/* Lista de máquinas con recaudación individual */}
       <Card>
         <CardHeader>
           <CardTitle>Mis Máquinas ({data.machines.length})</CardTitle>
           <CardDescription>
-            Máquinas asignadas a su cuenta
+            Recaudación individual por máquina (valores netos)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -309,14 +285,46 @@ export default function ClientDashboardPage() {
             </p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {data.machines.map((machine) => (
-                <div
-                  key={machine.id}
-                  className="p-4 border border-zinc-200 rounded-lg hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors cursor-pointer flex items-center justify-center min-h-[5rem]"
-                >
-                  <h3 className="font-medium leading-snug break-words text-center">{machine.name}</h3>
-                </div>
-              ))}
+              {data.machines.map((machine) => {
+                // Buscar datos de recaudación para esta máquina
+                const dailyData = data.revenue.daily.machines.find(m => m.id === machine.id);
+                const monthlyData = data.revenue.monthly.machines.find(m => m.id === machine.id);
+
+                return (
+                  <div
+                    key={machine.id}
+                    className="p-4 border border-zinc-200 rounded-lg hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors group"
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <h3 className="font-medium leading-snug wrap-break-word">{machine.name}</h3>
+                        {machine.location && (
+                          <p className="text-xs text-muted-foreground group-hover:text-zinc-300 flex items-center gap-1 mt-1">
+                            <MapPin className="w-3 h-3" />
+                            {machine.location}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Recaudación Diaria */}
+                      <div className="pt-2 border-t border-zinc-200 group-hover:border-zinc-700">
+                        <p className="text-xs text-muted-foreground group-hover:text-zinc-300">Diario</p>
+                        <p className="text-base font-bold">
+                          {dailyData ? formatCurrency(dailyData.amountNet) : '-'}
+                        </p>
+                      </div>
+
+                      {/* Recaudación Mensual */}
+                      <div className="pt-2 border-t border-zinc-200 group-hover:border-zinc-700">
+                        <p className="text-xs text-muted-foreground group-hover:text-zinc-300">Mensual</p>
+                        <p className="text-lg font-bold">
+                          {monthlyData ? formatCurrency(monthlyData.amountNet) : '-'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

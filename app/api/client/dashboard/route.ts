@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, supabaseAdmin, getLastScrapeRun } from '@/lib/supabase-helpers';
+import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -105,10 +105,17 @@ export async function GET(request: NextRequest) {
     const machines = (assignments || []).map(a => (a as any).machines).filter(Boolean);
     console.log(`✅ Máquinas asignadas: ${machines.length}`, machines.map(m => m.name));
 
-    // Obtener último scrape run
-    console.log('🔄 Obteniendo último scrape...');
-    const lastScrape = await getLastScrapeRun(user.id);
+    // Calcular la fecha de última actualización más reciente de las máquinas del cliente
+    const allUpdateDates = machines
+      .flatMap((m: any) => [m.daily_updated_at, m.monthly_updated_at, m.last_scraped])
+      .filter(Boolean)
+      .map((date: string) => new Date(date).getTime());
+    
+    const lastUpdate = allUpdateDates.length > 0 
+      ? new Date(Math.max(...allUpdateDates)).toISOString()
+      : null;
 
+    console.log('🕒 Última actualización de datos:', lastUpdate);
     console.log('✅ Dashboard cargado correctamente');
     
     return NextResponse.json({
@@ -127,12 +134,7 @@ export async function GET(request: NextRequest) {
         weekly: revenueByPeriod.weekly,
         monthly: revenueByPeriod.monthly
       },
-      lastScrape: lastScrape ? {
-        id: lastScrape.id,
-        status: lastScrape.status,
-        startedAt: lastScrape.started_at,
-        finishedAt: lastScrape.finished_at
-      } : null
+      lastUpdate
     });
 
   } catch (error: any) {

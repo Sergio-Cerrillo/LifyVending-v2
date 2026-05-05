@@ -93,11 +93,15 @@ export async function createNewClient(params: {
   commissionHidePercent?: number;
   commissionPaymentPercent?: number;
 }) {
-  // Crear usuario en Auth
+  // Crear usuario en Auth con user_metadata para que el trigger automático cree el perfil correctamente
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: params.email,
     password: params.password,
-    email_confirm: true
+    email_confirm: true,
+    user_metadata: {
+      role: 'client',
+      name: params.displayName || params.email
+    }
   });
 
   if (authError) {
@@ -108,19 +112,68 @@ export async function createNewClient(params: {
     throw new Error('No se pudo crear el usuario');
   }
 
-  // Crear perfil
-  const { error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .insert({
-      id: authData.user.id,
-      email: params.email,
-      role: 'client',
-      display_name: params.displayName || null,
-      company_name: params.companyName || null
-    });
+  // El perfil se crea automáticamente por el trigger 'on_auth_user_created'
+  // Esperamos a que el perfil exista antes de continuar
+  console.log('[CREATE-CLIENT] Esperando a que el trigger cree el perfil...');
+  
+  let profileExists = false;
+  let profileCreatedManually = false;
+  let attempts = 0;
+  const maxAttempts = 5;
+  
+  while (!profileExists && attempts < maxAttempts) {
+    const { data: profile, error: profileCheckError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('id', authData.user.id)
+      .single();
+    
+    if (profile) {
+      profileExists = true;
+      console.log('[CREATE-CLIENT] ✅ Perfil creado por el trigger');
+    } else {
+      attempts++;
+      console.log(`[CREATE-CLIENT] Intento ${attempts}/${maxAttempts} - esperando perfil...`);
+      await new Promise(resolve => setTimeout(resolve, 300)); // Esperar 300ms
+    }
+  }
+  
+  // Si el trigger no funcionó, crear perfil manualmente como fallback
+  if (!profileExists) {
+    console.log('[CREATE-CLIENT] ⚠️ Trigger no funcionó, creando perfil manualmente...');
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .insert({
+        id: authData.user.id,
+        email: params.email,
+        role: 'client',
+        display_name: params.displayName || null,
+        company_name: params.companyName || null
+      });
+    
+    if (profileError) {
+      // Si ya existe, está bien (unique_violation)
+      if (profileError.code !== '23505') {
+        throw new Error(`Error creando perfil manualmente: ${profileError.message}`);
+      }
+      console.log('[CREATE-CLIENT] Perfil ya existía');
+    } else {
+      console.log('[CREATE-CLIENT] ✅ Perfil creado manualmente');
+      profileCreatedManually = true;
+    }
+  }
 
-  if (profileError) {
-    throw new Error(`Error creando perfil: ${profileError.message}`);
+  // Solo actualizamos company_name si el perfil fue creado por el trigger (que no incluye company_name)
+  if (!profileCreatedManually && params.companyName) {
+    const { error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ company_name: params.companyName })
+      .eq('id', authData.user.id);
+
+    if (updateError) {
+      console.error('[CREATE-CLIENT] Error actualizando company_name:', updateError);
+      // No lanzamos error aquí porque el usuario ya se creó correctamente
+    }
   }
 
   // Crear settings con valores por defecto si no se proporcionan
