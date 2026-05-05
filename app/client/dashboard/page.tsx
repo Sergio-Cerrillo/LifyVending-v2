@@ -305,7 +305,7 @@ export default function ClientDashboardPage() {
                           </p>
                         )}
                       </div>
-                      
+
                       {/* Recaudación Diaria */}
                       <div className="pt-2 border-t border-zinc-200 group-hover:border-zinc-700">
                         <p className="text-xs text-muted-foreground group-hover:text-zinc-300">Diario</p>

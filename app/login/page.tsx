@@ -37,10 +37,10 @@ export default function LoginPage() {
         if (process.env.NODE_ENV === 'development') {
           console.log('[LOGIN] Error de autenticación:', error.message);
         }
-        
+
         // Mensajes de error personalizados según el tipo
-        if (error.message.includes('Invalid login credentials') || 
-            error.message.includes('Invalid email or password')) {
+        if (error.message.includes('Invalid login credentials') ||
+          error.message.includes('Invalid email or password')) {
           const msg = 'Email o contraseña incorrectos';
           setErrorMessage(msg);
           toast.error(msg, {
@@ -97,10 +97,10 @@ export default function LoginPage() {
           console.log('[LOGIN] Perfil no encontrado para usuario:', data.user.id);
         }
         console.error('[LOGIN] Perfil no encontrado para usuario:', data.user.id);
-        
+
         // Cerrar sesión ya que no tiene perfil válido
         await supabase.auth.signOut();
-        
+
         const msg = 'Tu cuenta no tiene un perfil asignado';
         setErrorMessage(msg);
         toast.error('Usuario no autorizado', {
