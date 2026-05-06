@@ -171,7 +171,7 @@ export default function AdminRevenueGeneralPage() {
             if (!response.ok) {
                 const responseText = await response.text();
                 console.log('[SCRAPE] Respuesta cruda:', responseText);
-                
+
                 let errorData: any = { error: 'Error desconocido' };
                 try {
                     errorData = JSON.parse(responseText);
@@ -179,7 +179,7 @@ export default function AdminRevenueGeneralPage() {
                     console.error('[SCRAPE] Error parseando respuesta:', e);
                     errorData = { error: 'Respuesta no válida del servidor', raw: responseText };
                 }
-                
+
                 console.error('[SCRAPE] Error del servidor:', errorData);
                 throw new Error(errorData.error || `Error HTTP ${response.status}`);
             }
@@ -187,7 +187,7 @@ export default function AdminRevenueGeneralPage() {
             const data = await response.json();
             console.log('[SCRAPE] Resultado:', data);
             toast.success(`Scraping completado: ${data.machines_updated || 0} máquinas actualizadas`);
-            
+
             // Recargar datos
             await loadRevenueData();
 
@@ -230,7 +230,7 @@ export default function AdminRevenueGeneralPage() {
 
             const data = await response.json();
             toast.success(`${data.count || 0} máquinas eliminadas correctamente`);
-            
+
             // Recargar datos
             await loadRevenueData();
 
@@ -593,7 +593,7 @@ function MachineTable({ machines, period, formatCurrency, formatDate }: MachineT
                         const isExpanded = expandedMobile === machine.id;
 
                         return (
-                            <div 
+                            <div
                                 key={machine.id}
                                 className="border border-zinc-200 rounded-lg bg-white overflow-hidden"
                             >
@@ -676,7 +676,7 @@ function MachineTable({ machines, period, formatCurrency, formatDate }: MachineT
                                 const isOrain = machine.source === 'orain';
 
                                 return (
-                                    <TableRow 
+                                    <TableRow
                                         key={machine.id}
                                         className="border-b border-zinc-100 hover:bg-zinc-50/50 transition-colors"
                                     >

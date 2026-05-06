@@ -279,121 +279,121 @@ export default function AdminClientsPage() {
           </div>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="lg" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
-              <Plus className="w-4 h-4 mr-2" />
-              Nuevo Cliente
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Crear Nuevo Cliente</DialogTitle>
-              <DialogDescription>
-                Introduce los datos del nuevo cliente.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="cliente@ejemplo.com"
-                  value={newClient.email}
-                  onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={newClient.password}
-                  onChange={(e) => setNewClient({ ...newClient, password: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="displayName">Nombre</Label>
-                <Input
-                  id="displayName"
-                  placeholder="Nombre del contacto"
-                  value={newClient.displayName}
-                  onChange={(e) => setNewClient({ ...newClient, displayName: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Empresa</Label>
-                <Input
-                  id="companyName"
-                  placeholder="Nombre de la empresa"
-                  value={newClient.companyName}
-                  onChange={(e) => setNewClient({ ...newClient, companyName: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="commissionHidePercent">Porcentaje Oculto (%)</Label>
-                <Input
-                  id="commissionHidePercent"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={newClient.commissionHidePercent}
-                  onChange={(e) => setNewClient({ ...newClient, commissionHidePercent: e.target.value })}
-                />
-                <p className="text-xs text-zinc-500">
-                  Porcentaje que se RESTARÁ de la recaudación bruta (ej: 30% → si bruto = 100€, cliente ve 70€)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="commissionPaymentPercent">Porcentaje Comisión - Pago (%)</Label>
-                <Input
-                  id="commissionPaymentPercent"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={newClient.commissionPaymentPercent}
-                  onChange={(e) => setNewClient({ ...newClient, commissionPaymentPercent: e.target.value })}
-                />
-                <p className="text-xs text-zinc-500">
-                  Porcentaje que el cliente recibirá en el pago (solo informativo, no afecta cálculos)
-                </p>
-              </div>
-            </div>
-
-            {error && (
-              <div className="text-sm text-destructive">
-                {error}
-              </div>
-            )}
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-                disabled={creating}
-                className="border-emerald-200 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 font-semibold"
-              >
-                Cancelar
+            <DialogTrigger asChild>
+              <Button size="lg" className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold">
+                <Plus className="w-4 h-4 mr-2" />
+                Nuevo Cliente
               </Button>
-              <Button
-                onClick={handleCreateClient}
-                disabled={creating || !newClient.email || !newClient.password}
-                className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold"
-              >
-                {creating ? 'Creando...' : 'Crear Cliente'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Crear Nuevo Cliente</DialogTitle>
+                <DialogDescription>
+                  Introduce los datos del nuevo cliente.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="cliente@ejemplo.com"
+                    value={newClient.email}
+                    onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Contraseña</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Mínimo 6 caracteres"
+                    value={newClient.password}
+                    onChange={(e) => setNewClient({ ...newClient, password: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="displayName">Nombre</Label>
+                  <Input
+                    id="displayName"
+                    placeholder="Nombre del contacto"
+                    value={newClient.displayName}
+                    onChange={(e) => setNewClient({ ...newClient, displayName: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">Empresa</Label>
+                  <Input
+                    id="companyName"
+                    placeholder="Nombre de la empresa"
+                    value={newClient.companyName}
+                    onChange={(e) => setNewClient({ ...newClient, companyName: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="commissionHidePercent">Porcentaje Oculto (%)</Label>
+                  <Input
+                    id="commissionHidePercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={newClient.commissionHidePercent}
+                    onChange={(e) => setNewClient({ ...newClient, commissionHidePercent: e.target.value })}
+                  />
+                  <p className="text-xs text-zinc-500">
+                    Porcentaje que se RESTARÁ de la recaudación bruta (ej: 30% → si bruto = 100€, cliente ve 70€)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="commissionPaymentPercent">Porcentaje Comisión - Pago (%)</Label>
+                  <Input
+                    id="commissionPaymentPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={newClient.commissionPaymentPercent}
+                    onChange={(e) => setNewClient({ ...newClient, commissionPaymentPercent: e.target.value })}
+                  />
+                  <p className="text-xs text-zinc-500">
+                    Porcentaje que el cliente recibirá en el pago (solo informativo, no afecta cálculos)
+                  </p>
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                  disabled={creating}
+                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 font-semibold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleCreateClient}
+                  disabled={creating || !newClient.email || !newClient.password}
+                  className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md font-semibold"
+                >
+                  {creating ? 'Creando...' : 'Crear Cliente'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
