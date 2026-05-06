@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   LayoutDashboard,
@@ -55,12 +55,6 @@ const navItems: NavItem[] = [
     title: 'Gestión de Clientes',
     href: '/admin/clients-management',
     icon: <Users className="h-5 w-5" />,
-    roles: ['admin'],
-  },
-  {
-    title: 'Gestión de Empleados',
-    href: '/admin/empleados',
-    icon: <User className="h-5 w-5" />,
     roles: ['admin'],
   },
   {
@@ -193,6 +187,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile Sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent side="left" className="p-0 w-64">
+          <SheetTitle className="sr-only">Menú de navegación</SheetTitle>
           <ScrollArea className="h-full">
             <Sidebar />
           </ScrollArea>

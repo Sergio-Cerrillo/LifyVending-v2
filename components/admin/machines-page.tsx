@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StatusBadge, getMachineStatusVariant } from './status-badge';
-import { Plus, Search, Edit, MapPin, CheckCircle2, XCircle, FileCheck, MoreVertical, Download, Package } from 'lucide-react';
+import { Plus, Search, Edit, MapPin, CheckCircle2, XCircle, FileCheck, MoreVertical, Download, Package, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CreateMachineSheet } from './create-machine-sheet';
@@ -36,6 +36,7 @@ export function MachinesPage() {
   const { machines } = useData();
   const [filters, setFilters] = useState<MachineFilters>({});
   const [search, setSearch] = useState('');
+  const [expandedMobile, setExpandedMobile] = useState<string | null>(null);
 
   const filteredMachines = machines.filter((machine) => {
     if (search) {
@@ -74,6 +75,10 @@ export function MachinesPage() {
       mixta: 'Mixta',
     };
     return types[type] || type;
+  };
+
+  const toggleMobileExpand = (machineId: string) => {
+    setExpandedMobile(expandedMobile === machineId ? null : machineId);
   };
 
   return (
@@ -157,8 +162,124 @@ export function MachinesPage() {
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-md border">
+      {/* Mobile View - Cards */}
+      <div className="block md:hidden space-y-3">
+        {filteredMachines.length === 0 ? (
+          <div className="text-center text-zinc-500 py-12 border rounded-lg">
+            No se encontraron máquinas
+          </div>
+        ) : (
+          filteredMachines.map((machine) => {
+            const isExpanded = expandedMobile === machine.id;
+            return (
+              <div
+                key={machine.id}
+                className="border border-zinc-200 rounded-lg bg-white overflow-hidden"
+              >
+                <button
+                  onClick={() => toggleMobileExpand(machine.id)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
+                >
+                  <div className="flex-1 text-left">
+                    <div className="font-semibold text-zinc-900 mb-2">
+                      {machine.machineNumber}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge
+                        status={getMachineTypeLabel(machine.type)}
+                        variant="info"
+                      />
+                      <StatusBadge
+                        status={machine.status}
+                        variant={getMachineStatusVariant(machine.status)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    {isExpanded ? (
+                      <ChevronUp className="h-5 w-5 text-zinc-400" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-zinc-400" />
+                    )}
+                  </div>
+                </button>
+                {isExpanded && (
+                  <div className="px-4 pb-4 pt-2 border-t border-zinc-100 bg-zinc-50/50 space-y-3">
+                    <div>
+                      <div className="text-xs text-zinc-500 mb-1">Marca/Modelo</div>
+                      <div className="font-medium text-zinc-900">{machine.brand}</div>
+                      <div className="text-sm text-zinc-600">{machine.model}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-zinc-500 mb-1">Ubicación</div>
+                      <div className="font-medium text-zinc-900">{machine.locationName}</div>
+                      <div className="text-sm text-zinc-600 flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {machine.locationAddress}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-600">Tarjeta:</span>
+                        {machine.hasCardReader ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-gray-300" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-600">Telemetría:</span>
+                        {machine.hasTelemetry ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-gray-300" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-600">Contrato:</span>
+                        {machine.hasContract ? (
+                          <FileCheck className="h-4 w-4 text-blue-600" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-gray-300" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-600">Comisión:</span>
+                        <span className="text-sm font-medium text-zinc-900">
+                          {machine.commissionPercentage ? `${machine.commissionPercentage}%` : '-'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-zinc-500 mb-1">Instalación</div>
+                      <div className="text-sm text-zinc-700">
+                        {format(new Date(machine.installationDate), 'dd/MM/yyyy', { locale: es })}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button variant="outline" size="sm" className="flex-1">
+                        <Edit className="mr-2 h-3 w-3" />
+                        Editar
+                      </Button>
+                      {machine.hasContract && machine.contractFileUrl && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={machine.contractFileUrl} download target="_blank" rel="noopener noreferrer">
+                            <Download className="mr-2 h-3 w-3" />
+                            Contrato
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop View - Table */}
+      <div className="hidden md:block rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>

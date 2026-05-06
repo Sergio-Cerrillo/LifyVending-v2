@@ -34,7 +34,7 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
         <AnimatedBackground />
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <div className="relative z-10">{children}</div>
           <Toaster />
         </ThemeProvider>

@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon, Zap, Clock, Trash2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Download, DollarSign, TrendingUp, Loader2, EuroIcon, Zap, Clock, Trash2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
@@ -282,23 +282,27 @@ export default function AdminRevenueGeneralPage() {
         <div className="space-y-6">
             {/* Header mejorado */}
             <div className="bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 border border-emerald-100 rounded-2xl p-6 shadow-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl shadow-lg">
-                                <EuroIcon className="h-6 w-6 text-white" />
+                        <div className="flex flex-col gap-2 mb-2">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl shadow-lg">
+                                    <EuroIcon className="h-6 w-6 text-white" />
+                                </div>
+                                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
                             </div>
-                            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
-                            {!enableManualScraping && (
-                                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700">
-                                    Solo lectura
-                                </Badge>
-                            )}
-                            {enableManualScraping && (
-                                <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200 font-semibold">
-                                    Modo Desarrollo
-                                </Badge>
-                            )}
+                            <div className="flex flex-wrap items-center gap-2 ml-14">
+                                {!enableManualScraping && (
+                                    <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700">
+                                        Solo lectura
+                                    </Badge>
+                                )}
+                                {enableManualScraping && (
+                                    <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200 font-semibold">
+                                        Modo Desarrollo
+                                    </Badge>
+                                )}
+                            </div>
                         </div>
                         <p className="text-sm font-semibold text-zinc-700 ml-14">
                             Vista global de todas las máquinas del sistema • Datos de base de datos
@@ -568,60 +572,140 @@ interface MachineTableProps {
 }
 
 function MachineTable({ machines, period, formatCurrency, formatDate }: MachineTableProps) {
-    return (
-        <div className="rounded-lg border border-zinc-200 overflow-hidden bg-white">
-            <Table>
-                <TableHeader>
-                    <TableRow className="bg-zinc-50 border-b border-zinc-200 hover:bg-zinc-50">
-                        <TableHead className="font-semibold text-zinc-900">Máquina</TableHead>
-                        <TableHead className="font-semibold text-zinc-900">Fuente</TableHead>
-                        <TableHead className="font-semibold text-zinc-900">Ubicación</TableHead>
-                        <TableHead className="text-right font-semibold text-zinc-900">Total</TableHead>
-                        <TableHead className="font-semibold text-zinc-900">Última Actualización</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {machines.length === 0 ? (
-                        <TableRow className="hover:bg-white">
-                            <TableCell colSpan={7} className="text-center text-zinc-500 py-12">
-                                No hay datos de recaudación disponibles. Los datos se actualizan automáticamente cada hora.
-                            </TableCell>
-                        </TableRow>
-                    ) : (
-                        machines.map((machine) => {
-                            const data = machine[period];
-                            const isOrain = machine.source === 'orain';
+    const [expandedMobile, setExpandedMobile] = useState<string | null>(null);
 
-                            return (
-                                <TableRow 
-                                    key={machine.id}
-                                    className="border-b border-zinc-100 hover:bg-zinc-50/50 transition-colors"
+    const toggleMobileExpand = (machineId: string) => {
+        setExpandedMobile(expandedMobile === machineId ? null : machineId);
+    };
+
+    return (
+        <>
+            {/* Vista Móvil - Lista de Cards */}
+            <div className="block md:hidden space-y-3">
+                {machines.length === 0 ? (
+                    <div className="text-center text-zinc-500 py-12 border rounded-lg">
+                        No hay datos de recaudación disponibles. Los datos se actualizan automáticamente cada hora.
+                    </div>
+                ) : (
+                    machines.map((machine) => {
+                        const data = machine[period];
+                        const isOrain = machine.source === 'orain';
+                        const isExpanded = expandedMobile === machine.id;
+
+                        return (
+                            <div 
+                                key={machine.id}
+                                className="border border-zinc-200 rounded-lg bg-white overflow-hidden"
+                            >
+                                <button
+                                    onClick={() => toggleMobileExpand(machine.id)}
+                                    className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
                                 >
-                                    <TableCell className="font-medium text-zinc-900">{machine.name}</TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className={isOrain
-                                                ? "bg-blue-100 text-blue-800 border-blue-300 font-medium"
-                                                : "bg-purple-100 text-purple-800 border-purple-300 font-medium"
-                                            }
-                                        >
-                                            {isOrain ? 'Orain-Frekuent' : 'Televend'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-zinc-700">{machine.location || 'Sin ubicación'}</TableCell>
-                                    <TableCell className="text-right font-bold text-zinc-900 text-base">
-                                        {formatCurrency(data.total)}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-zinc-600">
-                                        {formatDate(data.updatedAt)}
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })
-                    )}
-                </TableBody>
-            </Table>
-        </div>
+                                    <div className="flex-1 text-left">
+                                        <div className="font-semibold text-zinc-900 mb-1">{machine.name}</div>
+                                        <div className="flex items-center gap-2">
+                                            <Badge
+                                                variant="outline"
+                                                className={isOrain
+                                                    ? "bg-blue-100 text-blue-800 border-blue-300 text-xs"
+                                                    : "bg-purple-100 text-purple-800 border-purple-300 text-xs"
+                                                }
+                                            >
+                                                {isOrain ? 'Orain' : 'Televend'}
+                                            </Badge>
+                                            {machine.location && (
+                                                <span className="text-xs text-zinc-600">{machine.location}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {isExpanded && (
+                                            <span className="font-bold text-zinc-900 mr-2">
+                                                {formatCurrency(data.total)}
+                                            </span>
+                                        )}
+                                        {isExpanded ? (
+                                            <ChevronUp className="h-5 w-5 text-zinc-400" />
+                                        ) : (
+                                            <ChevronDown className="h-5 w-5 text-zinc-400" />
+                                        )}
+                                    </div>
+                                </button>
+                                {isExpanded && (
+                                    <div className="px-4 pb-4 pt-2 border-t border-zinc-100 bg-zinc-50/50">
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between">
+                                                <span className="text-zinc-600">Total:</span>
+                                                <span className="font-bold text-zinc-900">{formatCurrency(data.total)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-zinc-600">Última actualización:</span>
+                                                <span className="text-zinc-700">{formatDate(data.updatedAt)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+
+            {/* Vista Desktop - Tabla */}
+            <div className="hidden md:block rounded-lg border border-zinc-200 overflow-x-auto bg-white">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="bg-zinc-50 border-b border-zinc-200 hover:bg-zinc-50">
+                            <TableHead className="font-semibold text-zinc-900">Máquina</TableHead>
+                            <TableHead className="font-semibold text-zinc-900">Fuente</TableHead>
+                            <TableHead className="font-semibold text-zinc-900">Ubicación</TableHead>
+                            <TableHead className="text-right font-semibold text-zinc-900">Total</TableHead>
+                            <TableHead className="font-semibold text-zinc-900">Última Actualización</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {machines.length === 0 ? (
+                            <TableRow className="hover:bg-white">
+                                <TableCell colSpan={7} className="text-center text-zinc-500 py-12">
+                                    No hay datos de recaudación disponibles. Los datos se actualizan automáticamente cada hora.
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            machines.map((machine) => {
+                                const data = machine[period];
+                                const isOrain = machine.source === 'orain';
+
+                                return (
+                                    <TableRow 
+                                        key={machine.id}
+                                        className="border-b border-zinc-100 hover:bg-zinc-50/50 transition-colors"
+                                    >
+                                        <TableCell className="font-medium text-zinc-900">{machine.name}</TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant="outline"
+                                                className={isOrain
+                                                    ? "bg-blue-100 text-blue-800 border-blue-300 font-medium"
+                                                    : "bg-purple-100 text-purple-800 border-purple-300 font-medium"
+                                                }
+                                            >
+                                                {isOrain ? 'Orain-Frekuent' : 'Televend'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-zinc-700">{machine.location || 'Sin ubicación'}</TableCell>
+                                        <TableCell className="text-right font-bold text-zinc-900 text-base">
+                                            {formatCurrency(data.total)}
+                                        </TableCell>
+                                        <TableCell className="text-sm text-zinc-600">
+                                            {formatDate(data.updatedAt)}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+        </>
     );
 }

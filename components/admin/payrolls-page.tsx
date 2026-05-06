@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StatusBadge } from './status-badge';
-import { Plus, Download, Check } from 'lucide-react';
+import { Plus, Download, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { UploadPayrollSheet } from './upload-payroll-sheet';
@@ -35,6 +35,7 @@ export function PayrollsPage() {
   const { hasRole } = useAuth();
   const [selectedYear, setSelectedYear] = useState<string>('2026');
   const [activeTab, setActiveTab] = useState<string>(employees[0]?.id || 'all');
+  const [expandedMobile, setExpandedMobile] = useState<string | null>(null);
 
   const getEmployeeName = (employeeId: string) => {
     const employee = employees.find((e) => e.id === employeeId);
@@ -88,6 +89,10 @@ export function PayrollsPage() {
   const totalGross = filteredPayrolls.reduce((sum, p) => sum + p.grossAmount, 0);
   const totalNet = filteredPayrolls.reduce((sum, p) => sum + p.netAmount, 0);
   const totalCost = filteredPayrolls.reduce((sum, p) => sum + p.companyCost, 0);
+
+  const toggleMobileExpand = (payrollId: string) => {
+    setExpandedMobile(expandedMobile === payrollId ? null : payrollId);
+  };
 
   return (
     <div className="space-y-6">
@@ -194,8 +199,108 @@ export function PayrollsPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="rounded-md border">
+        {/* Mobile View - Cards */}
+        <div className="block md:hidden space-y-3">
+          {filteredPayrolls.length === 0 ? (
+            <div className="text-center text-zinc-500 py-12 border rounded-lg">
+              No se encontraron nóminas
+            </div>
+          ) : (
+            filteredPayrolls
+              .sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.month - a.month;
+              })
+              .map((payroll) => {
+                const isExpanded = expandedMobile === payroll.id;
+                return (
+                  <div
+                    key={payroll.id}
+                    className="border border-zinc-200 rounded-lg bg-white overflow-hidden"
+                  >
+                    <button
+                      onClick={() => toggleMobileExpand(payroll.id)}
+                      className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
+                    >
+                      <div className="flex-1 text-left">
+                        <div className="font-semibold text-zinc-900 mb-1">
+                          {getEmployeeName(payroll.employeeId)}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-zinc-600">
+                          <span>{getMonthName(payroll.month)} {payroll.year}</span>
+                          <StatusBadge
+                            status={payroll.status}
+                            variant={payroll.status === 'REVISADA' ? 'success' : 'warning'}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isExpanded && (
+                          <span className="font-bold text-zinc-900 mr-2">
+                            €{payroll.netAmount.toFixed(2)}
+                          </span>
+                        )}
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-zinc-400" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-zinc-400" />
+                        )}
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="px-4 pb-4 pt-2 border-t border-zinc-100 bg-zinc-50/50 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-xs text-zinc-500 mb-1">Bruto</div>
+                            <div className="font-semibold text-zinc-900">
+                              €{payroll.grossAmount.toFixed(2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-zinc-500 mb-1">Neto</div>
+                            <div className="font-semibold text-zinc-900">
+                              €{payroll.netAmount.toFixed(2)}
+                            </div>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="text-xs text-zinc-500 mb-1">Coste Empresa</div>
+                            <div className="font-semibold text-zinc-900">
+                              €{payroll.companyCost.toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          {payroll.status === 'PENDIENTE' && hasRole(['admin', 'gestor']) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => handleMarkReviewed(payroll)}
+                            >
+                              <Check className="mr-2 h-3 w-3" />
+                              Marcar Revisada
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleDownload(payroll)}
+                          >
+                            <Download className="mr-2 h-3 w-3" />
+                            Descargar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+          )}
+        </div>
+
+        {/* Desktop View - Table */}
+        <div className="hidden md:block rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -332,8 +437,105 @@ export function PayrollsPage() {
             </div>
           </div>
 
-          {/* Table */}
-          <div className="rounded-md border">
+          {/* Mobile View - Cards */}
+          <div className="block md:hidden space-y-3">
+            {filteredPayrolls.length === 0 ? (
+              <div className="text-center text-zinc-500 py-12 border rounded-lg">
+                No se encontraron nóminas para este empleado
+              </div>
+            ) : (
+              filteredPayrolls
+                .sort((a, b) => {
+                  if (a.year !== b.year) return b.year - a.year;
+                  return b.month - a.month;
+                })
+                .map((payroll) => {
+                  const isExpanded = expandedMobile === payroll.id;
+                  return (
+                    <div
+                      key={payroll.id}
+                      className="border border-zinc-200 rounded-lg bg-white overflow-hidden"
+                    >
+                      <button
+                        onClick={() => toggleMobileExpand(payroll.id)}
+                        className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
+                      >
+                        <div className="flex-1 text-left">
+                          <div className="font-semibold text-zinc-900 mb-1">
+                            {getMonthName(payroll.month)} {payroll.year}
+                          </div>
+                          <StatusBadge
+                            status={payroll.status}
+                            variant={payroll.status === 'REVISADA' ? 'success' : 'warning'}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isExpanded && (
+                            <span className="font-bold text-zinc-900 mr-2">
+                              €{payroll.netAmount.toFixed(2)}
+                            </span>
+                          )}
+                          {isExpanded ? (
+                            <ChevronUp className="h-5 w-5 text-zinc-400" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-zinc-400" />
+                          )}
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-2 border-t border-zinc-100 bg-zinc-50/50 space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs text-zinc-500 mb-1">Bruto</div>
+                              <div className="font-semibold text-zinc-900">
+                                €{payroll.grossAmount.toFixed(2)}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-zinc-500 mb-1">Neto</div>
+                              <div className="font-semibold text-zinc-900">
+                                €{payroll.netAmount.toFixed(2)}
+                              </div>
+                            </div>
+                            <div className="col-span-2">
+                              <div className="text-xs text-zinc-500 mb-1">Coste Empresa</div>
+                              <div className="font-semibold text-zinc-900">
+                                €{payroll.companyCost.toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            {payroll.status === 'PENDIENTE' && hasRole(['admin', 'gestor']) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => handleMarkReviewed(payroll)}
+                              >
+                                <Check className="mr-2 h-3 w-3" />
+                                Marcar Revisada
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => handleDownload(payroll)}
+                            >
+                              <Download className="mr-2 h-3 w-3" />
+                              Descargar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+            )}
+          </div>
+
+          {/* Desktop View - Table */}
+          <div className="hidden md:block rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>

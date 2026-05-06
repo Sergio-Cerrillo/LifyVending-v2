@@ -424,10 +424,10 @@ export default function AdminClientsPage() {
               {clients.map((client) => (
                 <div
                   key={client.id}
-                  className="flex items-center justify-between p-5 border border-zinc-200 rounded-lg hover:border-emerald-300 hover:shadow-sm transition-all duration-200"
+                  className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-5 border border-zinc-200 rounded-lg hover:border-emerald-300 hover:shadow-sm transition-all duration-200"
                 >
                   <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-zinc-900">{client.company_name || client.email}</h3>
                       <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-xs font-semibold">
                         {client.commissionHidePercent}% oculto
@@ -436,7 +436,7 @@ export default function AdminClientsPage() {
                         {client.commissionPaymentPercent}% comisión
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-zinc-500">
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-500">
                       {client.display_name && (
                         <span className="flex items-center gap-1.5">
                           <User className="w-3.5 h-3.5" />
@@ -448,7 +448,7 @@ export default function AdminClientsPage() {
                       <span>Creado {formatDate(client.created_at)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/admin/clients/${client.id}/overview`}>
                       <Button variant="ghost" size="sm" className="border border-zinc-200 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors">
                         <Eye className="w-4 h-4 mr-2" />
