@@ -9,24 +9,38 @@ interface TelevendConfig {
   headless: boolean;
 }
 
-function withBrowserlessTimeout(endpoint: string): string {
-  if (/([?&])timeout=/.test(endpoint)) return endpoint;
-  const separator = endpoint.includes('?') ? '&' : '?';
-  return `${endpoint}${separator}timeout=900000`;
+function normalizeBrowserlessEndpoint(endpoint: string, apiKey?: string): string {
+  const url = new URL(endpoint);
+  const host = url.hostname.toLowerCase();
+  const isBrowserless = host.includes('browserless');
+
+  if (isBrowserless && !url.searchParams.get('token') && apiKey) {
+    url.searchParams.set('token', apiKey);
+  }
+
+  if (isBrowserless && !url.searchParams.get('timeout')) {
+    const timeoutRaw = parseInt(process.env.BROWSERLESS_TIMEOUT_SECONDS || '900', 10);
+    const timeoutSeconds = Number.isFinite(timeoutRaw)
+      ? Math.max(1, Math.min(60000, timeoutRaw))
+      : 900;
+    url.searchParams.set('timeout', String(timeoutSeconds));
+  }
+
+  return url.toString();
 }
 
 function getBrowserlessPlaywrightEndpoint(): string | null {
+  const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
   const explicitPlaywrightEndpoint = process.env.BROWSERLESS_PLAYWRIGHT_WS_ENDPOINT?.trim();
-  if (explicitPlaywrightEndpoint) return withBrowserlessTimeout(explicitPlaywrightEndpoint);
+  if (explicitPlaywrightEndpoint) return normalizeBrowserlessEndpoint(explicitPlaywrightEndpoint, apiKey);
 
   const genericEndpoint = process.env.BROWSERLESS_WS_ENDPOINT?.trim();
-  if (genericEndpoint) return withBrowserlessTimeout(genericEndpoint);
+  if (genericEndpoint) return normalizeBrowserlessEndpoint(genericEndpoint, apiKey);
 
-  const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
   if (!apiKey) return null;
 
   // Endpoint CDP por defecto de Browserless cloud.
-  return withBrowserlessTimeout(`wss://chrome.browserless.io?token=${apiKey}`);
+  return normalizeBrowserlessEndpoint(`wss://chrome.browserless.io?token=${apiKey}`);
 }
 
 export class TelevendScraper {
