@@ -80,6 +80,44 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function getBrowserlessEndpoint(): string | null {
+  const explicitEndpoint = process.env.BROWSERLESS_WS_ENDPOINT?.trim();
+  if (explicitEndpoint) return explicitEndpoint;
+
+  const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  // Endpoint por defecto de Browserless cloud para Puppeteer.
+  return `wss://chrome.browserless.io?token=${apiKey}`;
+}
+
+async function launchFrekuentBrowser(): Promise<Browser> {
+  const browserlessEndpoint = getBrowserlessEndpoint();
+
+  if (browserlessEndpoint) {
+    console.log('[FREKUENT] 🌐 Usando Browserless (WS endpoint)');
+    return puppeteer.connect({
+      browserWSEndpoint: browserlessEndpoint,
+      protocolTimeout: 120000,
+    });
+  }
+
+  console.log('[FREKUENT] 🧭 Usando Chromium local de Puppeteer');
+  return puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-extensions'
+    ],
+    timeout: 60000,
+    protocolTimeout: 60000
+  });
+}
+
 /**
  * Espera a que la vista de "Puntos de venta" esté realmente hidratada.
  * En algunos casos la URL cambia, pero el DOM aún está vacío durante unos segundos.
@@ -873,16 +911,8 @@ export async function scrapeFrekuentRevenue(
   try {
     console.log(`🚀 Iniciando scraping de recaudación Frekuent (${period})...`);
 
-    // Lanzar navegador
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
-    });
+    // Lanzar navegador (local o Browserless)
+    browser = await launchFrekuentBrowser();
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
@@ -1006,19 +1036,7 @@ export async function scrapeFrekuentRevenueMultiple(
     console.log('[FREKUENT] 🚀 Lanzando navegador Puppeteer...');
     
     try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-software-rasterizer',
-          '--disable-extensions'
-        ],
-        timeout: 60000, // 60 segundos para lanzar el navegador
-        protocolTimeout: 60000
-      });
+      browser = await launchFrekuentBrowser();
       
       console.log('[FREKUENT] ✅ Navegador lanzado correctamente');
     } catch (launchError) {
