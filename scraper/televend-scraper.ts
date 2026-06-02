@@ -50,8 +50,8 @@ function getBrowserlessPlaywrightEndpoint(): string | null {
 
   if (!apiKey) return null;
 
-  // Endpoint CDP por defecto de Browserless cloud.
-  return normalizeBrowserlessEndpoint(`wss://chrome.browserless.io?token=${apiKey}`);
+  // Endpoint CDP por defecto recomendado para Playwright.
+  return normalizeBrowserlessEndpoint(`wss://production-sfo.browserless.io?token=${apiKey}`);
 }
 
 export class TelevendScraper {
