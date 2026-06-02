@@ -50,8 +50,8 @@ function getBrowserlessPlaywrightEndpoint(): string | null {
 
   if (!apiKey) return null;
 
-  // Endpoint CDP por defecto recomendado para Playwright.
-  return normalizeBrowserlessEndpoint(`wss://production-sfo.browserless.io?token=${apiKey}`);
+  // Endpoint WS nativo de Playwright (más estable que CDP para sesiones largas).
+  return normalizeBrowserlessEndpoint(`wss://production-sfo.browserless.io/playwright?token=${apiKey}`);
 }
 
 export class TelevendScraper {
@@ -89,13 +89,23 @@ export class TelevendScraper {
     this.page = existingPages[0] || await this.context.newPage();
   }
 
+  private async connectRemoteBrowser(endpoint: string): Promise<Browser> {
+    try {
+      // Preferimos el protocolo Playwright cuando está disponible.
+      return await chromium.connect(endpoint);
+    } catch (wsError) {
+      console.warn('⚠️ [TELEVEND] No se pudo conectar por Playwright WS, probando CDP fallback...');
+      return chromium.connectOverCDP(endpoint);
+    }
+  }
+
   private async reconnectBrowserlessSession(): Promise<void> {
     if (!this.usingBrowserless || !this.browserlessEndpoint) {
       throw new Error('No hay sesión Browserless para reconectar');
     }
 
     await this.browser?.close().catch(() => {});
-    this.browser = await chromium.connectOverCDP(this.browserlessEndpoint);
+    this.browser = await this.connectRemoteBrowser(this.browserlessEndpoint);
     await this.createContextAndPage();
   }
 
@@ -106,7 +116,7 @@ export class TelevendScraper {
 
     if (this.usingBrowserless) {
       console.log('🌐 [TELEVEND] Conectando a Browserless por CDP...');
-      this.browser = await chromium.connectOverCDP(this.browserlessEndpoint!);
+      this.browser = await this.connectRemoteBrowser(this.browserlessEndpoint!);
     } else {
       console.log('🧭 [TELEVEND] Usando Playwright local (chromium.launch)');
       this.browser = await chromium.launch({
