@@ -48,21 +48,75 @@ export interface FrekuentRevenueResult {
  */
 function parseEuroAmount(text: string): number {
   if (!text || text === '--' || text === '—' || text === '-') return 0;
-  
-  const cleaned = text.replace(/\s+/g, '').replace('€', '');
-  
-  // Detectar formato: si tiene coma, es formato español (punto=miles, coma=decimal)
-  // Si NO tiene coma y tiene punto, es formato inglés (punto=decimal)
-  if (cleaned.includes(',')) {
-    // Formato español: "3.140,00" → quitar puntos, cambiar coma por punto
-    const normalized = cleaned.replace(/\./g, '').replace(',', '.');
-    const amount = parseFloat(normalized);
-    return isNaN(amount) ? 0 : amount;
+
+  const normalizedText = text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const numberMatch = normalizedText.match(/\d{1,3}(?:[\.\s]\d{3})*(?:,\d+)?|\d+(?:[\.,]\d+)?/);
+  if (!numberMatch) return 0;
+
+  let value = numberMatch[0].replace(/\s/g, '');
+
+  // Detectar y normalizar separadores de miles/decimales
+  if (value.includes(',') && value.includes('.')) {
+    if (value.lastIndexOf(',') > value.lastIndexOf('.')) {
+      // Formato europeo: 1.234,56
+      value = value.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Formato inglés: 1,234.56
+      value = value.replace(/,/g, '');
+    }
+  } else if (value.includes(',')) {
+    // Formato europeo sin separador de miles
+    value = value.replace(/\./g, '').replace(',', '.');
   } else {
-    // Formato inglés o sin decimales: "31.40" o "3140"
-    const amount = parseFloat(cleaned);
-    return isNaN(amount) ? 0 : amount;
+    // Formato inglés o entero
+    value = value.replace(/,/g, '');
   }
+
+  const amount = parseFloat(value);
+  return isNaN(amount) ? 0 : amount;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Espera a que la vista de "Puntos de venta" esté realmente hidratada.
+ * En algunos casos la URL cambia, pero el DOM aún está vacío durante unos segundos.
+ */
+async function waitForPointsOfSaleReady(page: Page): Promise<boolean> {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const ready = await page.waitForFunction(() => {
+      const pathOk = window.location.pathname.includes('points-of-sale');
+      const bodyText = (document.body?.textContent || '').replace(/\s+/g, '');
+      const hasTable = document.querySelector('table, .ant-table, [role="table"]') !== null;
+      const hasSalesHeader = Array.from(document.querySelectorAll('th, [role="columnheader"], div, span'))
+        .some(el => (el.textContent || '').trim().toLowerCase() === 'ventas');
+      const hasRows = document.querySelectorAll('tbody tr, .ant-table-row, [role="row"]').length > 2;
+
+      return pathOk && (hasTable || hasSalesHeader || hasRows || bodyText.length > 300);
+    }, { timeout: 12000 }).then(() => true).catch(() => false);
+
+    if (ready) {
+      console.log(`[FREKUENT] ✅ Vista de Puntos de venta hidratada (intento ${attempt})`);
+      return true;
+    }
+
+    console.warn(`[FREKUENT] ⚠️ Vista no hidratada (intento ${attempt}/${maxAttempts})`);
+
+    if (attempt < maxAttempts) {
+      console.log('[FREKUENT] 🔄 Reintentando carga de Puntos de venta...');
+      await page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+        waitUntil: 'networkidle2',
+        timeout: 45000
+      }).catch(() => {});
+      await sleep(2500);
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -94,7 +148,7 @@ async function setDateFilter(
     // Si ya está en el período correcto, salir
     if (currentFilter && currentFilter.includes(targetLower)) {
       console.log(`[FREKUENT] ✅ Ya está en "${targetText}"`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await sleep(1000);
       return;
     }
     
@@ -136,10 +190,9 @@ async function setDateFilter(
         
         for (const btn of buttons) {
           const text = btn.textContent?.trim().toLowerCase() || '';
-          const hasCalendarIcon = btn.querySelector('svg') !== null;
           const hasDateText = text.includes('hoy') || text.includes('este mes') || text.includes('ayer') || text.includes('semana');
           
-          if (hasCalendarIcon && hasDateText) {
+          if (hasDateText) {
             console.log(`[EVAL] ✅ Encontrado botón de fecha: "${text}"`);
             return btn as Element;
           }
@@ -171,10 +224,9 @@ async function setDateFilter(
         
         for (const btn of buttons) {
           const text = btn.textContent?.trim().toLowerCase() || '';
-          const hasCalendarIcon = btn.querySelector('svg') !== null;
           const hasDateText = text.includes('hoy') || text.includes('este mes') || text.includes('ayer') || text.includes('semana');
           
-          if (hasCalendarIcon && hasDateText) {
+          if (hasDateText) {
             console.log(`[EVAL] ✅ Encontrado botón de fecha: "${text}"`);
             (btn as HTMLElement).click();
             return { clicked: true, text };
@@ -207,7 +259,7 @@ async function setDateFilter(
       console.log('[FREKUENT] ✅ Menú desplegable detectado');
     } catch (error) {
       console.warn('[FREKUENT] ⚠️ No se detectó menú con waitForSelector, esperando 3s...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await sleep(3000);
     }
     
     // Verificar que el menú está visible y listar opciones
@@ -411,16 +463,14 @@ async function setDateFilter(
     
     // 6. IMPORTANTE: Verificar que el botón cambió su texto después del click
     console.log('[FREKUENT] ⏳ Verificando que el filtro se aplicó correctamente...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await sleep(2000);
     
     const filterChanged = await page.evaluate((expectedText) => {
       const buttons = Array.from(document.querySelectorAll('button'));
       
       for (const btn of buttons) {
         const text = btn.textContent?.trim().toLowerCase() || '';
-        const hasCalendarIcon = btn.querySelector('svg') !== null;
-        
-        if (hasCalendarIcon && text.includes(expectedText.toLowerCase())) {
+        if (text.includes(expectedText.toLowerCase())) {
           console.log(`[EVAL] ✅ Botón actualizado a: "${text}"`);
           return true;
         }
@@ -446,14 +496,14 @@ async function setDateFilter(
       const apiResponse = await apiResponsePromise;
       if (apiResponse) {
         console.log('[FREKUENT] ✅ Respuesta API recibida');
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Espera para renderizado
+        await sleep(2000); // Espera para renderizado
       } else {
         console.log('[FREKUENT] ⚠️  No se detectó respuesta API, usando timeout');
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Mayor tiempo sin API
+        await sleep(5000); // Mayor tiempo sin API
       }
     } catch (error) {
       console.log('[FREKUENT] ⚠️  Error esperando API, usando timeout');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await sleep(5000);
     }
     
     // 8. Esperar hasta que la tabla realmente cambie (máximo 12s)
@@ -752,16 +802,9 @@ async function extractRevenueData(
       let ventasText = '0 €';
       const ventasCell = cells[4];
       if (ventasCell) {
-        const spans = ventasCell.querySelectorAll('span');
-        if (spans.length >= 2) {
-          // El primer span tiene el número, el segundo tiene el símbolo €
-          const numberText = spans[0].textContent?.trim() || '0';
-          const currencyText = spans[1].textContent?.trim() || '€';
-          ventasText = `${numberText} ${currencyText}`;
-        } else {
-          // Fallback: usar todo el texto de la celda
-          ventasText = ventasCell.textContent?.trim() || '0 €';
-        }
+        const rawCellText = ventasCell.textContent?.replace(/\u00a0/g, ' ').trim() || '';
+        const valueMatch = rawCellText.match(/\d{1,3}(?:[\.\s]\d{3})*(?:,\d+)?|\d+(?:[\.,]\d+)?/);
+        ventasText = valueMatch ? `${valueMatch[0]} €` : '0 €';
       }
       
       // Debug: loguear primeras 3 filas
@@ -855,7 +898,7 @@ export async function scrapeFrekuentRevenue(
       timeout: 30000
     });
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await sleep(2000);
 
     // Buscar campos de login
     const usernameInput = await page.$('input[type="email"], input[name="email"], input[placeholder*="email" i]');
@@ -877,7 +920,7 @@ export async function scrapeFrekuentRevenue(
     }
 
     // Esperar a que se complete el login y redirección a Frekuent
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await sleep(5000);
     console.log('✅ Login exitoso (redirigido desde Orain a Frekuent)');
 
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1179,11 +1222,11 @@ export async function scrapeFrekuentRevenueMultiple(
       console.log('[FREKUENT] 🔄 Intentando navegación directa a Puntos de venta...');
       try {
         await page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
-          waitUntil: 'domcontentloaded',
+          waitUntil: 'networkidle2',
           timeout: 20000
         });
         console.log('[FREKUENT] ✅ Navegación directa realizada');
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await sleep(2500);
       } catch (navError) {
         console.error('[FREKUENT] ❌ Error en navegación directa:', navError);
       }
@@ -1195,7 +1238,12 @@ export async function scrapeFrekuentRevenueMultiple(
       
       // Esperar a que cargue la tabla
       console.log('[FREKUENT] ⏳ Esperando carga de tabla (6s)...');
-      await new Promise(resolve => setTimeout(resolve, 6000));
+      await sleep(3000);
+    }
+
+    const pointsReady = await waitForPointsOfSaleReady(page);
+    if (!pointsReady) {
+      console.warn('[FREKUENT] ⚠️ No se pudo confirmar vista hidratada de Puntos de venta tras reintentos');
     }
     
     // Verificar que llegamos a la página correcta
@@ -1218,7 +1266,7 @@ export async function scrapeFrekuentRevenueMultiple(
     console.log('[FREKUENT] 🔍 Estado de la página:', JSON.stringify(pageDebug, null, 2));
     
     if (!pageDebug.hasTable) {
-      console.error('[FREKUENT] ⚠️ WARNING: No se encontró tabla en la página');
+      console.error('[FREKUENT] ⚠️ WARNING: No se encontró tabla HTML estándar en la página');
     }
     
     console.log('[FREKUENT] ✅ En Puntos de Venta');

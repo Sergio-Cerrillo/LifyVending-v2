@@ -7,7 +7,8 @@
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
-    "scrape": "tsx scraper/index.ts"
+    "scrape": "tsx scraper/index.ts",
+    "scrape:revenue": "tsx scraper/revenue.ts"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
