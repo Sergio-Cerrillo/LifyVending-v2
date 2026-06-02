@@ -59,6 +59,8 @@ export class TelevendScraper {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private config: TelevendConfig;
+  private browserlessEndpoint: string | null = null;
+  private usingBrowserless = false;
 
   constructor(config: TelevendConfig) {
     this.config = config;
@@ -87,14 +89,24 @@ export class TelevendScraper {
     this.page = existingPages[0] || await this.context.newPage();
   }
 
+  private async reconnectBrowserlessSession(): Promise<void> {
+    if (!this.usingBrowserless || !this.browserlessEndpoint) {
+      throw new Error('No hay sesión Browserless para reconectar');
+    }
+
+    await this.browser?.close().catch(() => {});
+    this.browser = await chromium.connectOverCDP(this.browserlessEndpoint);
+    await this.createContextAndPage();
+  }
+
   async initialize() {
     console.log('🚀 [TELEVEND] Inicializando navegador...');
-    const browserlessEndpoint = getBrowserlessPlaywrightEndpoint();
-    const usingBrowserless = Boolean(browserlessEndpoint);
+    this.browserlessEndpoint = getBrowserlessPlaywrightEndpoint();
+    this.usingBrowserless = Boolean(this.browserlessEndpoint);
 
-    if (usingBrowserless) {
+    if (this.usingBrowserless) {
       console.log('🌐 [TELEVEND] Conectando a Browserless por CDP...');
-      this.browser = await chromium.connectOverCDP(browserlessEndpoint!);
+      this.browser = await chromium.connectOverCDP(this.browserlessEndpoint!);
     } else {
       console.log('🧭 [TELEVEND] Usando Playwright local (chromium.launch)');
       this.browser = await chromium.launch({
@@ -120,14 +132,12 @@ export class TelevendScraper {
     try {
       await this.createContextAndPage();
     } catch (error) {
-      if (!usingBrowserless || !isClosedPlaywrightResourceError(error)) {
+      if (!this.usingBrowserless || !isClosedPlaywrightResourceError(error)) {
         throw error;
       }
 
       console.warn('⚠️ [TELEVEND] Contexto remoto cerrado al inicializar. Reintentando conexión Browserless una vez...');
-      await this.browser?.close().catch(() => {});
-      this.browser = await chromium.connectOverCDP(browserlessEndpoint!);
-      await this.createContextAndPage();
+      await this.reconnectBrowserlessSession();
     }
 
     console.log('✅ [TELEVEND] Navegador inicializado');
@@ -150,10 +160,22 @@ export class TelevendScraper {
     
     // Navegar siempre a la página de login (modo incógnito)  
     console.log('📍 [TELEVEND] Navegando a página de login...');
-    await this.page.goto(
-      'https://auth.televendcloud.com/auth/realms/televend/protocol/openid-connect/auth?tenant_id=5&redirect_uri=https%3A%2F%2Ftelevendcloud.com%2Flogin_complete%3Fnext%3D%2Fen%2F&response_type=code&client_id=televendcloud&scope=openid',
-      { waitUntil: 'domcontentloaded', timeout: 20000 }
-    );
+    const loginUrl = 'https://auth.televendcloud.com/auth/realms/televend/protocol/openid-connect/auth?tenant_id=5&redirect_uri=https%3A%2F%2Ftelevendcloud.com%2Flogin_complete%3Fnext%3D%2Fen%2F&response_type=code&client_id=televendcloud&scope=openid';
+
+    try {
+      await this.page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    } catch (error) {
+      if (!isClosedPlaywrightResourceError(error) || !this.usingBrowserless) {
+        throw error;
+      }
+
+      console.warn('⚠️ [TELEVEND] Página/contexto cerrado en login goto. Reintentando con nueva sesión Browserless...');
+      await this.reconnectBrowserlessSession();
+      if (!this.page) {
+        throw new Error('No se pudo recrear la página tras reconectar Browserless');
+      }
+      await this.page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    }
     await this.page.waitForTimeout(2000);
 
     // Esperar campos de login
