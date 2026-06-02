@@ -9,18 +9,24 @@ interface TelevendConfig {
   headless: boolean;
 }
 
+function withBrowserlessTimeout(endpoint: string): string {
+  if (/([?&])timeout=/.test(endpoint)) return endpoint;
+  const separator = endpoint.includes('?') ? '&' : '?';
+  return `${endpoint}${separator}timeout=900000`;
+}
+
 function getBrowserlessPlaywrightEndpoint(): string | null {
   const explicitPlaywrightEndpoint = process.env.BROWSERLESS_PLAYWRIGHT_WS_ENDPOINT?.trim();
-  if (explicitPlaywrightEndpoint) return explicitPlaywrightEndpoint;
+  if (explicitPlaywrightEndpoint) return withBrowserlessTimeout(explicitPlaywrightEndpoint);
 
   const genericEndpoint = process.env.BROWSERLESS_WS_ENDPOINT?.trim();
-  if (genericEndpoint) return genericEndpoint;
+  if (genericEndpoint) return withBrowserlessTimeout(genericEndpoint);
 
   const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
   if (!apiKey) return null;
 
   // Endpoint CDP por defecto de Browserless cloud.
-  return `wss://chrome.browserless.io?token=${apiKey}`;
+  return withBrowserlessTimeout(`wss://chrome.browserless.io?token=${apiKey}`);
 }
 
 export class TelevendScraper {

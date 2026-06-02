@@ -80,15 +80,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function withBrowserlessTimeout(endpoint: string): string {
+  if (/([?&])timeout=/.test(endpoint)) return endpoint;
+  const separator = endpoint.includes('?') ? '&' : '?';
+  return `${endpoint}${separator}timeout=900000`;
+}
+
 function getBrowserlessEndpoint(): string | null {
   const explicitEndpoint = process.env.BROWSERLESS_WS_ENDPOINT?.trim();
-  if (explicitEndpoint) return explicitEndpoint;
+  if (explicitEndpoint) return withBrowserlessTimeout(explicitEndpoint);
 
   const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
   if (!apiKey) return null;
 
   // Endpoint por defecto de Browserless cloud para Puppeteer.
-  return `wss://chrome.browserless.io?token=${apiKey}`;
+  return withBrowserlessTimeout(`wss://chrome.browserless.io?token=${apiKey}`);
 }
 
 async function launchFrekuentBrowser(): Promise<Browser> {

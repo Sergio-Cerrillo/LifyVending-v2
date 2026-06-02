@@ -66,6 +66,18 @@ function isTransientPuppeteerError(error: unknown): boolean {
   );
 }
 
+function isTransientPlaywrightError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('target page, context or browser has been closed')
+    || normalized.includes('browser has been closed')
+    || normalized.includes('context or browser has been closed')
+    || normalized.includes('websocket')
+  );
+}
+
 function requireFrekuentCredentials() {
   const username = process.env.FREKUENT_USERNAME || process.env.ORAIN_USERNAME;
   const password = process.env.FREKUENT_PASSWORD || process.env.ORAIN_PASSWORD;
@@ -263,40 +275,53 @@ async function runFrekuentBoth(): Promise<{ daily: ActionSummary; monthly: Actio
 }
 
 async function runTelevendBoth(): Promise<ActionSummary> {
-  const credentials = requireTelevendCredentials();
-  const scraper = new TelevendScraper({
-    username: credentials.username,
-    password: credentials.password,
-    headless: true,
-  });
+  const runOnce = async (): Promise<ActionSummary> => {
+    const credentials = requireTelevendCredentials();
+    const scraper = new TelevendScraper({
+      username: credentials.username,
+      password: credentials.password,
+      headless: true,
+    });
+
+    try {
+      const results = await scraper.scrapeAllMachinesRevenue();
+
+      const items: RevenueItem[] = results.flatMap((item) => ([
+        {
+          machineName: item.machineName,
+          location: item.location || 'Sin ubicación',
+          source: 'televend' as const,
+          period: 'daily' as const,
+          totalRevenue: item.daily,
+          card: 0,
+          cash: 0,
+        },
+        {
+          machineName: item.machineName,
+          location: item.location || 'Sin ubicación',
+          source: 'televend' as const,
+          period: 'monthly' as const,
+          totalRevenue: item.monthly,
+          card: 0,
+          cash: 0,
+        },
+      ]));
+
+      return applyRevenueItems(items);
+    } finally {
+      await scraper.close().catch(() => {});
+    }
+  };
 
   try {
-    const results = await scraper.scrapeAllMachinesRevenue();
+    return await runOnce();
+  } catch (error) {
+    if (!isTransientPlaywrightError(error)) {
+      throw error;
+    }
 
-    const items: RevenueItem[] = results.flatMap((item) => ([
-      {
-        machineName: item.machineName,
-        location: item.location || 'Sin ubicación',
-        source: 'televend' as const,
-        period: 'daily' as const,
-        totalRevenue: item.daily,
-        card: 0,
-        cash: 0,
-      },
-      {
-        machineName: item.machineName,
-        location: item.location || 'Sin ubicación',
-        source: 'televend' as const,
-        period: 'monthly' as const,
-        totalRevenue: item.monthly,
-        card: 0,
-        cash: 0,
-      },
-    ]));
-
-    return applyRevenueItems(items);
-  } finally {
-    await scraper.close().catch(() => {});
+    console.warn('[REVENUE RUNNER] Error transitorio de Playwright detectado en Televend. Reintentando una vez...');
+    return runOnce();
   }
 }
 
