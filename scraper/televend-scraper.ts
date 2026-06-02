@@ -29,6 +29,17 @@ function normalizeBrowserlessEndpoint(endpoint: string, apiKey?: string): string
   return url.toString();
 }
 
+function isClosedPlaywrightResourceError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('target page, context or browser has been closed')
+    || normalized.includes('browser has been closed')
+    || normalized.includes('context or browser has been closed')
+  );
+}
+
 function getBrowserlessPlaywrightEndpoint(): string | null {
   const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
   const explicitPlaywrightEndpoint = process.env.BROWSERLESS_PLAYWRIGHT_WS_ENDPOINT?.trim();
@@ -53,13 +64,37 @@ export class TelevendScraper {
     this.config = config;
   }
 
+  private async createContextAndPage(): Promise<void> {
+    if (!this.browser) {
+      throw new Error('Browser not initialized');
+    }
+
+    const existingContexts = this.browser.contexts();
+    this.context = existingContexts[0] || await this.browser.newContext({
+      javaScriptEnabled: true,
+      // No se carga storageState para simular navegación privada
+    });
+
+    // Set default timeout
+    this.context.setDefaultTimeout(30000);
+
+    // Bloquear recursos innecesarios
+    await this.context.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2}', route => route.abort()).catch(() => {
+      console.warn('⚠️ [TELEVEND] No se pudo registrar bloqueo de recursos en el contexto');
+    });
+
+    const existingPages = this.context.pages();
+    this.page = existingPages[0] || await this.context.newPage();
+  }
+
   async initialize() {
     console.log('🚀 [TELEVEND] Inicializando navegador...');
     const browserlessEndpoint = getBrowserlessPlaywrightEndpoint();
+    const usingBrowserless = Boolean(browserlessEndpoint);
 
-    if (browserlessEndpoint) {
+    if (usingBrowserless) {
       console.log('🌐 [TELEVEND] Conectando a Browserless por CDP...');
-      this.browser = await chromium.connectOverCDP(browserlessEndpoint);
+      this.browser = await chromium.connectOverCDP(browserlessEndpoint!);
     } else {
       console.log('🧭 [TELEVEND] Usando Playwright local (chromium.launch)');
       this.browser = await chromium.launch({
@@ -82,22 +117,19 @@ export class TelevendScraper {
     // MODO INCÓGNITO: No cargar sesión guardada para forzar login fresco
     console.log('🕵️ [TELEVEND] Modo incógnito: forzando login fresco sin sesión guardada');
 
-    // Con CDP remoto puede existir un contexto por defecto reutilizable.
-    const existingContexts = this.browser.contexts();
-    this.context = existingContexts[0] || await this.browser.newContext({
-      javaScriptEnabled: true,
-      // No se carga storageState para simular navegación privada
-    });
-    
-    // Set default timeout
-    this.context.setDefaultTimeout(30000);
-    
-    // Bloquear recursos innecesarios
-    await this.context.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2}', route => route.abort()).catch(() => {
-      console.warn('⚠️ [TELEVEND] No se pudo registrar bloqueo de recursos en el contexto');
-    });
-    
-    this.page = await this.context.newPage();
+    try {
+      await this.createContextAndPage();
+    } catch (error) {
+      if (!usingBrowserless || !isClosedPlaywrightResourceError(error)) {
+        throw error;
+      }
+
+      console.warn('⚠️ [TELEVEND] Contexto remoto cerrado al inicializar. Reintentando conexión Browserless una vez...');
+      await this.browser?.close().catch(() => {});
+      this.browser = await chromium.connectOverCDP(browserlessEndpoint!);
+      await this.createContextAndPage();
+    }
+
     console.log('✅ [TELEVEND] Navegador inicializado');
   }
 
