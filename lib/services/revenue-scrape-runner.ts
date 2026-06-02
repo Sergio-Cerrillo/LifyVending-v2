@@ -55,6 +55,17 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function isTransientPuppeteerError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('detached frame')
+    || normalized.includes('execution context was destroyed')
+    || normalized.includes('cannot find context with specified id')
+  );
+}
+
 function requireFrekuentCredentials() {
   const username = process.env.FREKUENT_USERNAME || process.env.ORAIN_USERNAME;
   const password = process.env.FREKUENT_PASSWORD || process.env.ORAIN_PASSWORD;
@@ -208,7 +219,18 @@ async function applyRevenueItems(items: RevenueItem[]): Promise<ActionSummary> {
 
 async function runFrekuentBoth(): Promise<{ daily: ActionSummary; monthly: ActionSummary }> {
   const credentials = requireFrekuentCredentials();
-  const result = await scrapeFrekuentRevenueMultiple(credentials);
+  let result;
+
+  try {
+    result = await scrapeFrekuentRevenueMultiple(credentials);
+  } catch (error) {
+    if (!isTransientPuppeteerError(error)) {
+      throw error;
+    }
+
+    console.warn('[REVENUE RUNNER] Error transitorio de Puppeteer detectado en Frekuent. Reintentando una vez...');
+    result = await scrapeFrekuentRevenueMultiple(credentials);
+  }
 
   if (!result.daily.success || !result.monthly.success) {
     throw new Error(result.daily.error || result.monthly.error || 'Scraping Frekuent falló');

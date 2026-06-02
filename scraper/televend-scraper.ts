@@ -9,6 +9,20 @@ interface TelevendConfig {
   headless: boolean;
 }
 
+function getBrowserlessPlaywrightEndpoint(): string | null {
+  const explicitPlaywrightEndpoint = process.env.BROWSERLESS_PLAYWRIGHT_WS_ENDPOINT?.trim();
+  if (explicitPlaywrightEndpoint) return explicitPlaywrightEndpoint;
+
+  const genericEndpoint = process.env.BROWSERLESS_WS_ENDPOINT?.trim();
+  if (genericEndpoint) return genericEndpoint;
+
+  const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  // Endpoint CDP por defecto de Browserless cloud.
+  return `wss://chrome.browserless.io?token=${apiKey}`;
+}
+
 export class TelevendScraper {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
@@ -21,27 +35,36 @@ export class TelevendScraper {
 
   async initialize() {
     console.log('🚀 [TELEVEND] Inicializando navegador...');
-    
-    this.browser = await chromium.launch({
-      headless: this.config.headless,
-      args: [
-        '--disable-images',
-        '--disable-fonts',
-        '--disable-extensions',
-        '--disable-plugins',
-        '--disable-background-networking',
-        '--disable-default-apps',
-        '--disable-sync',
-        '--disable-translate',
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
-    });
+    const browserlessEndpoint = getBrowserlessPlaywrightEndpoint();
+
+    if (browserlessEndpoint) {
+      console.log('🌐 [TELEVEND] Conectando a Browserless por CDP...');
+      this.browser = await chromium.connectOverCDP(browserlessEndpoint);
+    } else {
+      console.log('🧭 [TELEVEND] Usando Playwright local (chromium.launch)');
+      this.browser = await chromium.launch({
+        headless: this.config.headless,
+        args: [
+          '--disable-images',
+          '--disable-fonts',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--disable-translate',
+          '--no-first-run',
+          '--no-default-browser-check',
+        ],
+      });
+    }
 
     // MODO INCÓGNITO: No cargar sesión guardada para forzar login fresco
     console.log('🕵️ [TELEVEND] Modo incógnito: forzando login fresco sin sesión guardada');
-    
-    this.context = await this.browser.newContext({
+
+    // Con CDP remoto puede existir un contexto por defecto reutilizable.
+    const existingContexts = this.browser.contexts();
+    this.context = existingContexts[0] || await this.browser.newContext({
       javaScriptEnabled: true,
       // No se carga storageState para simular navegación privada
     });
@@ -50,7 +73,9 @@ export class TelevendScraper {
     this.context.setDefaultTimeout(30000);
     
     // Bloquear recursos innecesarios
-    await this.context.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2}', route => route.abort());
+    await this.context.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2}', route => route.abort()).catch(() => {
+      console.warn('⚠️ [TELEVEND] No se pudo registrar bloqueo de recursos en el contexto');
+    });
     
     this.page = await this.context.newPage();
     console.log('✅ [TELEVEND] Navegador inicializado');
