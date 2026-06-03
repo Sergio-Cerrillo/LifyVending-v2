@@ -80,6 +80,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function shouldUseBrowserless(): boolean {
+  const explicit = process.env.SCRAPER_USE_BROWSERLESS?.trim().toLowerCase();
+  if (explicit === 'true') return true;
+  if (explicit === 'false') return false;
+
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+}
+
 function normalizeBrowserlessEndpoint(endpoint: string, apiKey?: string): string {
   const url = new URL(endpoint);
   const host = url.hostname.toLowerCase();
@@ -101,6 +109,8 @@ function normalizeBrowserlessEndpoint(endpoint: string, apiKey?: string): string
 }
 
 function getBrowserlessEndpoint(): string | null {
+  if (!shouldUseBrowserless()) return null;
+
   const explicitEndpoint = process.env.BROWSERLESS_WS_ENDPOINT?.trim();
   const apiKey = process.env.BROWSERLESS_API_KEY?.trim();
 

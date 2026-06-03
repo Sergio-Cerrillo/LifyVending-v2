@@ -105,6 +105,19 @@ export async function GET(request: NextRequest) {
     const machines = (assignments || []).map(a => (a as any).machines).filter(Boolean);
     console.log(`✅ Máquinas asignadas: ${machines.length}`, machines.map(m => m.name));
 
+    // Obtener histórico mensual manual creado por admin
+    const { data: historicalRows, error: historicalError } = await supabaseAdmin
+      .from('client_revenue_history_adjustments' as any)
+      .select('id, year, month, amount_total, notes, created_at, updated_at, machine_id, machines(name, location)')
+      .eq('client_id', user.id)
+      .order('year', { ascending: false })
+      .order('month', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (historicalError) {
+      console.error('❌ Error obteniendo histórico mensual:', historicalError);
+    }
+
     // Calcular la fecha de última actualización más reciente de las máquinas del cliente
     const allUpdateDates = machines
       .flatMap((m: any) => [m.daily_updated_at, m.monthly_updated_at, m.last_scraped])
@@ -129,6 +142,18 @@ export async function GET(request: NextRequest) {
         paymentPercent: settings?.commission_payment_percent || 0
       },
       machines,
+      historical: (historicalRows || []).map((row: any) => ({
+        id: row.id,
+        machineId: row.machine_id,
+        machineName: row.machines?.name || 'Máquina',
+        machineLocation: row.machines?.location || null,
+        year: row.year,
+        month: row.month,
+        amountTotal: Number(row.amount_total || 0),
+        notes: row.notes || null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
       revenue: {
         daily: revenueByPeriod.daily,
         weekly: revenueByPeriod.weekly,

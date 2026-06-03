@@ -415,14 +415,29 @@ async function main() {
   if (onlyTelevend) console.log(`   • Solo Televend`);
 
   try {
-    // Ejecutar scraping
-    const frekuentResult = onlyTelevend ? 
-      { daily: { data: [], totalMachines: 0 }, monthly: { data: [], totalMachines: 0 } } :
-      await scrapeFrekuent(useMock);
+    // Ejecutar scraping de Frekuent primero
+    const frekuentResult = onlyTelevend
+      ? { daily: { data: [], totalMachines: 0 }, monthly: { data: [], totalMachines: 0 } }
+      : await scrapeFrekuent(useMock);
 
-    const televendResult = onlyFrekuent ?
-      { daily: { data: [], totalMachines: 0 }, monthly: { data: [], totalMachines: 0 } } :
-      await scrapeTelvend(useMock);
+    // Guardado temprano de Frekuent para no perder actualización si Televend falla/cuélga
+    if (saveToDb && !onlyTelevend) {
+      const frekuentOnlyMap = consolidateMachineData(frekuentResult, {
+        daily: { data: [], totalMachines: 0 },
+        monthly: { data: [], totalMachines: 0 },
+      });
+
+      console.log('\n💾 Guardado temprano de Frekuent...');
+      const earlyResult = await saveToSupabase(frekuentOnlyMap);
+      if (earlyResult.errors > 0) {
+        console.log(`⚠️  Guardado temprano con errores (${earlyResult.errors})`);
+      }
+    }
+
+    // Ejecutar scraping de Televend después
+    const televendResult = onlyFrekuent
+      ? { daily: { data: [], totalMachines: 0 }, monthly: { data: [], totalMachines: 0 } }
+      : await scrapeTelvend(useMock);
 
     // Consolidar datos
     console.log('\n📊 Consolidando datos...');
@@ -447,12 +462,14 @@ async function main() {
     console.log(`   • Total mensual: ${totalMonthly.toFixed(2)} €`);
 
     // Guardar en Supabase
-    if (saveToDb) {
+    if (saveToDb && !onlyFrekuent) {
       const dbResult = await saveToSupabase(machines);
       
       if (dbResult.errors > 0) {
         console.log(`\n⚠️  Se completó con algunos errores (${dbResult.errors})`);
       }
+    } else if (saveToDb && onlyFrekuent) {
+      console.log('\n✅ Frekuent ya guardado en BD (guardado temprano)');
     } else {
       console.log('\n⏭️  Omitiendo guardado en base de datos (--no-db)');
     }

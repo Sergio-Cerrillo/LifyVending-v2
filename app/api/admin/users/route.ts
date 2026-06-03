@@ -47,15 +47,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, displayName, companyName, commissionHidePercent, commissionPaymentPercent } = body;
 
+    const parsedHide = Number(commissionHidePercent);
+    const parsedPayment = Number(commissionPaymentPercent);
+
+    const normalizedHidePercent = Number.isFinite(parsedHide) ? parsedHide : 30;
+    const normalizedPaymentPercent = Number.isFinite(parsedPayment) ? parsedPayment : 15;
+
     console.log('[CREATE-CLIENT] Datos recibidos RAW:', body);
     console.log('[CREATE-CLIENT] Datos recibidos:', { 
       email, 
       displayName, 
       companyName, 
-      commissionHidePercent: commissionHidePercent,
-      commissionHidePercent_type: typeof commissionHidePercent,
-      commissionPaymentPercent: commissionPaymentPercent,
-      commissionPaymentPercent_type: typeof commissionPaymentPercent
+      commissionHidePercent: normalizedHidePercent,
+      commissionHidePercent_type: typeof normalizedHidePercent,
+      commissionPaymentPercent: normalizedPaymentPercent,
+      commissionPaymentPercent_type: typeof normalizedPaymentPercent
     });
 
     // Validaciones
@@ -66,22 +72,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (commissionHidePercent !== undefined) {
-      if (commissionHidePercent < 0 || commissionHidePercent > 100) {
-        return NextResponse.json(
-          { error: 'El porcentaje oculto debe estar entre 0 y 100' },
-          { status: 400 }
-        );
-      }
+    if (normalizedHidePercent < 0 || normalizedHidePercent > 100) {
+      return NextResponse.json(
+        { error: 'El porcentaje oculto debe estar entre 0 y 100' },
+        { status: 400 }
+      );
     }
 
-    if (commissionPaymentPercent !== undefined) {
-      if (commissionPaymentPercent < 0 || commissionPaymentPercent > 100) {
-        return NextResponse.json(
-          { error: 'El porcentaje de comisión debe estar entre 0 y 100' },
-          { status: 400 }
-        );
-      }
+    if (normalizedPaymentPercent < 0 || normalizedPaymentPercent > 100) {
+      return NextResponse.json(
+        { error: 'El porcentaje de comisión debe estar entre 0 y 100' },
+        { status: 400 }
+      );
     }
 
     // Crear cliente
@@ -90,8 +92,8 @@ export async function POST(request: NextRequest) {
       password,
       displayName,
       companyName,
-      commissionHidePercent,
-      commissionPaymentPercent
+      commissionHidePercent: normalizedHidePercent,
+      commissionPaymentPercent: normalizedPaymentPercent
     });
 
     return NextResponse.json({

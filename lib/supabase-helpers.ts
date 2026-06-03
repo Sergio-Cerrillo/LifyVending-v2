@@ -177,8 +177,11 @@ export async function createNewClient(params: {
   }
 
   // Crear settings con valores por defecto si no se proporcionan
-  const hidePercent = params.commissionHidePercent !== undefined ? params.commissionHidePercent : 0;
-  const paymentPercent = params.commissionPaymentPercent !== undefined ? params.commissionPaymentPercent : 0;
+  const parsedHide = Number(params.commissionHidePercent);
+  const parsedPayment = Number(params.commissionPaymentPercent);
+
+  const hidePercent = Number.isFinite(parsedHide) ? parsedHide : 30;
+  const paymentPercent = Number.isFinite(parsedPayment) ? parsedPayment : 15;
 
   console.log('[CREATE-CLIENT] Creando settings con % Oculto:', hidePercent, '% Comisión:', paymentPercent);
 

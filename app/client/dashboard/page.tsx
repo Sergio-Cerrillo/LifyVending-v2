@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { RefreshCw, TrendingUp, DollarSign, Calendar, MapPin, Clock, LogOut, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/lib/supabase-helpers';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 
@@ -36,6 +37,18 @@ interface DashboardData {
     id: string;
     name: string;
     location: string | null;
+  }>;
+  historical: Array<{
+    id: string;
+    machineId: string;
+    machineName: string;
+    machineLocation: string | null;
+    year: number;
+    month: number;
+    amountTotal: number;
+    notes: string | null;
+    createdAt: string;
+    updatedAt: string;
   }>;
   revenue: {
     daily: {
@@ -127,6 +140,28 @@ export default function ClientDashboardPage() {
       minute: '2-digit'
     }).format(date);
   }
+
+  function formatMonthLabel(year: number, month: number): string {
+    const date = new Date(year, month - 1, 1);
+    return new Intl.DateTimeFormat('es-ES', {
+      month: 'long',
+      year: 'numeric',
+    }).format(date);
+  }
+
+  const historicalByMonth = (data?.historical || []).reduce((acc, entry) => {
+    const monthKey = `${entry.year}-${String(entry.month).padStart(2, '0')}`;
+    if (!acc[monthKey]) {
+      acc[monthKey] = [];
+    }
+    acc[monthKey].push(entry);
+    return acc;
+  }, {} as Record<string, DashboardData['historical']>);
+
+  const historicalMonthKeys = Object.keys(historicalByMonth).sort((a, b) => b.localeCompare(a));
+
+  const paymentPercent = Number(data?.commission?.paymentPercent ?? 0);
+  const paymentRate = paymentPercent > 1 ? paymentPercent / 100 : paymentPercent;
 
   if (loading) {
     return <LoadingScreen message="Cargando dashboard..." />;
@@ -231,104 +266,189 @@ export default function ClientDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Cards de recaudación */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Daily */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Recaudación Diaria (Neta)
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(data.revenue.daily.total)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Hoy
-            </p>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="this-month" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="this-month">Este mes</TabsTrigger>
+          <TabsTrigger value="historical">Histórico</TabsTrigger>
+        </TabsList>
 
-        {/* Monthly */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Recaudación Mensual (Neta)
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(data.revenue.monthly.total)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Este mes
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="this-month" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Recaudación Diaria (Neta)
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(data.revenue.daily.total)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Hoy
+                </p>
+              </CardContent>
+            </Card>
 
-      {/* Lista de máquinas con recaudación individual */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Mis Máquinas ({data.machines.length})</CardTitle>
-          <CardDescription>
-            Recaudación individual por máquina (valores netos)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {data.machines.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              No tiene máquinas asignadas
-            </p>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Recaudación Mensual (Neta)
+                </CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(data.revenue.monthly.total)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Este mes
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Mis Máquinas ({data.machines.length})</CardTitle>
+              <CardDescription>
+                Recaudación individual por máquina (valores netos)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {data.machines.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No tiene máquinas asignadas
+                </p>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {data.machines.map((machine) => {
+                    const dailyData = data.revenue.daily.machines.find(m => m.id === machine.id);
+                    const monthlyData = data.revenue.monthly.machines.find(m => m.id === machine.id);
+
+                    return (
+                      <div
+                        key={machine.id}
+                        className="p-4 border border-zinc-200 rounded-lg hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors group"
+                      >
+                        <div className="flex flex-col gap-3">
+                          <div>
+                            <h3 className="font-medium leading-snug wrap-break-word">{machine.name}</h3>
+                            {machine.location && (
+                              <p className="text-xs text-muted-foreground group-hover:text-zinc-300 flex items-center gap-1 mt-1">
+                                <MapPin className="w-3 h-3" />
+                                {machine.location}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="pt-2 border-t border-zinc-200 group-hover:border-zinc-700">
+                            <p className="text-xs text-muted-foreground group-hover:text-zinc-300">Diario</p>
+                            <p className="text-base font-bold">
+                              {dailyData ? formatCurrency(dailyData.amountNet) : '-'}
+                            </p>
+                          </div>
+
+                          <div className="pt-2 border-t border-zinc-200 group-hover:border-zinc-700">
+                            <p className="text-xs text-muted-foreground group-hover:text-zinc-300">Mensual</p>
+                            <p className="text-lg font-bold">
+                              {monthlyData ? formatCurrency(monthlyData.amountNet) : '-'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="historical" className="space-y-4">
+          {data.historical.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No hay meses históricos cargados todavía.
+              </CardContent>
+            </Card>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {data.machines.map((machine) => {
-                // Buscar datos de recaudación para esta máquina
-                const dailyData = data.revenue.daily.machines.find(m => m.id === machine.id);
-                const monthlyData = data.revenue.monthly.machines.find(m => m.id === machine.id);
+            <Tabs defaultValue={historicalMonthKeys[0]} className="space-y-4">
+              <TabsList className="flex flex-wrap h-auto">
+                {historicalMonthKeys.map((monthKey) => {
+                  const [year, month] = monthKey.split('-').map(Number);
+                  return (
+                    <TabsTrigger key={monthKey} value={monthKey} className="capitalize">
+                      {formatMonthLabel(year, month)}
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+
+              {historicalMonthKeys.map((monthKey) => {
+                const [year, month] = monthKey.split('-').map(Number);
+                const monthEntries = historicalByMonth[monthKey] || [];
+                const monthTotal = monthEntries.reduce((sum, entry) => sum + Number(entry.amountTotal || 0), 0);
+                const monthCommission = Math.round((monthTotal * paymentRate) * 100) / 100;
 
                 return (
-                  <div
-                    key={machine.id}
-                    className="p-4 border border-zinc-200 rounded-lg hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors group"
-                  >
-                    <div className="flex flex-col gap-3">
-                      <div>
-                        <h3 className="font-medium leading-snug wrap-break-word">{machine.name}</h3>
-                        {machine.location && (
-                          <p className="text-xs text-muted-foreground group-hover:text-zinc-300 flex items-center gap-1 mt-1">
-                            <MapPin className="w-3 h-3" />
-                            {machine.location}
+                  <TabsContent key={monthKey} value={monthKey} className="space-y-4">
+                    <Card className="border-zinc-200">
+                      <CardHeader>
+                        <CardTitle className="capitalize">
+                          Total {formatMonthLabel(year, month)}
+                        </CardTitle>
+                        <CardDescription>
+                          Suma de recaudaciones del mes
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap items-baseline gap-3">
+                          <p className="text-3xl font-bold">{formatCurrency(monthTotal)}</p>
+                          <p className="text-sm text-zinc-600">
+                            Comisión {formatCurrency(monthCommission)}
                           </p>
-                        )}
-                      </div>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                      {/* Recaudación Diaria */}
-                      <div className="pt-2 border-t border-zinc-200 group-hover:border-zinc-700">
-                        <p className="text-xs text-muted-foreground group-hover:text-zinc-300">Diario</p>
-                        <p className="text-base font-bold">
-                          {dailyData ? formatCurrency(dailyData.amountNet) : '-'}
-                        </p>
-                      </div>
-
-                      {/* Recaudación Mensual */}
-                      <div className="pt-2 border-t border-zinc-200 group-hover:border-zinc-700">
-                        <p className="text-xs text-muted-foreground group-hover:text-zinc-300">Mensual</p>
-                        <p className="text-lg font-bold">
-                          {monthlyData ? formatCurrency(monthlyData.amountNet) : '-'}
-                        </p>
-                      </div>
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      {monthEntries.map((entry) => (
+                        <Card key={entry.id} className="border-zinc-200">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">
+                              {entry.machineName}
+                            </CardTitle>
+                            <CardDescription>
+                              {entry.machineLocation || 'Sin ubicación'}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-2">
+                            <div className="space-y-1">
+                              <p className="text-2xl font-bold">
+                                {formatCurrency(entry.amountTotal)}
+                              </p>
+                              <p className="text-sm text-zinc-600">
+                                Comisión {formatCurrency(Number(entry.amountTotal || 0) * paymentRate)}
+                              </p>
+                            </div>
+                            {entry.notes && (
+                              <p className="text-xs text-muted-foreground">
+                                {entry.notes}
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
-                  </div>
+                  </TabsContent>
                 );
               })}
-            </div>
+            </Tabs>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

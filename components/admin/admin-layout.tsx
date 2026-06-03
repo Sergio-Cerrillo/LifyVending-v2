@@ -30,6 +30,7 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   roles?: string[];
+  external?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -59,9 +60,10 @@ const navItems: NavItem[] = [
   },
   {
     title: 'Máquinas',
-    href: '/admin/maquinas',
+    href: 'https://frekuent.io/app/frekuent-spots/points-of-sale',
     icon: <Package className="h-5 w-5" />,
     roles: ['admin'],
+    external: true,
   },
   {
     title: 'Stock',
@@ -105,7 +107,12 @@ function Sidebar({ className }: { className?: string }) {
           </div>
           <div className="space-y-1">
             {filteredNavItems.map((item) => (
-              <Link key={item.href} href={item.href}>
+              <Link
+                key={item.href}
+                href={item.href}
+                target={item.external ? '_blank' : undefined}
+                rel={item.external ? 'noopener noreferrer' : undefined}
+              >
                 <Button
                   variant="ghost"
                   className={cn(
