@@ -63,6 +63,12 @@ function isTransientPuppeteerError(error: unknown): boolean {
     normalized.includes('detached frame')
     || normalized.includes('execution context was destroyed')
     || normalized.includes('cannot find context with specified id')
+    || normalized.includes('target closed')
+    || normalized.includes('target.createtarget')
+    || normalized.includes('protocol error (target.createtarget)')
+    || normalized.includes('session closed')
+    || normalized.includes('connection closed')
+    || normalized.includes('websocket')
   );
 }
 
@@ -231,17 +237,27 @@ async function applyRevenueItems(items: RevenueItem[]): Promise<ActionSummary> {
 
 async function runFrekuentBoth(): Promise<{ daily: ActionSummary; monthly: ActionSummary }> {
   const credentials = requireFrekuentCredentials();
+  const runOnce = () => scrapeFrekuentRevenueMultiple(credentials);
   let result;
 
   try {
-    result = await scrapeFrekuentRevenueMultiple(credentials);
+    result = await runOnce();
   } catch (error) {
     if (!isTransientPuppeteerError(error)) {
       throw error;
     }
 
     console.warn('[REVENUE RUNNER] Error transitorio de Puppeteer detectado en Frekuent. Reintentando una vez...');
-    result = await scrapeFrekuentRevenueMultiple(credentials);
+    result = await runOnce();
+  }
+
+  if (!result.daily.success || !result.monthly.success) {
+    const failureMessage = result.daily.error || result.monthly.error || 'Scraping Frekuent falló';
+
+    if (isTransientPuppeteerError(failureMessage)) {
+      console.warn('[REVENUE RUNNER] Resultado Frekuent con error transitorio. Reintentando una vez...');
+      result = await runOnce();
+    }
   }
 
   if (!result.daily.success || !result.monthly.success) {

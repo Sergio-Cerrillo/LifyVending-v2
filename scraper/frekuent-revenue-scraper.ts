@@ -80,6 +80,56 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function isTransientBrowserTargetError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('target closed')
+    || normalized.includes('target.createtarget')
+    || normalized.includes('protocol error (target.createtarget)')
+    || normalized.includes('session closed')
+    || normalized.includes('connection closed')
+    || normalized.includes('websocket')
+  );
+}
+
+async function createPageWithRetry(browserRef: { current: Browser | null }, label: string): Promise<Page> {
+  const maxAttempts = 2;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (!browserRef.current || !browserRef.current.isConnected()) {
+        browserRef.current = await launchFrekuentBrowser();
+      }
+
+      const page = await browserRef.current.newPage();
+      await page.setViewport({ width: 1920, height: 1080 });
+      return page;
+    } catch (error) {
+      lastError = error;
+      const transient = isTransientBrowserTargetError(error);
+
+      console.warn(`[FREKUENT] ⚠️ Error creando página (${label}) intento ${attempt}/${maxAttempts}:`, error);
+
+      if (browserRef.current) {
+        await browserRef.current.close().catch(() => {});
+        browserRef.current = null;
+      }
+
+      if (!transient || attempt === maxAttempts) {
+        throw error;
+      }
+
+      console.warn('[FREKUENT] 🔄 Reintentando conexión con Browserless...');
+      await sleep(1500);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('No se pudo crear página en el navegador remoto');
+}
+
 function shouldUseBrowserless(): boolean {
   const explicit = process.env.SCRAPER_USE_BROWSERLESS?.trim().toLowerCase();
   if (explicit === 'true') return true;
@@ -947,8 +997,9 @@ export async function scrapeFrekuentRevenue(
     // Lanzar navegador (local o Browserless)
     browser = await launchFrekuentBrowser();
 
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1920, height: 1080 });
+    const browserRef = { current: browser };
+    const page = await createPageWithRetry(browserRef, 'single-period');
+    browser = browserRef.current;
 
     // ============================================
     // 1. LOGIN
@@ -1016,7 +1067,7 @@ export async function scrapeFrekuentRevenue(
     // ============================================
     const data = await extractRevenueData(page, period);
 
-    await browser.close();
+    await browser.close().catch(() => {});
 
     const duration = ((new Date().getTime() - startTime.getTime()) / 1000).toFixed(2);
     console.log(`\n✅ Scraping de recaudación Frekuent completado en ${duration}s`);
@@ -1034,7 +1085,7 @@ export async function scrapeFrekuentRevenue(
     console.error('❌ Error en scraping de recaudación Frekuent:', error);
 
     if (browser) {
-      await browser.close();
+      await browser.close().catch(() => {});
     }
 
     return {
@@ -1081,8 +1132,9 @@ export async function scrapeFrekuentRevenueMultiple(
       throw launchError;
     }
 
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1920, height: 1080 });
+    const browserRef = { current: browser };
+    const page = await createPageWithRetry(browserRef, 'multi-period');
+    browser = browserRef.current;
 
     // ============================================
     // 2. LOGIN (UNA SOLA VEZ) - DIRECTAMENTE EN FREKUENT
@@ -1345,7 +1397,7 @@ export async function scrapeFrekuentRevenueMultiple(
     // ============================================
     // 7. CERRAR NAVEGADOR
     // ============================================
-    await browser.close();
+    await browser.close().catch(() => {});
 
     const duration = ((new Date().getTime() - startTime.getTime()) / 1000).toFixed(2);
     console.log(`[FREKUENT] \n✅ Scraping multi-periodo completado en ${duration}s`);
@@ -1373,7 +1425,7 @@ export async function scrapeFrekuentRevenueMultiple(
     console.error('[FREKUENT] ❌ Error en scraping multi-periodo Frekuent:', error);
 
     if (browser) {
-      await browser.close();
+      await browser.close().catch(() => {});
     }
 
     const errorResult = {

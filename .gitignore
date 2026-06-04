@@ -3,6 +3,11 @@ node_modules/
 
 # Build
 .next/
+_next/
+tsconfig.tsbuildinfo
+__next.*.txt
+index.txt
+index.html
 
 # System
 .DS_Store
@@ -21,6 +26,10 @@ yarn-error.log*
 
 # Others
 *.log
+debug-*.png
+debug-*.jpg
+debug-output.txt
+test-*.ts
 
 # VSCode
 .vscode/

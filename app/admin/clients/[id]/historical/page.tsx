@@ -49,7 +49,7 @@ interface FormState {
     machineId: string;
     year: string;
     month: string;
-    amountTotal: string;
+    amountReal: string;
     notes: string;
 }
 
@@ -75,7 +75,7 @@ function getDefaultForm(): FormState {
         machineId: '',
         year: String(now.getFullYear()),
         month: String(now.getMonth() + 1),
-        amountTotal: '0',
+        amountReal: '0',
         notes: '',
     };
 }
@@ -110,8 +110,12 @@ export default function ClientHistoricalAdjustmentsPage() {
     const paymentPercent = Number(client?.commission_payment_percent ?? 0);
     const paymentRate = paymentPercent > 1 ? paymentPercent / 100 : paymentPercent;
     const paymentPercentDisplay = paymentRate * 100;
-    const formAmount = Number(form.amountTotal || 0);
-    const formCommission = Math.round((formAmount * paymentRate) * 100) / 100;
+    const hidePercent = Number(client?.commission_hide_percent ?? 0);
+    const hideRate = hidePercent > 1 ? hidePercent / 100 : hidePercent;
+    const visibleRate = Math.max(0, 1 - hideRate);
+    const formRealAmount = Number(form.amountReal || 0);
+    const formVisibleAmount = Math.round((formRealAmount * visibleRate) * 100) / 100;
+    const formCommission = Math.round((formVisibleAmount * paymentRate) * 100) / 100;
 
     async function getToken(): Promise<string | null> {
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -163,12 +167,16 @@ export default function ClientHistoricalAdjustmentsPage() {
     }
 
     function startEdit(entry: HistoryEntry) {
+        const estimatedRealAmount = visibleRate > 0
+            ? Math.round((entry.amount_total / visibleRate) * 100) / 100
+            : entry.amount_total;
+
         setForm({
             id: entry.id,
             machineId: entry.machine_id,
             year: String(entry.year),
             month: String(entry.month),
-            amountTotal: String(entry.amount_total),
+            amountReal: String(estimatedRealAmount),
             notes: entry.notes || '',
         });
     }
@@ -186,7 +194,7 @@ export default function ClientHistoricalAdjustmentsPage() {
                 machineId: form.machineId,
                 year: Number(form.year),
                 month: Number(form.month),
-                amountTotal: Number(form.amountTotal),
+                amountTotal: formVisibleAmount,
                 notes: form.notes.trim() || null,
             };
 
@@ -364,15 +372,19 @@ export default function ClientHistoricalAdjustmentsPage() {
                             </select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="amount">Importe total (€)</Label>
+                            <Label htmlFor="amount">Importe real del mes (€)</Label>
                             <Input
                                 id="amount"
                                 type="number"
                                 min={0}
                                 step="0.01"
-                                value={form.amountTotal}
-                                onChange={(e) => setForm((prev) => ({ ...prev, amountTotal: e.target.value }))}
+                                value={form.amountReal}
+                                onChange={(e) => setForm((prev) => ({ ...prev, amountReal: e.target.value }))}
                             />
+                            <p className="text-xs text-zinc-600">
+                                Se mostrará al cliente: {formatCurrency(formVisibleAmount)}
+                                {' '}(-{(hideRate * 100).toFixed(2)}%)
+                            </p>
                             <p className="text-xs text-zinc-600">
                                 A abonar {formatCurrency(formCommission)} ({paymentPercentDisplay.toFixed(2)}%)
                             </p>
