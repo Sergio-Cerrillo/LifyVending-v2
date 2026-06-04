@@ -95,7 +95,7 @@ function isTransientBrowserTargetError(error: unknown): boolean {
 }
 
 async function createPageWithRetry(browserRef: { current: Browser | null }, label: string): Promise<Page> {
-  const maxAttempts = 2;
+  const maxAttempts = 4;
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -104,8 +104,37 @@ async function createPageWithRetry(browserRef: { current: Browser | null }, labe
         browserRef.current = await launchFrekuentBrowser();
       }
 
-      const page = await browserRef.current.newPage();
-      await page.setViewport({ width: 1920, height: 1080 });
+      let page: Page | null = null;
+
+      try {
+        const existingPages = await browserRef.current.pages();
+        page = existingPages.find((p) => !p.isClosed()) || null;
+      } catch {
+        page = null;
+      }
+
+      if (!page) {
+        page = await browserRef.current.newPage();
+      }
+
+      if (page.isClosed()) {
+        throw new Error('Página cerrada inmediatamente tras creación/reutilización');
+      }
+
+      // La configuración de viewport puede fallar en sesiones remotas inestables.
+      // Si falla pero la página sigue viva, continuamos para no abortar el scraping.
+      try {
+        await page.setViewport({ width: 1920, height: 1080 });
+      } catch (viewportError) {
+        if (page.isClosed() || isTransientBrowserTargetError(viewportError)) {
+          throw viewportError;
+        }
+        console.warn('[FREKUENT] ⚠️ No se pudo aplicar viewport, continuando sin viewport fijo:', viewportError);
+      }
+
+      page.setDefaultNavigationTimeout(60000);
+      page.setDefaultTimeout(60000);
+
       return page;
     } catch (error) {
       lastError = error;
@@ -123,7 +152,7 @@ async function createPageWithRetry(browserRef: { current: Browser | null }, labe
       }
 
       console.warn('[FREKUENT] 🔄 Reintentando conexión con Browserless...');
-      await sleep(1500);
+      await sleep(1500 * attempt);
     }
   }
 
