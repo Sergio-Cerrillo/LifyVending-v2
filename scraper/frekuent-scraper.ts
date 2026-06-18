@@ -28,6 +28,10 @@ import path from 'path';
 import os from 'os';
 import type { MachineStock, StockProduct } from '@/lib/types';
 
+const FREKUENT_POINTS_OF_SALE_URL =
+  'https://frekuent.io/app/frekuent-spots/points-of-sale/your-points-of-sales';
+const MACHINE_TABLE_SELECTOR = 'table[data-frekuent-machine-table="true"]';
+
 interface FrekuentConfig {
   user: string;
   pass: string;
@@ -178,15 +182,12 @@ export class FrekuentScraper {
 
     console.log('📊 Navegando a Puntos de Venta en Frekuent...');
     
-    // La URL directa según las capturas es: https://frekuent.io/app/frekuent-spots/points-of-sale
-    await this.page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+    await this.page.goto(FREKUENT_POINTS_OF_SALE_URL, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
     
-    // OPTIMIZACIÓN: Esperar a que la tabla aparezca en lugar de timeout fijo
-    await this.page.waitForSelector('table', { timeout: 3000 }).catch(() => {});
-    await this.page.waitForTimeout(500); // Reducido de 2000ms a 500ms
+    await this.markAndWaitForMachineTable();
     
     console.log('🔄 Verificando que estamos en Puntos de Venta...');
     
@@ -194,8 +195,9 @@ export class FrekuentScraper {
     const isCorrectPage = await this.page.evaluate(() => {
       // Buscar texto "Puntos de venta" en el título
       const title = document.querySelector('h1, h2, .title, [class*="title"]');
-      return title?.textContent?.includes('Puntos de venta') || 
-             window.location.pathname.includes('points-of-sale');
+      return (title?.textContent?.includes('Puntos de venta') ||
+             window.location.pathname.includes('points-of-sale'))
+             && window.location.pathname.includes('your-points-of-sales');
     });
     
     if (!isCorrectPage) {
@@ -210,10 +212,11 @@ export class FrekuentScraper {
         await this.page.waitForTimeout(800); // Reducido de 1000ms a 800ms
         
         // Click en "Puntos de venta" en el dropdown
-        await this.page.click('text=Puntos de venta, [href*="points-of-sale"]');
-        // OPTIMIZACIÓN: Esperar a que aparezca la tabla
-        await this.page.waitForSelector('table', { timeout: 3000 }).catch(() => {});
-        await this.page.waitForTimeout(500); // Reducido de 2000ms a 500ms
+        await this.page.goto(FREKUENT_POINTS_OF_SALE_URL, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000,
+        });
+        await this.markAndWaitForMachineTable();
         
         console.log('✅ Navegación manual exitosa');
       } catch (error) {
@@ -223,6 +226,47 @@ export class FrekuentScraper {
     }
     
     console.log('✅ En página de Puntos de Venta');
+  }
+
+  private async markAndWaitForMachineTable(): Promise<void> {
+    if (!this.page) throw new Error('Page not initialized');
+
+    const found = await this.page.waitForFunction(() => {
+      const tables = Array.from(document.querySelectorAll('table'));
+      const candidates = tables
+        .map(table => {
+          const headers = Array.from(table.querySelectorAll('th'))
+            .map(header => (header.textContent || '').trim().toLowerCase());
+          const validRows = Array.from(table.querySelectorAll('tbody tr'))
+            .filter(row => {
+              if (row.hasAttribute('aria-hidden')) return false;
+              const cells = row.querySelectorAll('td');
+              return cells.length >= 5 && Boolean(cells[2]?.textContent?.trim());
+            }).length;
+
+          const hasMachineHeaders = headers.some(header => header.includes('dispositivo'))
+            && headers.some(header => header.includes('nombre'))
+            && headers.some(header => header.includes('ventas'));
+
+          return { table, validRows, hasMachineHeaders };
+        })
+        .filter(candidate => candidate.hasMachineHeaders && candidate.validRows > 0)
+        .sort((a, b) => b.validRows - a.validRows);
+
+      const machineTable = candidates[0]?.table;
+
+      if (!machineTable) return false;
+      document.querySelectorAll('[data-frekuent-machine-table]')
+        .forEach(table => table.removeAttribute('data-frekuent-machine-table'));
+      machineTable.setAttribute('data-frekuent-machine-table', 'true');
+      return true;
+    }, { timeout: 15000 }).then(() => true).catch(() => false);
+
+    if (!found) {
+      throw new Error(
+        'No se encontró la tabla "Tus máquinas" en la pestaña "Tus puntos de venta"'
+      );
+    }
   }
 
   async setTablePagination() {
@@ -331,7 +375,7 @@ export class FrekuentScraper {
     console.log('📋 Obteniendo lista de máquinas de todas las páginas...');
 
     // OPTIMIZACIÓN: Esperar a que la tabla cargue de forma inteligente
-    await this.page.waitForSelector('table tbody tr', { timeout: 3000 }).catch(() => {});
+    await this.markAndWaitForMachineTable();
     await this.page.waitForTimeout(500);
 
     const allMachines: Array<{ id: string; name: string; rowIndex: number }> = [];
@@ -342,7 +386,7 @@ export class FrekuentScraper {
       console.log(`📄 Procesando página ${currentPage}...`);
 
       // Obtener máquinas de la página actual
-      const machines = await this.page.$$eval('table tbody tr', (rows) => {
+      const machines = await this.page.$$eval(`${MACHINE_TABLE_SELECTOR} tbody tr`, (rows) => {
         return rows
           .filter(row => !row.hasAttribute('aria-hidden')) // Excluir filas ocultas de medida
           .map((row, index) => {
@@ -429,6 +473,8 @@ export class FrekuentScraper {
     console.log(`📦 Extrayendo productos para ${machine.name}...`);
 
     try {
+      await this.markAndWaitForMachineTable();
+
       // OPTIMIZACIÓN: Reducir espera inicial de 500ms a 200ms
       await this.page.waitForTimeout(200);
       
@@ -436,7 +482,9 @@ export class FrekuentScraper {
       console.log(`  🔘 Buscando menú de opciones...`);
       
       const menuClicked = await this.page.evaluate((rowIndex) => {
-        const rows = Array.from(document.querySelectorAll('table tbody tr'));
+        const rows = Array.from(document.querySelectorAll(
+          'table[data-frekuent-machine-table="true"] tbody tr'
+        ));
         // Filtrar filas de medida (aria-hidden="true")
         const actualRows = rows.filter(row => !row.hasAttribute('aria-hidden'));
         const row = actualRows[rowIndex];
@@ -685,17 +733,15 @@ export class FrekuentScraper {
       });
       
       if (backClicked) {
-        // OPTIMIZACIÓN: Esperar a que aparezca la tabla del listado en lugar de timeout fijo
-        await this.page.waitForSelector('table tbody tr', { timeout: 2500 }).catch(() => {});
-        await this.page.waitForTimeout(300); // Pequeña espera adicional
+        await this.markAndWaitForMachineTable();
         console.log(`  ✅ Vuelta al listado exitosa`);
       } else {
         // Fallback: navegar directamente a la URL
-        await this.page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+        await this.page.goto(FREKUENT_POINTS_OF_SALE_URL, {
           waitUntil: 'domcontentloaded',
           timeout: 15000,
         });
-        await this.page.waitForTimeout(800); // Reducido de 2000ms a 800ms
+        await this.markAndWaitForMachineTable();
         console.log(`  ✅ Vuelta al listado por URL`);
       }
     } catch (error) {
@@ -703,11 +749,11 @@ export class FrekuentScraper {
       
       // Último intento: reload de la página principal
       try {
-        await this.page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+        await this.page.goto(FREKUENT_POINTS_OF_SALE_URL, {
           waitUntil: 'domcontentloaded',
           timeout: 15000,
         });
-        await this.page.waitForTimeout(800); // Reducido de 2000ms a 800ms
+        await this.markAndWaitForMachineTable();
       } catch (e) {
         console.error(`  ❌ No se pudo volver al listado`);
       }
@@ -737,7 +783,8 @@ export class FrekuentScraper {
       console.log(`\n📄 Procesando página ${currentPage}...`);
 
       // Obtener máquinas de la página actual
-      const machines = await this.page!.$$eval('table tbody tr', (rows) => {
+      await this.markAndWaitForMachineTable();
+      const machines = await this.page!.$$eval(`${MACHINE_TABLE_SELECTOR} tbody tr`, (rows) => {
         return rows
           .filter(row => !row.hasAttribute('aria-hidden'))
           .map((row, index) => {
@@ -830,7 +877,8 @@ export class FrekuentScraper {
     let hasNextPage = true;
 
     while (hasNextPage) {
-      const countInPage = await this.page.$$eval('table tbody tr', (rows) => {
+      await this.markAndWaitForMachineTable();
+      const countInPage = await this.page.$$eval(`${MACHINE_TABLE_SELECTOR} tbody tr`, (rows) => {
         return rows.filter(row => !row.hasAttribute('aria-hidden')).length;
       });
       
@@ -863,11 +911,11 @@ export class FrekuentScraper {
     }
 
     // Volver a la primera página
-    await this.page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+    await this.page.goto(FREKUENT_POINTS_OF_SALE_URL, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
     });
-    await this.page.waitForTimeout(1000);
+    await this.markAndWaitForMachineTable();
     await this.setTablePagination();
 
     return total;

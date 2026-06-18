@@ -60,7 +60,7 @@ const navItems: NavItem[] = [
   },
   {
     title: 'Máquinas',
-    href: 'https://frekuent.io/app/frekuent-spots/points-of-sale',
+    href: 'https://frekuent.io/app/frekuent-spots/points-of-sale/your-points-of-sales',
     icon: <Package className="h-5 w-5" />,
     roles: ['admin'],
     external: true,

@@ -25,6 +25,9 @@
 
 import puppeteer, { Browser, Page } from 'puppeteer';
 
+const FREKUENT_POINTS_OF_SALE_URL =
+  'https://frekuent.io/app/frekuent-spots/points-of-sale/your-points-of-sales';
+
 export interface FrekuentMachineRevenueData {
   machineName: string;
   deviceId: string;
@@ -50,7 +53,7 @@ function parseEuroAmount(text: string): number {
   if (!text || text === '--' || text === '—' || text === '-') return 0;
 
   const normalizedText = text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-  const numberMatch = normalizedText.match(/\d{1,3}(?:[\.\s]\d{3})*(?:,\d+)?|\d+(?:[\.,]\d+)?/);
+  const numberMatch = normalizedText.match(/\d(?:[\d.,\s]*\d)?/);
   if (!numberMatch) return 0;
 
   let value = numberMatch[0].replace(/\s/g, '');
@@ -239,14 +242,38 @@ async function waitForPointsOfSaleReady(page: Page): Promise<boolean> {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const ready = await page.waitForFunction(() => {
-      const pathOk = window.location.pathname.includes('points-of-sale');
-      const bodyText = (document.body?.textContent || '').replace(/\s+/g, '');
-      const hasTable = document.querySelector('table, .ant-table, [role="table"]') !== null;
-      const hasSalesHeader = Array.from(document.querySelectorAll('th, [role="columnheader"], div, span'))
-        .some(el => (el.textContent || '').trim().toLowerCase() === 'ventas');
-      const hasRows = document.querySelectorAll('tbody tr, .ant-table-row, [role="row"]').length > 2;
+      const pathOk = window.location.pathname.includes(
+        'points-of-sale/your-points-of-sales'
+      );
+      const tables = Array.from(document.querySelectorAll('table'));
+      const candidates = tables
+        .map(table => {
+          const headers = Array.from(table.querySelectorAll('th'))
+            .map(header => (header.textContent || '').trim().toLowerCase());
+          const validRows = Array.from(table.querySelectorAll('tbody tr'))
+            .filter(row => {
+              if (row.hasAttribute('aria-hidden')) return false;
+              const cells = row.querySelectorAll('td');
+              return cells.length >= 5 && Boolean(cells[2]?.textContent?.trim());
+            }).length;
 
-      return pathOk && (hasTable || hasSalesHeader || hasRows || bodyText.length > 300);
+          const hasMachineHeaders = headers.some(header => header.includes('dispositivo'))
+            && headers.some(header => header.includes('nombre'))
+            && headers.some(header => header.includes('ventas'));
+
+          return { table, validRows, hasMachineHeaders };
+        })
+        .filter(candidate => candidate.hasMachineHeaders && candidate.validRows > 0)
+        .sort((a, b) => b.validRows - a.validRows);
+
+      const machineTable = candidates[0]?.table;
+      if (machineTable) {
+        document.querySelectorAll('[data-frekuent-machine-table]')
+          .forEach(table => table.removeAttribute('data-frekuent-machine-table'));
+        machineTable.setAttribute('data-frekuent-machine-table', 'true');
+      }
+
+      return pathOk && Boolean(machineTable);
     }, { timeout: 12000 }).then(() => true).catch(() => false);
 
     if (ready) {
@@ -258,7 +285,7 @@ async function waitForPointsOfSaleReady(page: Page): Promise<boolean> {
 
     if (attempt < maxAttempts) {
       console.log('[FREKUENT] 🔄 Reintentando carga de Puntos de venta...');
-      await page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+      await page.goto(FREKUENT_POINTS_OF_SALE_URL, {
         waitUntil: 'networkidle2',
         timeout: 45000
       }).catch(() => {});
@@ -306,7 +333,9 @@ async function setDateFilter(
 
     // 2. Capturar datos ANTES del cambio (para verificar después)
     const dataBefore = await page.evaluate(() => {
-      const table = document.querySelector('table');
+      const table = document.querySelector<HTMLTableElement>(
+        'table[data-frekuent-machine-table="true"]'
+      );
       if (!table) return null;
       
       const rows = Array.from(table.querySelectorAll('tbody tr'))
@@ -662,7 +691,9 @@ async function setDateFilter(
     const beforeSamples = dataBefore?.samples || [];
     const dataChanged = await page.waitForFunction(
       (beforeSamples: string[]) => {
-        const table = document.querySelector('table');
+        const table = document.querySelector<HTMLTableElement>(
+          'table[data-frekuent-machine-table="true"]'
+        );
         if (!table) {
           console.log('[EVAL] ⚠️ No se encuentra tabla');
           return false;
@@ -708,7 +739,9 @@ async function setDateFilter(
     
     // 9. Verificar que los datos cambiaron
     const dataAfter = await page.evaluate(() => {
-      const table = document.querySelector('table');
+      const table = document.querySelector<HTMLTableElement>(
+        'table[data-frekuent-machine-table="true"]'
+      );
       if (!table) return null;
       
       const rows = Array.from(table.querySelectorAll('tbody tr'))
@@ -876,13 +909,17 @@ async function extractRevenueData(
 
   // Debug: Verificar estado de la página antes de extraer
   const pageState = await page.evaluate(() => {
+    const machineTable = document.querySelector<HTMLTableElement>(
+      'table[data-frekuent-machine-table="true"]'
+    );
+
     return {
       url: window.location.href,
       title: document.title,
-      hasTable: !!document.querySelector('table'),
+      hasTable: Boolean(machineTable),
       hasAntTable: !!document.querySelector('.ant-table'),
       tableCount: document.querySelectorAll('table').length,
-      rowCount: document.querySelectorAll('table tbody tr').length,
+      rowCount: machineTable?.querySelectorAll('tbody tr').length || 0,
       bodyText: document.body.textContent?.substring(0, 500)
     };
   });
@@ -910,9 +947,11 @@ async function extractRevenueData(
   const data = await page.evaluate((periodParam) => {
     const results: any[] = [];
     
-    const table = document.querySelector('table');
+    const table = document.querySelector<HTMLTableElement>(
+      'table[data-frekuent-machine-table="true"]'
+    );
     if (!table) {
-      console.error('[FREKUENT] ❌ No se encontró la tabla');
+      console.error('[FREKUENT] ❌ No se encontró la tabla de "Tus máquinas"');
       return results;
     }
 
@@ -953,7 +992,7 @@ async function extractRevenueData(
       const ventasCell = cells[4];
       if (ventasCell) {
         const rawCellText = ventasCell.textContent?.replace(/\u00a0/g, ' ').trim() || '';
-        const valueMatch = rawCellText.match(/\d{1,3}(?:[\.\s]\d{3})*(?:,\d+)?|\d+(?:[\.,]\d+)?/);
+        const valueMatch = rawCellText.match(/\d(?:[\d.,\s]*\d)?/);
         ventasText = valueMatch ? `${valueMatch[0]} €` : '0 €';
       }
       
@@ -1073,12 +1112,17 @@ export async function scrapeFrekuentRevenue(
     // ============================================
     console.log('📍 Navegando a Puntos de Venta...');
     
-    await page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+    await page.goto(FREKUENT_POINTS_OF_SALE_URL, {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    const pointsReady = await waitForPointsOfSaleReady(page);
+    if (!pointsReady) {
+      throw new Error(
+        'No se cargó la tabla "Tus máquinas" en la pestaña "Tus puntos de venta"'
+      );
+    }
     console.log('✅ En Puntos de Venta');
 
     // ============================================
@@ -1208,7 +1252,7 @@ export async function scrapeFrekuentRevenueMultiple(
     }
 
     console.log('[FREKUENT] ✅ Campos de login encontrados');
-    console.log(`[FREKUENT] 📝 Ingresando credenciales - username: ${credentials.username}`);
+    console.log('[FREKUENT] 📝 Ingresando credenciales...');
     
     await usernameInput.type(credentials.username);
     await passwordInput.type(credentials.password);
@@ -1221,15 +1265,43 @@ export async function scrapeFrekuentRevenueMultiple(
       throw new Error('No se encontró el botón de login');
     }
 
-    // Esperar redirección después del login en Frekuent
-    console.log('[FREKUENT] ⏳ Esperando redirección después del login (8s)...');
-    await new Promise(resolve => setTimeout(resolve, 8000));
+    // Esperar a que termine realmente la autenticación. La página puede mantener
+    // el botón en "Cargando..." durante bastante más de 8 segundos.
+    console.log('[FREKUENT] ⏳ Esperando a que Frekuent complete el login...');
+    const loginCompleted = await page.waitForFunction(() => {
+      const isLoginPath = window.location.pathname === '/login'
+        || window.location.pathname.startsWith('/login/');
+      const hasPasswordInput = document.querySelector('input[type="password"]') !== null;
+      return !isLoginPath && !hasPasswordInput;
+    }, { timeout: 45000 }).then(() => true).catch(() => false);
     
     const currentUrl = page.url();
     const currentTitle = await page.title();
-    console.log(`[FREKUENT] ✅ Login completado`);
     console.log(`[FREKUENT] 📍 URL después del login: ${currentUrl}`);
     console.log(`[FREKUENT] 📋 Título después del login: ${currentTitle}`);
+
+    if (!loginCompleted) {
+      const loginPageMessage = await page.evaluate(() => {
+        const selectors = [
+          '[role="alert"]',
+          '.ant-alert-message',
+          '.ant-message-notice-content',
+          '[class*="error"]',
+        ];
+        const explicitMessage = selectors
+          .map(selector => document.querySelector(selector)?.textContent?.trim())
+          .find(Boolean);
+
+        return explicitMessage
+          || (document.body?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      });
+
+      throw new Error(
+        `Frekuent no completó el login en 45 segundos. Mensaje visible: ${loginPageMessage || 'sin mensaje'}`
+      );
+    }
+
+    console.log('[FREKUENT] ✅ Login completado');
 
     // ============================================
     // 3. NAVEGAR A PUNTOS DE VENTA (USANDO MENÚ)
@@ -1353,7 +1425,7 @@ export async function scrapeFrekuentRevenueMultiple(
       // FALLBACK: Intentar navegar directamente por URL
       console.log('[FREKUENT] 🔄 Intentando navegación directa a Puntos de venta...');
       try {
-        await page.goto('https://frekuent.io/app/frekuent-spots/points-of-sale', {
+        await page.goto(FREKUENT_POINTS_OF_SALE_URL, {
           waitUntil: 'networkidle2',
           timeout: 20000
         });
@@ -1368,14 +1440,18 @@ export async function scrapeFrekuentRevenueMultiple(
         console.log(`[FREKUENT] 🔗 URL destino: ${puntosDeVentaResult.href}`);
       }
       
-      // Esperar a que cargue la tabla
-      console.log('[FREKUENT] ⏳ Esperando carga de tabla (6s)...');
-      await sleep(3000);
+      console.log('[FREKUENT] 🖱️ Abriendo pestaña "Tus puntos de venta"...');
+      await page.goto(FREKUENT_POINTS_OF_SALE_URL, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
     }
 
     const pointsReady = await waitForPointsOfSaleReady(page);
     if (!pointsReady) {
-      console.warn('[FREKUENT] ⚠️ No se pudo confirmar vista hidratada de Puntos de venta tras reintentos');
+      throw new Error(
+        'No se cargó la tabla "Tus máquinas" en la pestaña "Tus puntos de venta"'
+      );
     }
     
     // Verificar que llegamos a la página correcta
@@ -1386,8 +1462,12 @@ export async function scrapeFrekuentRevenueMultiple(
     
     // Debug: Ver qué elementos hay en la página
     const pageDebug = await page.evaluate(() => {
+      const machineTable = document.querySelector<HTMLTableElement>(
+        'table[data-frekuent-machine-table="true"]'
+      );
+
       return {
-        hasTable: !!document.querySelector('table'),
+        hasTable: Boolean(machineTable),
         tableCount: document.querySelectorAll('table').length,
         hasLoginForm: !!document.querySelector('input[type="password"]'),
         bodyText: document.body.textContent?.substring(0, 300),
