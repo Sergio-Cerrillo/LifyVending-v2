@@ -1,28 +1,15 @@
 import { supabaseAdmin } from '@/lib/supabase-helpers';
 import { scrapeFrekuentRevenueMultiple } from '@/scraper/frekuent-revenue-scraper';
-import { TelevendScraper } from '@/scraper/televend-scraper';
-import { generateFrekuentId, generateTelevendId } from '@/lib/machine-id-utils';
+import { generateFrekuentId } from '@/lib/machine-id-utils';
 
-export type RevenueJobAction = 'frekuent_daily' | 'frekuent_monthly' | 'televend' | 'all_queue';
+export type RevenueJobAction = 'frekuent';
 
 export type RevenueJobPhase =
   | 'validating'
-  | 'frekuent_daily'
-  | 'frekuent_monthly'
-  | 'televend'
+  | 'frekuent'
   | 'saving'
   | 'completed'
   | 'error';
-
-interface RevenueItem {
-  machineName: string;
-  location: string;
-  source: 'frekuent' | 'televend';
-  period: 'daily' | 'monthly';
-  totalRevenue: number;
-  card?: number;
-  cash?: number;
-}
 
 export interface ActionSummary {
   machinesTouched: number;
@@ -55,35 +42,6 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function isTransientPuppeteerError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error || '');
-  const normalized = message.toLowerCase();
-
-  return (
-    normalized.includes('detached frame')
-    || normalized.includes('execution context was destroyed')
-    || normalized.includes('cannot find context with specified id')
-    || normalized.includes('target closed')
-    || normalized.includes('target.createtarget')
-    || normalized.includes('protocol error (target.createtarget)')
-    || normalized.includes('session closed')
-    || normalized.includes('connection closed')
-    || normalized.includes('websocket')
-  );
-}
-
-function isTransientPlaywrightError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error || '');
-  const normalized = message.toLowerCase();
-
-  return (
-    normalized.includes('target page, context or browser has been closed')
-    || normalized.includes('browser has been closed')
-    || normalized.includes('context or browser has been closed')
-    || normalized.includes('websocket')
-  );
-}
-
 function requireFrekuentCredentials() {
   const username = process.env.FREKUENT_USERNAME || process.env.ORAIN_USERNAME;
   const password = process.env.FREKUENT_PASSWORD || process.env.ORAIN_PASSWORD;
@@ -95,250 +53,125 @@ function requireFrekuentCredentials() {
   return { username, password };
 }
 
-function requireTelevendCredentials() {
-  const username = process.env.TELEVEND_USERNAME;
-  const password = process.env.TELEVEND_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error('Faltan credenciales de Televend');
-  }
-
-  return { username, password };
-}
-
-async function resolveMachineId(item: RevenueItem): Promise<{ machineId: string; created: boolean }> {
-  const frekuentMachineId = item.source === 'frekuent' ? generateFrekuentId(item.machineName) : null;
-  const televendMachineId = item.source === 'televend' ? generateTelevendId(item.machineName) : null;
-
-  let existingMachineId: string | null = null;
-
-  if (frekuentMachineId) {
-    const { data: byFrekuent } = await supabaseAdmin
-      .from('machines')
-      .select('id')
-      .eq('frekuent_machine_id', frekuentMachineId)
-      .maybeSingle();
-
-    if (byFrekuent?.id) {
-      existingMachineId = byFrekuent.id;
-    } else {
-      const { data: byOrain } = await supabaseAdmin
-        .from('machines')
-        .select('id')
-        .eq('orain_machine_id', frekuentMachineId)
-        .maybeSingle();
-
-      if (byOrain?.id) {
-        existingMachineId = byOrain.id;
-        await supabaseAdmin
-          .from('machines')
-          .update({
-            frekuent_machine_id: frekuentMachineId,
-            orain_machine_id: null,
-          })
-          .eq('id', byOrain.id);
-      }
-    }
-  }
-
-  if (!existingMachineId && televendMachineId) {
-    const { data: byTelevend } = await supabaseAdmin
-      .from('machines')
-      .select('id')
-      .eq('televend_machine_id', televendMachineId)
-      .maybeSingle();
-
-    if (byTelevend?.id) {
-      existingMachineId = byTelevend.id;
-    }
-  }
-
-  if (existingMachineId) {
-    return { machineId: existingMachineId, created: false };
-  }
-
-  const { data: inserted, error: insertError } = await supabaseAdmin
-    .from('machines')
-    .insert({
-      name: item.machineName,
-      location: item.location || 'Sin ubicación',
-      status: 'active',
-      frekuent_machine_id: frekuentMachineId,
-      televend_machine_id: televendMachineId,
-      last_scraped_at: nowIso(),
-    })
-    .select('id')
-    .single();
-
-  if (insertError || !inserted) {
-    throw new Error(`No se pudo crear máquina ${item.machineName}: ${insertError?.message}`);
-  }
-
-  return { machineId: inserted.id, created: true };
-}
-
-async function applyRevenueItems(items: RevenueItem[]): Promise<ActionSummary> {
+async function saveFrekuentRevenueBulk(
+  dailyData: Array<{ machineName: string; location: string; totalRevenue: number }>,
+  monthlyData: Array<{ machineName: string; location: string; totalRevenue: number }>,
+): Promise<{ daily: ActionSummary; monthly: ActionSummary }> {
   const startedAt = Date.now();
-  const touched = new Set<string>();
-  let machinesCreated = 0;
-  let machinesUpdated = 0;
-  let revenueUpdates = 0;
+  const scrapedAt = nowIso();
+  const combined = new Map<string, {
+    machineName: string;
+    location: string;
+    daily?: number;
+    monthly?: number;
+  }>();
 
-  for (const item of items) {
-    const { machineId, created } = await resolveMachineId(item);
-
-    if (created) {
-      machinesCreated += 1;
-    } else if (!touched.has(machineId)) {
-      machinesUpdated += 1;
-    }
-
-    touched.add(machineId);
-
-    const updateData: Record<string, any> = {
-      last_scraped_at: nowIso(),
-    };
-
-    if (item.period === 'daily') {
-      updateData.daily_total = item.totalRevenue;
-      updateData.daily_card = item.card || 0;
-      updateData.daily_cash = item.cash || 0;
-      updateData.daily_updated_at = nowIso();
-    } else {
-      updateData.monthly_total = item.totalRevenue;
-      updateData.monthly_card = item.card || 0;
-      updateData.monthly_cash = item.cash || 0;
-      updateData.monthly_updated_at = nowIso();
-    }
-
-    const { error: updateError } = await supabaseAdmin
-      .from('machines')
-      .update(updateData)
-      .eq('id', machineId);
-
-    if (updateError) {
-      throw new Error(`No se pudo actualizar recaudación de ${item.machineName}: ${updateError.message}`);
-    }
-
-    revenueUpdates += 1;
+  for (const item of dailyData) {
+    const frekuentId = generateFrekuentId(item.machineName);
+    combined.set(frekuentId, {
+      machineName: item.machineName,
+      location: item.location || 'Sin ubicación',
+      daily: item.totalRevenue,
+    });
   }
 
-  const totalRevenue = round2(items.reduce((sum, i) => sum + i.totalRevenue, 0));
+  for (const item of monthlyData) {
+    const frekuentId = generateFrekuentId(item.machineName);
+    const existing = combined.get(frekuentId);
+    combined.set(frekuentId, {
+      machineName: item.machineName,
+      location: item.location || existing?.location || 'Sin ubicación',
+      daily: existing?.daily,
+      monthly: item.totalRevenue,
+    });
+  }
+
+  const { data: existingRows, error: existingError } = await supabaseAdmin
+    .from('machines')
+    .select('id, frekuent_machine_id, orain_machine_id')
+    .or('frekuent_machine_id.not.is.null,orain_machine_id.not.is.null');
+
+  if (existingError) {
+    throw new Error(`No se pudieron leer las máquinas existentes: ${existingError.message}`);
+  }
+
+  const existingByExternalId = new Map<string, { id: string }>();
+  for (const row of existingRows || []) {
+    const typedRow = row as any;
+    if (typedRow.frekuent_machine_id) {
+      existingByExternalId.set(typedRow.frekuent_machine_id, { id: typedRow.id });
+    }
+    if (typedRow.orain_machine_id) {
+      existingByExternalId.set(typedRow.orain_machine_id, { id: typedRow.id });
+    }
+  }
+
+  let machinesCreated = 0;
+  const rows = Array.from(combined.entries()).map(([frekuentId, item]) => {
+    const existing = existingByExternalId.get(frekuentId);
+    if (!existing) machinesCreated += 1;
+
+    return {
+      id: existing?.id || crypto.randomUUID(),
+      name: item.machineName,
+      location: item.location,
+      status: 'active',
+      frekuent_machine_id: frekuentId,
+      orain_machine_id: null,
+      last_scraped_at: scrapedAt,
+      updated_at: scrapedAt,
+      daily_total: item.daily || 0,
+      daily_card: 0,
+      daily_cash: 0,
+      daily_updated_at: scrapedAt,
+      monthly_total: item.monthly || 0,
+      monthly_card: 0,
+      monthly_cash: 0,
+      monthly_updated_at: scrapedAt,
+    };
+  });
+
+  const { error: upsertError } = await supabaseAdmin
+    .from('machines')
+    .upsert(rows as any[], { onConflict: 'id' });
+
+  if (upsertError) {
+    throw new Error(`No se pudo guardar la recaudación en bloque: ${upsertError.message}`);
+  }
+
+  const machinesTouched = rows.length;
+  const machinesUpdated = machinesTouched - machinesCreated;
+  const durationSeconds = round2((Date.now() - startedAt) / 1000);
 
   return {
-    machinesTouched: touched.size,
-    machinesCreated,
-    machinesUpdated,
-    revenueUpdates,
-    totalRevenue,
-    durationSeconds: round2((Date.now() - startedAt) / 1000),
+    daily: {
+      machinesTouched,
+      machinesCreated,
+      machinesUpdated,
+      revenueUpdates: dailyData.length,
+      totalRevenue: round2(dailyData.reduce((sum, item) => sum + item.totalRevenue, 0)),
+      durationSeconds,
+    },
+    monthly: {
+      machinesTouched,
+      machinesCreated: 0,
+      machinesUpdated,
+      revenueUpdates: monthlyData.length,
+      totalRevenue: round2(monthlyData.reduce((sum, item) => sum + item.totalRevenue, 0)),
+      durationSeconds,
+    },
   };
 }
 
 async function runFrekuentBoth(): Promise<{ daily: ActionSummary; monthly: ActionSummary }> {
   const credentials = requireFrekuentCredentials();
-  const runOnce = () => scrapeFrekuentRevenueMultiple(credentials);
-  let result;
-
-  try {
-    result = await runOnce();
-  } catch (error) {
-    if (!isTransientPuppeteerError(error)) {
-      throw error;
-    }
-
-    console.warn('[REVENUE RUNNER] Error transitorio de Puppeteer detectado en Frekuent. Reintentando una vez...');
-    result = await runOnce();
-  }
-
-  if (!result.daily.success || !result.monthly.success) {
-    const failureMessage = result.daily.error || result.monthly.error || 'Scraping Frekuent falló';
-
-    if (isTransientPuppeteerError(failureMessage)) {
-      console.warn('[REVENUE RUNNER] Resultado Frekuent con error transitorio. Reintentando una vez...');
-      result = await runOnce();
-    }
-  }
+  const result = await scrapeFrekuentRevenueMultiple(credentials);
 
   if (!result.daily.success || !result.monthly.success) {
     throw new Error(result.daily.error || result.monthly.error || 'Scraping Frekuent falló');
   }
 
-  const dailyItems: RevenueItem[] = result.daily.data.map((item) => ({
-    machineName: item.machineName,
-    location: item.location || 'Sin ubicación',
-    source: 'frekuent',
-    period: 'daily',
-    totalRevenue: item.totalRevenue,
-    card: 0,
-    cash: 0,
-  }));
-
-  const monthlyItems: RevenueItem[] = result.monthly.data.map((item) => ({
-    machineName: item.machineName,
-    location: item.location || 'Sin ubicación',
-    source: 'frekuent',
-    period: 'monthly',
-    totalRevenue: item.totalRevenue,
-    card: 0,
-    cash: 0,
-  }));
-
-  const daily = await applyRevenueItems(dailyItems);
-  const monthly = await applyRevenueItems(monthlyItems);
-
-  return { daily, monthly };
-}
-
-async function runTelevendBoth(): Promise<ActionSummary> {
-  const runOnce = async (): Promise<ActionSummary> => {
-    const credentials = requireTelevendCredentials();
-    const scraper = new TelevendScraper({
-      username: credentials.username,
-      password: credentials.password,
-      headless: true,
-    });
-
-    try {
-      const results = await scraper.scrapeAllMachinesRevenue();
-
-      const items: RevenueItem[] = results.flatMap((item) => ([
-        {
-          machineName: item.machineName,
-          location: item.location || 'Sin ubicación',
-          source: 'televend' as const,
-          period: 'daily' as const,
-          totalRevenue: item.daily,
-          card: 0,
-          cash: 0,
-        },
-        {
-          machineName: item.machineName,
-          location: item.location || 'Sin ubicación',
-          source: 'televend' as const,
-          period: 'monthly' as const,
-          totalRevenue: item.monthly,
-          card: 0,
-          cash: 0,
-        },
-      ]));
-
-      return applyRevenueItems(items);
-    } finally {
-      await scraper.close().catch(() => {});
-    }
-  };
-
-  try {
-    return await runOnce();
-  } catch (error) {
-    if (!isTransientPlaywrightError(error)) {
-      throw error;
-    }
-
-    console.warn('[REVENUE RUNNER] Error transitorio de Playwright detectado en Televend. Reintentando una vez...');
-    return runOnce();
-  }
+  return saveFrekuentRevenueBulk(result.daily.data, result.monthly.data);
 }
 
 export async function executeRevenueJob(
@@ -356,33 +189,17 @@ export async function executeRevenueJob(
 
   await emit('validating', 5, 'Validando credenciales y entorno');
 
-  if (action === 'frekuent_daily') {
-    await emit('frekuent_daily', 20, 'Ejecutando Frekuent diario');
-    const frekuent = await runFrekuentBoth();
-    details.frekuent_daily = frekuent.daily;
-  } else if (action === 'frekuent_monthly') {
-    await emit('frekuent_monthly', 20, 'Ejecutando Frekuent mensual');
-    const frekuent = await runFrekuentBoth();
-    details.frekuent_monthly = frekuent.monthly;
-  } else if (action === 'televend') {
-    await emit('televend', 20, 'Ejecutando Televend');
-    details.televend = await runTelevendBoth();
-  } else {
-    await emit('frekuent_daily', 20, 'Cola: Frekuent diario');
-    const frekuent = await runFrekuentBoth();
-    details.frekuent_daily = frekuent.daily;
-
-    await emit('frekuent_monthly', 45, 'Cola: Frekuent mensual');
-    details.frekuent_monthly = frekuent.monthly;
-
-    await emit('televend', 65, 'Cola: Televend');
-    details.televend = await runTelevendBoth();
-  }
+  await emit('frekuent', 20, 'Extrayendo recaudación diaria y mensual de Frekuent');
+  const frekuent = await runFrekuentBoth();
+  details.frekuent_daily = frekuent.daily;
+  details.frekuent_monthly = frekuent.monthly;
 
   await emit('saving', 95, 'Guardando resultados');
 
-  const machinesScraped = Object.values(details)
-    .reduce((sum, detail) => sum + detail.machinesTouched, 0);
+  const machinesScraped = Math.max(
+    0,
+    ...Object.values(details).map(detail => detail.machinesTouched),
+  );
 
   const totalRevenue = round2(Object.values(details)
     .reduce((sum, detail) => sum + detail.totalRevenue, 0));

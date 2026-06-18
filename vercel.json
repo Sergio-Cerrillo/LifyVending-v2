@@ -2,11 +2,7 @@
     "crons": [
         {
             "path": "/api/cron/scrape-frekuent-revenue",
-            "schedule": "0 7 * * *"
-        },
-        {
-            "path": "/api/cron/scrape-televend-revenue",
-            "schedule": "20 7 * * *"
+            "schedule": "0 6 * * *"
         }
     ]
 }

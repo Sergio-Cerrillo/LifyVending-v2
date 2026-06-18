@@ -1,907 +1,367 @@
 'use client';
 
-/**
- * PÁGINA ADMIN: RECAUDACIONES GENERALES
- * 
- * Vista general de todas las recaudaciones del sistema
- * - Tabla con todas las máquinas y sus recaudaciones
- * - Totales por periodo (diario, mensual)
- * - Datos actualizados automáticamente cada hora via CRON
- */
-
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { RefreshCw, DollarSign, TrendingUp, Loader2, EuroIcon, Zap, Clock, Trash2, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, XCircle, CircleDashed, ListChecks } from 'lucide-react';
-import { LoadingInline } from '@/components/ui/loading-screen';
-import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/lib/supabase-helpers';
-import { toast } from 'sonner';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+  CheckCircle2,
+  CircleDashed,
+  Clock,
+  DollarSign,
+  EuroIcon,
+  Loader2,
+  RefreshCw,
+  TrendingUp,
+  XCircle,
+  Zap,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase-helpers';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { LoadingInline } from '@/components/ui/loading-screen';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 interface MachineRevenue {
-    id: string;
-    name: string;
-    location: string | null;
-    status: string;
-    lastScraped: string | null;
-    source: 'orain' | 'televend'; // Fuente de la máquina
-    daily: {
-        total: number;
-        card: number;
-        cash: number;
-        updatedAt: string | null;
-    };
-    monthly: {
-        total: number;
-        card: number;
-        cash: number;
-        updatedAt: string | null;
-    };
+  id: string;
+  name: string;
+  location: string | null;
+  lastScraped: string | null;
+  source: 'frekuent';
+  daily: { total: number; updatedAt: string | null };
+  monthly: { total: number; updatedAt: string | null };
 }
 
 interface RevenueData {
-    machines: MachineRevenue[];
-    totals: {
-        daily: number;
-        monthly: number;
-    };
-    totalsOrain: {
-        daily: number;
-        monthly: number;
-    };
-    totalsTelevend: {
-        daily: number;
-        monthly: number;
-    };
-    count: number;
-    countOrain: number;
-    countTelevend: number;
+  machines: MachineRevenue[];
+  totals: { daily: number; monthly: number };
+  count: number;
+  lastUpdate: string | null;
 }
 
-type ScrapeAction = 'frekuent_daily' | 'frekuent_monthly' | 'televend' | 'all_queue';
-type ScrapeTaskStatus = 'idle' | 'queued' | 'running' | 'success' | 'error';
-
-interface ScrapeTaskState {
-    status: ScrapeTaskStatus;
-    message?: string;
-    durationSeconds?: number;
-}
-
-const SCRAPE_LABELS: Record<ScrapeAction, string> = {
-    frekuent_daily: 'Frekuent diario',
-    frekuent_monthly: 'Frekuent mensual',
-    televend: 'Televend',
-    all_queue: 'Todo en cola',
+type JobState = {
+  status: 'idle' | 'queued' | 'running' | 'success' | 'error';
+  message?: string;
+  durationSeconds?: number;
 };
 
-const INITIAL_TASKS: Record<ScrapeAction, ScrapeTaskState> = {
-    frekuent_daily: { status: 'idle' },
-    frekuent_monthly: { status: 'idle' },
-    televend: { status: 'idle' },
-    all_queue: { status: 'idle' },
-};
+const IDLE_JOB: JobState = { status: 'idle' };
 
 export default function AdminRevenueGeneralPage() {
-    const router = useRouter();
-    const [loading, setLoading] = useState(true);
-    const [revenueData, setRevenueData] = useState<RevenueData | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'monthly'>('daily');
-    const [isScraping, setIsScraping] = useState(false);
-    const [isSubmittingJob, setIsSubmittingJob] = useState(false);
-    const [lastUpdate, setLastUpdate] = useState<string | null>(null);
-    const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
-    const [scrapeTasks, setScrapeTasks] = useState<Record<ScrapeAction, ScrapeTaskState>>(INITIAL_TASKS);
-    const [activeScrapePhase, setActiveScrapePhase] = useState<string | null>(null);
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [data, setData] = useState<RevenueData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [job, setJob] = useState<JobState>(IDLE_JOB);
+  const manualEnabled = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING !== 'false';
 
-    // Manual scraping enabled by default. Set NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING=false to hide controls.
-    const enableManualScraping = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING !== 'false';
-
-    useEffect(() => {
-        loadRevenueData();
-        loadScrapeStatus();
-    }, []);
-
-    useEffect(() => {
-        const interval = setInterval(loadScrapeStatus, 3000);
-        return () => clearInterval(interval);
-    }, []);
-
-    async function loadRevenueData() {
-        try {
-            setLoading(true);
-            setError(null);
-
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-            console.log('[RECAUDACIONES] Sesión:', !!sessionData.session, 'Error:', sessionError?.message);
-
-            if (sessionError || !sessionData.session) {
-                console.error('[RECAUDACIONES] Sin sesión válida, redirigiendo a login');
-                toast.error('Sesión expirada. Por favor, inicia sesión de nuevo.');
-                router.push('/login');
-                return;
-            }
-
-            console.log('[RECAUDACIONES] Haciendo petición a /api/admin/revenue');
-
-            const response = await fetch('/api/admin/revenue', {
-                headers: {
-                    'Authorization': `Bearer ${sessionData.session.access_token}`
-                }
-            });
-
-            console.log('[RECAUDACIONES] Respuesta:', response.status, response.statusText);
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-                console.error('[RECAUDACIONES] Error del servidor:', errorData);
-                throw new Error(errorData.error || `Error HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('[RECAUDACIONES] Datos recibidos:', data.count, 'máquinas');
-            setRevenueData(data);
-            setLastUpdate(data.lastUpdate);
-
-        } catch (err: any) {
-            console.error('[RECAUDACIONES] Error completo:', err);
-            setError(err.message);
-            toast.error('Error cargando recaudaciones', {
-                description: err.message
-            });
-        } finally {
-            setLoading(false);
-        }
+  async function authenticatedFetch(url: string, init?: RequestInit) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      router.push('/login');
+      throw new Error('Sesión expirada');
     }
 
-    async function loadScrapeStatus() {
-        try {
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    return fetch(url, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${sessionData.session.access_token}`,
+      },
+    });
+  }
 
-            if (sessionError || !sessionData.session) return;
-
-            const response = await fetch('/api/admin/revenue/jobs', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${sessionData.session.access_token}`
-                }
-            });
-
-            if (!response.ok) return;
-
-            const data = await response.json();
-
-            const activeJob = data?.activeJob || null;
-            setIsScraping(Boolean(activeJob && activeJob.status === 'running'));
-            setActiveScrapePhase(activeJob?.phase || null);
-
-            if (data?.byAction) {
-                const next: Record<ScrapeAction, ScrapeTaskState> = { ...INITIAL_TASKS };
-
-                (Object.keys(SCRAPE_LABELS) as ScrapeAction[]).forEach((key) => {
-                    const job = data.byAction[key];
-                    if (!job) return;
-
-                    const mappedStatus: ScrapeTaskStatus =
-                        job.status === 'queued' ? 'queued' :
-                            job.status === 'running' ? 'running' :
-                                job.status === 'completed' ? 'success' :
-                                    job.status === 'error' ? 'error' :
-                                        'idle';
-
-                    next[key] = {
-                        status: mappedStatus,
-                        message: job.error_message || job.phase || undefined,
-                        durationSeconds: job?.result_json?.durationSeconds,
-                    };
-                });
-
-                setScrapeTasks(next);
-            }
-        } catch {
-            // Estado auxiliar, no bloqueante
-        }
+  async function loadRevenueData(showLoader = true) {
+    try {
+      if (showLoader) setLoading(true);
+      setError(null);
+      const response = await authenticatedFetch('/api/admin/revenue');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'No se pudieron cargar las recaudaciones');
+      setData(payload);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      setError(message);
+      toast.error('Error cargando recaudaciones', { description: message });
+    } finally {
+      if (showLoader) setLoading(false);
     }
+  }
 
-    function updateTask(action: ScrapeAction, next: Partial<ScrapeTaskState>) {
-        setScrapeTasks(prev => ({
-            ...prev,
-            [action]: {
-                ...prev[action],
-                ...next,
-            }
-        }));
+  async function loadJobStatus() {
+    if (!manualEnabled) return;
+
+    try {
+      const response = await authenticatedFetch('/api/admin/revenue/jobs');
+      if (!response.ok) return;
+      const payload = await response.json();
+      const latest = payload.byAction?.frekuent;
+      if (!latest) return;
+
+      const status =
+        latest.status === 'completed' ? 'success' :
+        latest.status === 'error' ? 'error' :
+        latest.status;
+
+      setJob({
+        status,
+        message: latest.error_message || latest.phase,
+        durationSeconds: latest.result_json?.durationSeconds,
+      });
+
+      if (status === 'success') {
+        await loadRevenueData(false);
+      }
+    } catch {
+      // El estado es auxiliar y no debe bloquear la lectura de recaudaciones.
     }
+  }
 
-    async function runScraping(action: ScrapeAction) {
-        try {
-            setIsSubmittingJob(true);
+  useEffect(() => {
+    loadRevenueData();
+    loadJobStatus();
+  }, []);
 
-            setScrapeTasks({ ...INITIAL_TASKS });
+  useEffect(() => {
+    if (!manualEnabled) return;
+    const interval = window.setInterval(loadJobStatus, 5000);
+    return () => window.clearInterval(interval);
+  }, [manualEnabled]);
 
-            if (action === 'all_queue') {
-                updateTask('all_queue', { status: 'running', message: 'Cola iniciada' });
-                updateTask('frekuent_daily', { status: 'queued', message: 'Esperando turno' });
-                updateTask('frekuent_monthly', { status: 'queued', message: 'Esperando turno' });
-                updateTask('televend', { status: 'queued', message: 'Esperando turno' });
-            } else {
-                updateTask(action, { status: 'running', message: 'Ejecutando' });
-            }
+  async function runFrekuentScraping() {
+    try {
+      setSubmitting(true);
+      setJob({ status: 'queued', message: 'Encolando ejecución' });
 
-            toast.info(`Iniciando ${SCRAPE_LABELS[action]}...`, {
-                description: action === 'televend' ? 'Puede tardar varios minutos' : 'Procesando recaudaciones'
-            });
+      const response = await authenticatedFetch('/api/admin/revenue/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'frekuent' }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'No se pudo encolar el scraping');
 
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-            if (sessionError || !sessionData.session) {
-                router.push('/login');
-                return;
-            }
-
-            console.log('[SCRAPE] Haciendo petición a /api/admin/revenue/jobs', { action });
-
-            const response = await fetch('/api/admin/revenue/jobs', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${sessionData.session.access_token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ action })
-            });
-
-            console.log('[SCRAPE] Respuesta recibida:', {
-                ok: response.ok,
-                status: response.status,
-                statusText: response.statusText
-            });
-
-            if (!response.ok) {
-                const responseText = await response.text();
-                console.log('[SCRAPE] Respuesta cruda:', responseText);
-
-                let errorData: any = { error: 'Error desconocido' };
-                try {
-                    errorData = JSON.parse(responseText);
-                } catch (e) {
-                    console.error('[SCRAPE] Error parseando respuesta:', e);
-                    errorData = { error: 'Respuesta no válida del servidor', raw: responseText };
-                }
-
-                console.error('[SCRAPE] Error del servidor:', errorData);
-                throw new Error(errorData.error || `Error HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('[SCRAPE] Job encolado:', data);
-
-            updateTask(action, {
-                status: 'queued',
-                message: 'En cola',
-            });
-
-            toast.success(`${SCRAPE_LABELS[action]} encolado`, {
-                description: 'Se ejecutará automáticamente por el processor'
-            });
-
-            await loadScrapeStatus();
-
-            // Refrescar tabla unos segundos después para captar resultados recientes
-            setTimeout(() => {
-                loadRevenueData();
-            }, 4000);
-
-        } catch (err: any) {
-            console.error('[SCRAPE] Error completo:', err);
-
-            if (action === 'all_queue') {
-                updateTask('all_queue', { status: 'error', message: err.message || 'Error en la cola' });
-            } else {
-                updateTask(action, { status: 'error', message: err.message || 'Error en scraping' });
-            }
-
-            toast.error('Error ejecutando scraping', {
-                description: err.message || 'Error desconocido',
-                duration: 6000
-            });
-        } finally {
-            setIsSubmittingJob(false);
-        }
+      setJob({
+        status: 'success',
+        message: 'Completado',
+        durationSeconds: payload.result?.durationSeconds,
+      });
+      await loadRevenueData(false);
+      toast.success('Scraping de Frekuent completado');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      setJob({ status: 'error', message });
+      toast.error('Error ejecutando Frekuent', { description: message });
+    } finally {
+      setSubmitting(false);
     }
+  }
 
-    function statusBadge(state: ScrapeTaskState) {
-        if (state.status === 'running') {
-            return <Badge className="bg-blue-100 text-blue-700 border-blue-200"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Ejecutando</Badge>;
-        }
-        if (state.status === 'queued') {
-            return <Badge variant="outline" className="border-amber-300 text-amber-700"><CircleDashed className="h-3 w-3 mr-1" />En cola</Badge>;
-        }
-        if (state.status === 'success') {
-            return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200"><CheckCircle2 className="h-3 w-3 mr-1" />Completado</Badge>;
-        }
-        if (state.status === 'error') {
-            return <Badge className="bg-red-100 text-red-700 border-red-200"><XCircle className="h-3 w-3 mr-1" />Error</Badge>;
-        }
-        return <Badge variant="outline" className="border-zinc-300 text-zinc-600">Idle</Badge>;
-    }
+  if (loading) return <LoadingInline message="Cargando recaudaciones..." />;
 
-    async function deleteAllMachines() {
-        try {
-            setShowDeleteAllDialog(false);
-            toast.info('Eliminando todas las máquinas...');
-
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-            if (sessionError || !sessionData.session) {
-                router.push('/login');
-                return;
-            }
-
-            const response = await fetch('/api/admin/machines', {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${sessionData.session.access_token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ deleteAll: true })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-                throw new Error(errorData.error || `Error HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-            toast.success(`${data.count || 0} máquinas eliminadas correctamente`);
-
-            // Recargar datos
-            await loadRevenueData();
-
-        } catch (err: any) {
-            console.error('[DELETE ALL] Error:', err);
-            toast.error('Error eliminando máquinas', {
-                description: err.message || 'Error desconocido',
-                duration: 6000
-            });
-        }
-    }
-
-    function formatCurrency(amount: number): string {
-        return new Intl.NumberFormat('es-ES', {
-            style: 'currency',
-            currency: 'EUR'
-        }).format(amount);
-    }
-
-    function formatDate(dateString: string | null): string {
-        if (!dateString) return 'Sin datos';
-        const date = new Date(dateString);
-        return new Intl.DateTimeFormat('es-ES', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        }).format(date);
-    }
-
-    if (loading) {
-        return <LoadingInline message="Cargando recaudaciones..." />;
-    }
-
-    return (
-        <div className="space-y-6">
-            {/* Header mejorado */}
-            <div className="bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 border border-emerald-100 rounded-2xl p-6 shadow-sm">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <div className="flex flex-col gap-2 mb-2">
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl shadow-lg">
-                                    <EuroIcon className="h-6 w-6 text-white" />
-                                </div>
-                                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900">Recaudaciones Generales</h1>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 ml-14">
-                                {!enableManualScraping && (
-                                    <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700">
-                                        Solo lectura
-                                    </Badge>
-                                )}
-                                {enableManualScraping && (
-                                    <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200 font-semibold">
-                                        Acciones manuales habilitadas
-                                    </Badge>
-                                )}
-                            </div>
-                        </div>
-                        <p className="text-sm font-semibold text-zinc-700 ml-14">
-                            Vista global de todas las máquinas del sistema • Datos de base de datos
-                        </p>
-                        {lastUpdate && (
-                            <p className="text-xs font-medium text-emerald-600 mt-2 ml-14">
-                                <Clock className="inline h-3 w-3 mr-1" />
-                                Última actualización: {formatDate(lastUpdate)}
-                            </p>
-                        )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {enableManualScraping && (
-                            <>
-                                <Button
-                                    variant="default"
-                                    size="default"
-                                    onClick={() => runScraping('frekuent_daily')}
-                                    disabled={isSubmittingJob || loading}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md font-semibold"
-                                >
-                                    {isScraping && scrapeTasks.frekuent_daily.status === 'running' ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Zap className="mr-2 h-4 w-4" />
-                                    )}
-                                    Frekuent diario
-                                </Button>
-                                <Button
-                                    variant="default"
-                                    size="default"
-                                    onClick={() => runScraping('frekuent_monthly')}
-                                    disabled={isSubmittingJob || loading}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md font-semibold"
-                                >
-                                    {isScraping && scrapeTasks.frekuent_monthly.status === 'running' ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <TrendingUp className="mr-2 h-4 w-4" />
-                                    )}
-                                    Frekuent mensual
-                                </Button>
-                                <Button
-                                    variant="default"
-                                    size="default"
-                                    onClick={() => runScraping('televend')}
-                                    disabled={isSubmittingJob || loading}
-                                    className="bg-purple-600 hover:bg-purple-700 text-white shadow-md font-semibold"
-                                >
-                                    {isScraping && scrapeTasks.televend.status === 'running' ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Zap className="mr-2 h-4 w-4" />
-                                    )}
-                                    Scraping Televend
-                                </Button>
-                                <Button
-                                    variant="default"
-                                    size="default"
-                                    onClick={() => runScraping('all_queue')}
-                                    disabled={isSubmittingJob || loading}
-                                    className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-md font-semibold"
-                                >
-                                    {isScraping && scrapeTasks.all_queue.status === 'running' ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <ListChecks className="mr-2 h-4 w-4" />
-                                    )}
-                                    Ejecutar todo en cola
-                                </Button>
-                            </>
-                        )}
-                        <Button
-                            variant="outline"
-                            size="default"
-                            onClick={loadRevenueData}
-                            disabled={loading || isSubmittingJob}
-                            className="border-emerald-300 text-emerald-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-colors font-semibold"
-                        >
-                            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                            Refrescar
-                        </Button>
-                        {enableManualScraping && revenueData && (
-                            <Button
-                                variant="destructive"
-                                size="default"
-                                onClick={() => setShowDeleteAllDialog(true)}
-                                disabled={loading || isSubmittingJob}
-                                className="bg-red-600 hover:bg-red-700 text-white shadow-md font-semibold"
-                            >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Borrar Todas las Máquinas
-                            </Button>
-                        )}
-                    </div>
-                </div>
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 p-3 shadow-lg">
+                <EuroIcon className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-zinc-900 md:text-3xl">Recaudaciones Frekuent</h1>
+                <p className="text-sm font-medium text-zinc-600">
+                  Datos diarios y del mes para {data?.count || 0} máquinas
+                </p>
+              </div>
             </div>
-
-            {enableManualScraping && (
-                <Card className="border border-zinc-200 bg-white">
-                    <CardHeader>
-                        <CardTitle className="text-zinc-900 text-base">Estado de scrapings</CardTitle>
-                        <CardDescription>
-                            {activeScrapePhase ? `Fase actual: ${activeScrapePhase}` : 'Sin ejecuciones activas'}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        {(Object.keys(SCRAPE_LABELS) as ScrapeAction[]).map((key) => {
-                            const state = scrapeTasks[key];
-                            return (
-                                <div key={key} className="rounded-lg border border-zinc-200 p-3 bg-zinc-50/40">
-                                    <div className="flex items-center justify-between gap-2 mb-2">
-                                        <p className="text-sm font-semibold text-zinc-900">{SCRAPE_LABELS[key]}</p>
-                                        {statusBadge(state)}
-                                    </div>
-                                    <p className="text-xs text-zinc-600 min-h-4">{state.message || 'Sin actividad reciente'}</p>
-                                    {typeof state.durationSeconds === 'number' && (
-                                        <p className="text-xs text-emerald-700 mt-1">Duración: {state.durationSeconds}s</p>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </CardContent>
-                </Card>
+            {data?.lastUpdate && (
+              <p className="ml-14 mt-2 text-xs font-medium text-emerald-700">
+                <Clock className="mr-1 inline h-3 w-3" />
+                Última actualización: {formatDate(data.lastUpdate)}
+              </p>
             )}
+          </div>
 
-            {error && (
-                <Card className="border-destructive">
-                    <CardContent className="pt-6">
-                        <p className="text-destructive">{error}</p>
-                    </CardContent>
-                </Card>
+          <div className="flex flex-wrap gap-2">
+            {manualEnabled && (
+              <Button
+                onClick={runFrekuentScraping}
+                disabled={submitting || job.status === 'queued' || job.status === 'running'}
+                className="bg-blue-600 text-white hover:bg-blue-700"
+              >
+                {submitting || job.status === 'running'
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <Zap className="mr-2 h-4 w-4" />}
+                Actualizar Frekuent
+              </Button>
             )}
-
-            {/* Tarjetas de Totales - Separadas por fuente */}
-            {revenueData && (<>
-                {/* Totales Generales */}
-                <div className="grid gap-4 md:grid-cols-2 w-full">
-                    <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white shadow-md hover:shadow-lg transition-shadow">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-semibold text-zinc-700">Total Diario (Hoy)</CardTitle>
-                            <div className="p-2 bg-emerald-100 rounded-lg">
-                                <DollarSign className="h-5 w-5 text-emerald-600" />
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-4xl font-bold text-zinc-900">
-                                {formatCurrency(revenueData?.totals.daily || 0)}
-                            </div>
-                            <p className="text-xs font-semibold text-zinc-600 mt-1">
-                                {revenueData?.count || 0} máquinas
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-2 border-teal-200 bg-gradient-to-br from-teal-50/50 to-white shadow-md hover:shadow-lg transition-shadow">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-semibold text-zinc-700">Total Mensual</CardTitle>
-                            <div className="p-2 bg-teal-100 rounded-lg">
-                                <TrendingUp className="h-5 w-5 text-teal-600" />
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-4xl font-bold text-zinc-900">
-                                {formatCurrency(revenueData?.totals.monthly || 0)}
-                            </div>
-                            <p className="text-xs font-semibold text-zinc-600 mt-1">
-                                Combinado
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Tarjetas separadas por fuente */}
-                <div className="grid gap-4 md:grid-cols-2 w-full">
-                    {/* Orain-Frekuent - Este mes */}
-                    <Card className="border-2 border-blue-200 bg-blue-50/30">
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-sm font-medium text-blue-900">
-                                    Máquinas Orain-Frekuent
-                                </CardTitle>
-                                <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
-                                    Este mes
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <div>
-                                <p className="text-xs text-blue-600 mb-1">Diario (Hoy)</p>
-                                <div className="text-2xl font-semibold text-blue-900">
-                                    {formatCurrency(revenueData?.totalsOrain.daily || 0)}
-                                </div>
-                            </div>
-                            <div>
-                                <p className="text-xs text-blue-600 mb-1">Mensual</p>
-                                <div className="text-2xl font-semibold text-blue-900">
-                                    {formatCurrency(revenueData?.totalsOrain.monthly || 0)}
-                                </div>
-                            </div>
-                            <p className="text-xs text-blue-600 mt-2">
-                                {revenueData?.countOrain || 0} máquinas
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    {/* Televend - Últimos 30 días */}
-                    <Card className="border-2 border-purple-200 bg-purple-50/30">
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-sm font-medium text-purple-900">
-                                    Máquinas Televend
-                                </CardTitle>
-                                <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
-                                    Últimos 30 días
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <div>
-                                <p className="text-xs text-purple-600 mb-1">Diario (Hoy)</p>
-                                <div className="text-2xl font-semibold text-purple-900">
-                                    {formatCurrency(revenueData?.totalsTelevend.daily || 0)}
-                                </div>
-                            </div>
-                            <div>
-                                <p className="text-xs text-purple-600 mb-1">Últimos 30 días</p>
-                                <div className="text-2xl font-semibold text-purple-900">
-                                    {formatCurrency(revenueData?.totalsTelevend.monthly || 0)}
-                                </div>
-                            </div>
-                            <p className="text-xs text-purple-600 mt-2">
-                                {revenueData?.countTelevend || 0} máquinas
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-            </>)}
-
-            {/* Tabla de Máquinas */}
-            {!isScraping && (<Card className="border border-zinc-200 bg-white">
-                <CardHeader>
-                    <CardTitle className="text-zinc-900">Detalle por Máquina</CardTitle>
-                    <CardDescription className="text-zinc-600">
-                        Recaudaciones brutas de cada máquina
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Tabs value={selectedPeriod} onValueChange={(v) => setSelectedPeriod(v as any)}>
-                        <TabsList className="grid w-full max-w-md grid-cols-2">
-                            <TabsTrigger value="daily">Diario (Hoy)</TabsTrigger>
-                            <TabsTrigger value="monthly">Mensual (Mixto)</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="daily" className="mt-4">
-                            <MachineTable
-                                machines={revenueData?.machines || []}
-                                period="daily"
-                                formatCurrency={formatCurrency}
-                                formatDate={formatDate}
-                            />
-                        </TabsContent>
-
-                        <TabsContent value="monthly" className="mt-4">
-                            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
-                                <p className="text-sm text-amber-800">
-                                    ⚠️ <strong>Nota:</strong> Orain-Frekuent muestra datos de <strong>"Este mes"</strong> (mes calendario),
-                                    mientras que Televend muestra <strong>"Últimos 30 días"</strong> (rolling).
-                                </p>
-                            </div>
-                            <MachineTable
-                                machines={revenueData?.machines || []}
-                                period="monthly"
-                                formatCurrency={formatCurrency}
-                                formatDate={formatDate}
-                            />
-                        </TabsContent>
-                    </Tabs>
-                </CardContent>
-            </Card>)}
-
-            {/* Dialog de confirmación para borrar todas las máquinas */}
-            <Dialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
-                <DialogContent className="light">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-red-600">
-                            <AlertTriangle className="h-5 w-5" />
-                            ¿Borrar todas las máquinas?
-                        </DialogTitle>
-                        <DialogDescription>
-                            Esta acción eliminará <strong>TODAS las máquinas</strong> de la base de datos, incluyendo:
-                        </DialogDescription>
-                        <div className="text-sm text-muted-foreground">
-                            <ul className="list-disc list-inside mt-2 space-y-1">
-                                <li>Datos de recaudaciones</li>
-                                <li>Historial de stock</li>
-                                <li>Configuraciones de máquinas</li>
-                            </ul>
-                            <div className="mt-3">
-                                <strong className="text-red-600">⚠️ Esta acción NO se puede deshacer.</strong>
-                            </div>
-                            <div className="mt-3">
-                                Puedes volver a ejecutar el scraping para obtener las máquinas de nuevo.
-                            </div>
-                        </div>
-                    </DialogHeader>
-                    <div className="flex justify-end gap-2 mt-4">
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowDeleteAllDialog(false)}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={deleteAllMachines}
-                            className="bg-red-600 hover:bg-red-700"
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Sí, Borrar Todo
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <Button variant="outline" onClick={() => loadRevenueData()} disabled={loading}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refrescar vista
+            </Button>
+          </div>
         </div>
-    );
+      </div>
+
+      {manualEnabled && <JobStatusCard job={job} />}
+
+      {error && (
+        <Card className="border-red-200">
+          <CardContent className="pt-6 text-red-700">{error}</CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <TotalCard
+          title="Total de hoy"
+          amount={data?.totals.daily || 0}
+          subtitle={`${data?.count || 0} máquinas Frekuent`}
+          icon={<DollarSign className="h-5 w-5 text-emerald-600" />}
+        />
+        <TotalCard
+          title="Total de este mes"
+          amount={data?.totals.monthly || 0}
+          subtitle="Mes natural"
+          icon={<TrendingUp className="h-5 w-5 text-teal-600" />}
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Detalle por máquina</CardTitle>
+          <CardDescription>Recaudaciones brutas obtenidas de Frekuent</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="daily">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="daily">Hoy</TabsTrigger>
+              <TabsTrigger value="monthly">Este mes</TabsTrigger>
+            </TabsList>
+            <TabsContent value="daily" className="mt-4">
+              <MachineTable machines={data?.machines || []} period="daily" />
+            </TabsContent>
+            <TabsContent value="monthly" className="mt-4">
+              <MachineTable machines={data?.machines || []} period="monthly" />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
-interface MachineTableProps {
-    machines: MachineRevenue[];
-    period: 'daily' | 'monthly';
-    formatCurrency: (amount: number) => string;
-    formatDate: (dateString: string | null) => string;
+function JobStatusCard({ job }: { job: JobState }) {
+  const badge =
+    job.status === 'running' ? <Badge className="bg-blue-100 text-blue-700"><Loader2 className="mr-1 h-3 w-3 animate-spin" />Ejecutando</Badge> :
+    job.status === 'queued' ? <Badge variant="outline" className="text-amber-700"><CircleDashed className="mr-1 h-3 w-3" />En cola</Badge> :
+    job.status === 'success' ? <Badge className="bg-emerald-100 text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />Completado</Badge> :
+    job.status === 'error' ? <Badge className="bg-red-100 text-red-700"><XCircle className="mr-1 h-3 w-3" />Error</Badge> :
+    <Badge variant="outline">Sin actividad</Badge>;
+
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-between gap-4 pt-6">
+        <div>
+          <p className="font-semibold text-zinc-900">Estado del scraping Frekuent</p>
+          <p className="text-sm text-zinc-600">{job.message || 'Sin ejecuciones recientes'}</p>
+          {typeof job.durationSeconds === 'number' && (
+            <p className="text-xs text-emerald-700">Duración: {job.durationSeconds}s</p>
+          )}
+        </div>
+        {badge}
+      </CardContent>
+    </Card>
+  );
 }
 
-function MachineTable({ machines, period, formatCurrency, formatDate }: MachineTableProps) {
-    const [expandedMobile, setExpandedMobile] = useState<string | null>(null);
+function TotalCard({
+  title,
+  amount,
+  subtitle,
+  icon,
+}: {
+  title: string;
+  amount: number;
+  subtitle: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <Card className="border-2 border-emerald-100">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm text-zinc-700">{title}</CardTitle>
+        <div className="rounded-lg bg-emerald-50 p-2">{icon}</div>
+      </CardHeader>
+      <CardContent>
+        <div className="text-4xl font-bold text-zinc-900">{formatCurrency(amount)}</div>
+        <p className="mt-1 text-xs text-zinc-600">{subtitle}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
-    const toggleMobileExpand = (machineId: string) => {
-        setExpandedMobile(expandedMobile === machineId ? null : machineId);
-    };
+function MachineTable({
+  machines,
+  period,
+}: {
+  machines: MachineRevenue[];
+  period: 'daily' | 'monthly';
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Máquina</TableHead>
+            <TableHead>Ubicación</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+            <TableHead>Actualización</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {machines.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="py-12 text-center text-zinc-500">
+                No hay datos de Frekuent disponibles.
+              </TableCell>
+            </TableRow>
+          ) : machines.map((machine) => {
+            const revenue = machine[period];
+            return (
+              <TableRow key={machine.id}>
+                <TableCell className="font-medium">{machine.name}</TableCell>
+                <TableCell>{machine.location || 'Sin ubicación'}</TableCell>
+                <TableCell className="text-right font-bold">{formatCurrency(revenue.total)}</TableCell>
+                <TableCell className="text-sm text-zinc-600">{formatDate(revenue.updatedAt)}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
-    return (
-        <>
-            {/* Vista Móvil - Lista de Cards */}
-            <div className="block md:hidden space-y-3">
-                {machines.length === 0 ? (
-                    <div className="text-center text-zinc-500 py-12 border rounded-lg">
-                        No hay datos de recaudación disponibles. Los datos se actualizan automáticamente cada hora.
-                    </div>
-                ) : (
-                    machines.map((machine) => {
-                        const data = machine[period];
-                        const isOrain = machine.source === 'orain';
-                        const isExpanded = expandedMobile === machine.id;
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
+}
 
-                        return (
-                            <div
-                                key={machine.id}
-                                className="border border-zinc-200 rounded-lg bg-white overflow-hidden"
-                            >
-                                <button
-                                    onClick={() => toggleMobileExpand(machine.id)}
-                                    className="w-full p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors"
-                                >
-                                    <div className="flex-1 text-left">
-                                        <div className="font-semibold text-zinc-900 mb-1">{machine.name}</div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge
-                                                variant="outline"
-                                                className={isOrain
-                                                    ? "bg-blue-100 text-blue-800 border-blue-300 text-xs"
-                                                    : "bg-purple-100 text-purple-800 border-purple-300 text-xs"
-                                                }
-                                            >
-                                                {isOrain ? 'Orain' : 'Televend'}
-                                            </Badge>
-                                            {machine.location && (
-                                                <span className="text-xs text-zinc-600">{machine.location}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        {isExpanded && (
-                                            <span className="font-bold text-zinc-900 mr-2">
-                                                {formatCurrency(data.total)}
-                                            </span>
-                                        )}
-                                        {isExpanded ? (
-                                            <ChevronUp className="h-5 w-5 text-zinc-400" />
-                                        ) : (
-                                            <ChevronDown className="h-5 w-5 text-zinc-400" />
-                                        )}
-                                    </div>
-                                </button>
-                                {isExpanded && (
-                                    <div className="px-4 pb-4 pt-2 border-t border-zinc-100 bg-zinc-50/50">
-                                        <div className="space-y-2 text-sm">
-                                            <div className="flex justify-between">
-                                                <span className="text-zinc-600">Total:</span>
-                                                <span className="font-bold text-zinc-900">{formatCurrency(data.total)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-zinc-600">Última actualización:</span>
-                                                <span className="text-zinc-700">{formatDate(data.updatedAt)}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })
-                )}
-            </div>
-
-            {/* Vista Desktop - Tabla */}
-            <div className="hidden md:block rounded-lg border border-zinc-200 overflow-x-auto bg-white">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-zinc-50 border-b border-zinc-200 hover:bg-zinc-50">
-                            <TableHead className="font-semibold text-zinc-900">Máquina</TableHead>
-                            <TableHead className="font-semibold text-zinc-900">Fuente</TableHead>
-                            <TableHead className="font-semibold text-zinc-900">Ubicación</TableHead>
-                            <TableHead className="text-right font-semibold text-zinc-900">Total</TableHead>
-                            <TableHead className="font-semibold text-zinc-900">Última Actualización</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {machines.length === 0 ? (
-                            <TableRow className="hover:bg-white">
-                                <TableCell colSpan={7} className="text-center text-zinc-500 py-12">
-                                    No hay datos de recaudación disponibles. Los datos se actualizan automáticamente cada hora.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            machines.map((machine) => {
-                                const data = machine[period];
-                                const isOrain = machine.source === 'orain';
-
-                                return (
-                                    <TableRow
-                                        key={machine.id}
-                                        className="border-b border-zinc-100 hover:bg-zinc-50/50 transition-colors"
-                                    >
-                                        <TableCell className="font-medium text-zinc-900">{machine.name}</TableCell>
-                                        <TableCell>
-                                            <Badge
-                                                variant="outline"
-                                                className={isOrain
-                                                    ? "bg-blue-100 text-blue-800 border-blue-300 font-medium"
-                                                    : "bg-purple-100 text-purple-800 border-purple-300 font-medium"
-                                                }
-                                            >
-                                                {isOrain ? 'Orain-Frekuent' : 'Televend'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-zinc-700">{machine.location || 'Sin ubicación'}</TableCell>
-                                        <TableCell className="text-right font-bold text-zinc-900 text-base">
-                                            {formatCurrency(data.total)}
-                                        </TableCell>
-                                        <TableCell className="text-sm text-zinc-600">
-                                            {formatDate(data.updatedAt)}
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-        </>
-    );
+function formatDate(value: string | null) {
+  if (!value) return 'Sin datos';
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }

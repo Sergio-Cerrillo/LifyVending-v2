@@ -334,30 +334,3 @@ export async function getScrapingStatus(): Promise<ScrapingStatus | null> {
     return null;
   }
 }
-
-/**
- * Ejecutar scraping manualmente (trigger API)
- */
-export async function triggerManualScraping(): Promise<{
-  success: boolean;
-  error?: string;
-}> {
-  try {
-    const response = await fetch('/api/admin/force-scrape', {
-      method: 'POST',
-    });
-    
-    if (!response.ok) {
-      const error = await response.text();
-      return { success: false, error };
-    }
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Error triggering scraping:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Error desconocido',
-    };
-  }
-}

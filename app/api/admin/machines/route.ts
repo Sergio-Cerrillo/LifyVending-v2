@@ -37,16 +37,17 @@ export async function GET(request: NextRequest) {
     const { data: machines, error } = await supabaseAdmin
       .from('machines')
       .select('*')
+      .or('frekuent_machine_id.not.is.null,orain_machine_id.not.is.null')
       .order('name', { ascending: true });
 
     if (error) {
       throw new Error(`Error obteniendo máquinas: ${error.message}`);
     }
 
-    // Añadir campo source a cada máquina
+    // La interfaz activa trabaja exclusivamente con Frekuent.
     const machinesWithSource = (machines || []).map(machine => ({
       ...machine,
-      source: machine.orain_machine_id ? 'orain' : 'televend'
+      source: 'frekuent'
     }));
 
     return NextResponse.json({

@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
-import type { RevenueJobAction } from '@/lib/services/revenue-scrape-runner';
+import {
+  executeRevenueJob,
+  type RevenueJobAction,
+} from '@/lib/services/revenue-scrape-runner';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 type JobStatus = 'queued' | 'running' | 'completed' | 'error' | 'canceled';
 
-const VALID_ACTIONS: RevenueJobAction[] = ['frekuent_daily', 'frekuent_monthly', 'televend', 'all_queue'];
+const VALID_ACTIONS: RevenueJobAction[] = ['frekuent'];
 
 async function requireAdmin(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -92,20 +96,9 @@ export async function POST(request: NextRequest) {
     .order('requested_at', { ascending: true });
 
   const active = activeRows || [];
-  const hasAllQueueActive = active.some((row: any) => row.action === 'all_queue');
   const hasSameActionActive = active.some((row: any) => row.action === action);
 
-  if (action === 'all_queue' && active.length > 0) {
-    return NextResponse.json(
-      {
-        error: 'No se puede encolar all_queue mientras hay jobs activos',
-        active,
-      },
-      { status: 409 }
-    );
-  }
-
-  if (action !== 'all_queue' && (hasAllQueueActive || hasSameActionActive)) {
+  if (hasSameActionActive) {
     return NextResponse.json(
       {
         error: 'Ya existe un job activo para esta acción',
@@ -120,11 +113,12 @@ export async function POST(request: NextRequest) {
     .from('revenue_scrape_jobs' as any)
     .insert({
       action,
-      status: 'queued',
-      phase: 'queued',
-      progress: 0,
+      status: 'running',
+      phase: 'validating',
+      progress: 1,
       requested_by_user_id: auth.user.id,
       requested_at: now,
+      started_at: now,
     })
     .select('*')
     .single();
@@ -136,9 +130,47 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({
-    success: true,
-    message: 'Job encolado correctamente',
-    job: inserted,
-  });
+  try {
+    const result = await executeRevenueJob(action, async ({ phase, progress, message }) => {
+      await supabaseAdmin
+        .from('revenue_scrape_jobs' as any)
+        .update({ phase, progress, error_message: message || null })
+        .eq('id', inserted.id);
+    });
+
+    const finishedAt = new Date().toISOString();
+    await supabaseAdmin
+      .from('revenue_scrape_jobs' as any)
+      .update({
+        status: 'completed',
+        phase: 'completed',
+        progress: 100,
+        finished_at: finishedAt,
+        result_json: result,
+        error_message: null,
+      })
+      .eq('id', inserted.id);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Scraping completado correctamente',
+      job: { ...inserted, status: 'completed', result_json: result },
+      result,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error ejecutando Frekuent';
+
+    await supabaseAdmin
+      .from('revenue_scrape_jobs' as any)
+      .update({
+        status: 'error',
+        phase: 'error',
+        progress: 100,
+        finished_at: new Date().toISOString(),
+        error_message: message,
+      })
+      .eq('id', inserted.id);
+
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

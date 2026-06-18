@@ -78,7 +78,7 @@ interface Machine {
   id: string;
   name: string;
   location: string | null;
-  source?: 'orain' | 'televend'; // Fuente de la máquina
+  source?: 'frekuent';
 }
 
 export default function AdminClientDetailPage() {
@@ -531,8 +531,7 @@ export default function AdminClientDetailPage() {
             <div className="space-y-3">
               {allMachines.map((machine) => {
                 const isSelected = selectedMachineIds.has(machine.id);
-                const isOrain = machine.source === 'orain';
-                return (
+                          return (
                   <div
                     key={machine.id}
                     className={`flex items-center space-x-3 p-3 border rounded-lg transition-all ${
@@ -555,12 +554,9 @@ export default function AdminClientDetailPage() {
                         {machine.source && (
                           <Badge 
                             variant="outline" 
-                            className={`text-xs ${isOrain 
-                              ? "bg-blue-50 text-blue-700 border-blue-300" 
-                              : "bg-purple-50 text-purple-700 border-purple-300"
-                            }`}
+                            className="bg-blue-50 text-xs text-blue-700 border-blue-300"
                           >
-                            {isOrain ? 'Orain-Frekuent' : 'Televend'}
+                            Frekuent
                           </Badge>
                         )}
                       </div>

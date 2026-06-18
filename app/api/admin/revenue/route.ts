@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
     const { data: machines, error } = await supabaseAdmin
       .from('machines')
       .select('*')
+      .or('frekuent_machine_id.not.is.null,orain_machine_id.not.is.null')
       .order('name', { ascending: true });
 
     if (error) {
@@ -69,16 +70,13 @@ export async function GET(request: NextRequest) {
 
     // Formatear datos (solo daily y monthly, weekly eliminado)
     const formattedMachines = (machines || []).map((machine: any) => {
-      // Determinar la fuente de la máquina (checar ambos orain_machine_id y frekuent_machine_id)
-      const source = (machine.orain_machine_id || machine.frekuent_machine_id) ? 'orain' : 'televend';
-      
       return {
         id: machine.id,
         name: machine.name,
         location: machine.location,
         status: machine.status,
         lastScraped: machine.last_scraped_at,
-        source: source, // 'orain' o 'televend'
+        source: 'frekuent',
         daily: {
           total: machine.daily_total || 0,
           card: machine.daily_card || 0,
@@ -93,27 +91,6 @@ export async function GET(request: NextRequest) {
         }
       };
     });
-
-    // Calcular totales separados por fuente
-    const totalsOrain = formattedMachines
-      .filter((m: any) => m.source === 'orain')
-      .reduce(
-        (acc: { daily: number; monthly: number }, machine: any) => ({
-          daily: acc.daily + machine.daily.total,
-          monthly: acc.monthly + machine.monthly.total
-        }), 
-        { daily: 0, monthly: 0 }
-      );
-
-    const totalsTelevend = formattedMachines
-      .filter((m: any) => m.source === 'televend')
-      .reduce(
-        (acc: { daily: number; monthly: number }, machine: any) => ({
-          daily: acc.daily + machine.daily.total,
-          monthly: acc.monthly + machine.monthly.total
-        }), 
-        { daily: 0, monthly: 0 }
-      );
 
     // Calcular totales generales
     const totals = formattedMachines.reduce(
@@ -137,11 +114,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       machines: formattedMachines,
       totals,
-      totalsOrain,
-      totalsTelevend,
       count: formattedMachines.length,
-      countOrain: formattedMachines.filter((m: any) => m.source === 'orain').length,
-      countTelevend: formattedMachines.filter((m: any) => m.source === 'televend').length,
       lastUpdate
     });
 

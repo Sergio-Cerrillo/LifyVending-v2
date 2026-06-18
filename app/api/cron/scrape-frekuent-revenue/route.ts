@@ -4,6 +4,7 @@ import { executeRevenueJob } from '@/lib/services/revenue-scrape-runner';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 function getAuthOk(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     scrapeRunId = scrapeRun?.id || null;
 
-    const result = await executeRevenueJob('frekuent_daily');
+    const result = await executeRevenueJob('frekuent');
 
     if (scrapeRunId) {
       await supabaseAdmin
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      action: 'frekuent_daily',
+      action: 'frekuent',
       scrapeRunId,
       result,
     });
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        action: 'frekuent_daily',
+        action: 'frekuent',
         scrapeRunId,
         error: message,
       },

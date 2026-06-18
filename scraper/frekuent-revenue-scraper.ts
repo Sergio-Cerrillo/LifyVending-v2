@@ -180,11 +180,11 @@ function normalizeBrowserlessEndpoint(endpoint: string, apiKey?: string): string
   }
 
   if (isBrowserless && !url.searchParams.get('timeout')) {
-    const timeoutRaw = parseInt(process.env.BROWSERLESS_TIMEOUT_SECONDS || '900', 10);
+    const timeoutRaw = parseInt(process.env.BROWSERLESS_TIMEOUT_SECONDS || '60', 10);
     const timeoutSeconds = Number.isFinite(timeoutRaw)
-      ? Math.max(1, Math.min(60000, timeoutRaw))
-      : 900;
-    url.searchParams.set('timeout', String(timeoutSeconds));
+      ? Math.max(1, Math.min(3600, timeoutRaw))
+      : 60;
+    url.searchParams.set('timeout', String(timeoutSeconds * 1000));
   }
 
   return url.toString();
@@ -202,8 +202,8 @@ function getBrowserlessEndpoint(): string | null {
 
   if (!apiKey) return null;
 
-  // Endpoint por defecto de Browserless cloud para Puppeteer.
-  return normalizeBrowserlessEndpoint(`wss://chrome.browserless.io?token=${apiKey}`);
+  // Shared fleet europea, cercana a la región de despliegue y compatible con BaaS v2.
+  return normalizeBrowserlessEndpoint(`wss://production-ams.browserless.io?token=${apiKey}`);
 }
 
 async function launchFrekuentBrowser(): Promise<Browser> {
@@ -428,18 +428,10 @@ async function setDateFilter(
     console.log(`[FREKUENT] ✅ Click en botón: "${buttonClicked.text}"`);
     console.log('[FREKUENT] ⏳ Esperando menú desplegable...');
     
-    // 4. Esperar a que aparezca el menú/dropdown en el DOM
-    // Aumentamos el tiempo y usamos waitForSelector para mayor confiabilidad
-    try {
-      await page.waitForSelector('.ant-dropdown:not(.ant-dropdown-hidden), [role="menu"]:not([style*="display: none"])', {
-        visible: true,
-        timeout: 5000
-      });
-      console.log('[FREKUENT] ✅ Menú desplegable detectado');
-    } catch (error) {
-      console.warn('[FREKUENT] ⚠️ No se detectó menú con waitForSelector, esperando 3s...');
-      await sleep(3000);
-    }
+    // Ant Design renderiza este menú en un portal que no coincide de forma
+    // estable con sus selectores públicos. Una espera breve permite que aparezca
+    // sin consumir ocho segundos buscando un selector que nunca se detecta.
+    await sleep(1000);
     
     // Verificar que el menú está visible y listar opciones
     const menuInfo = await page.evaluate(() => {
@@ -636,8 +628,7 @@ async function setDateFilter(
     }
     
     if (!clicked) {
-      console.warn(`[FREKUENT] ⚠️  No se encontró "${targetText}" en el menú ni en la página`);
-      return;
+      throw new Error(`No se encontró "${targetText}" en el selector de fecha`);
     }
     
     // 6. IMPORTANTE: Verificar que el botón cambió su texto después del click
@@ -828,6 +819,24 @@ async function setTableEntries(page: Page): Promise<void> {
     }
     
     console.log('[FREKUENT] ✅ Tabla encontrada en la página');
+
+    const visibleMachineRows = await page.evaluate(() => {
+      const table = document.querySelector<HTMLTableElement>(
+        'table[data-frekuent-machine-table="true"]'
+      );
+      if (!table) return 0;
+      return Array.from(table.querySelectorAll('tbody tr'))
+        .filter(row => !row.hasAttribute('aria-hidden') && row.querySelectorAll('td').length >= 5)
+        .length;
+    });
+
+    // La preferencia de 100 filas queda guardada en la cuenta de Frekuent.
+    // Si ya vemos todas las máquinas evitamos abrir el selector y esperar 5 segundos.
+    if (visibleMachineRows > 50) {
+      console.log(`[FREKUENT] ✅ Ya hay ${visibleMachineRows} máquinas visibles; no se cambia la paginación`);
+      return;
+    }
+
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Paso 1: Buscar y hacer click en el selector de paginación usando Puppeteer
@@ -1219,7 +1228,10 @@ export async function scrapeFrekuentRevenueMultiple(
       timeout: 30000
     });
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await page.waitForSelector(
+      'input[name="username"], input#username, input[type="email"], input[name="email"]',
+      { timeout: 10000 }
+    );
     
     // Debug: Verificar que estamos en la página de login
     const loginPageUrl = page.url();
@@ -1304,148 +1316,13 @@ export async function scrapeFrekuentRevenueMultiple(
     console.log('[FREKUENT] ✅ Login completado');
 
     // ============================================
-    // 3. NAVEGAR A PUNTOS DE VENTA (USANDO MENÚ)
+    // 3. NAVEGAR DIRECTAMENTE A PUNTOS DE VENTA
     // ============================================
-    console.log('[FREKUENT] 📍 Navegando a Puntos de Venta usando menú...');
-    
-    // Esperar a que cargue la interfaz de Frekuent
-    console.log('[FREKUENT] ⏳ Esperando carga de interfaz (5s)...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    // Debug: Ver qué hay en la página después del login
-    const pageDebugInitial = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a, button, div[role="button"], li, nav a'));
-      const menuTexts = links
-        .map(link => link.textContent?.trim())
-        .filter(text => text && text.length > 0 && text.length < 100)
-        .slice(0, 30);
-      
-      return {
-        url: window.location.href,
-        title: document.title,
-        menuItems: menuTexts,
-        hasNav: !!document.querySelector('nav'),
-        hasSidebar: !!document.querySelector('aside, [class*="sidebar"]')
-      };
+    console.log('[FREKUENT] 📍 Navegando directamente a Puntos de Venta...');
+    await page.goto(FREKUENT_POINTS_OF_SALE_URL, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
     });
-    
-    console.log('[FREKUENT] 🔍 Elementos de menú encontrados:', JSON.stringify(pageDebugInitial.menuItems, null, 2));
-    console.log(`[FREKUENT] 📍 URL actual: ${pageDebugInitial.url}`);
-    
-    // Paso 1: Click en "Frekuent Spots" en el menú lateral
-    console.log('[FREKUENT] 🖱️ Paso 1: Buscando menú "Frekuent Spots"...');
-    
-    const frekuentSpotsResult = await page.evaluate(() => {
-      // Buscar elementos que puedan ser el menú "Frekuent Spots"
-      const allElements = Array.from(document.querySelectorAll('a, button, div[role="button"], li, nav a, [class*="menu"] a, [class*="nav"] a'));
-      
-      console.log(`[FREKUENT] [EVAL] Buscando entre ${allElements.length} elementos`);
-      
-      // Buscar "frekuent" y "spot" en el texto
-      for (const elem of allElements) {
-        const text = elem.textContent?.trim().toLowerCase() || '';
-        
-        if ((text.includes('frekuent') && text.includes('spot')) || text === 'frekuent spots') {
-          console.log(`[FREKUENT] [EVAL] 🎯 Encontrado: "${elem.textContent?.trim()}"`);
-          (elem as HTMLElement).click();
-          return { success: true, clickedText: elem.textContent?.trim() };
-        }
-      }
-      
-      console.warn('[FREKUENT] [EVAL] ⚠️ No se encontró "Frekuent Spots"');
-      return { success: false };
-    });
-    
-    if (!frekuentSpotsResult.success) {
-      console.warn('[FREKUENT] ⚠️ No se pudo hacer click en "Frekuent Spots"');
-    } else {
-      console.log(`[FREKUENT] ✅ Click en "${frekuentSpotsResult.clickedText}"`);
-      
-      // Esperar a que se expanda el menú (puede ser un acordeón)
-      console.log('[FREKUENT] ⏳ Esperando expansión del submenú (4s)...');
-      await new Promise(resolve => setTimeout(resolve, 4000));
-    }
-    
-    // Paso 2: Click en "Puntos de venta" en el submenú
-    console.log('[FREKUENT] 🖱️ Paso 2: Buscando "Puntos de venta"...');
-    
-    // Debug: Ver qué elementos hay ahora (debe incluir el submenú expandido)
-    const subMenuItems = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a, button, div[role="button"], li'));
-      return links
-        .map(link => link.textContent?.trim())
-        .filter(text => text && text.length > 0 && text.length < 100);
-    });
-    
-    console.log('[FREKUENT] 🔍 Total de elementos clickeables:', subMenuItems.length);
-    console.log('[FREKUENT] 🔍 Primeros 50 elementos:', JSON.stringify(subMenuItems.slice(0, 50), null, 2));
-    
-    const puntosDeVentaResult = await page.evaluate(() => {
-      const allElements = Array.from(document.querySelectorAll('a, button, div[role="button"], li, nav a'));
-      
-      console.log(`[FREKUENT] [EVAL] Buscando "Puntos de venta" entre ${allElements.length} elementos`);
-      
-      for (const elem of allElements) {
-        const text = elem.textContent?.trim().toLowerCase() || '';
-   const href = (elem as HTMLAnchorElement).href || '';
-        
-        // Buscar coincidencia exacta o parcial con "puntos de venta"
-        if (text === 'puntos de venta' || 
-            (text.includes('puntos') && text.includes('venta')) ||
-            text.includes('points-of-sale') ||
-            href.includes('points-of-sale')) {
-          console.log(`[FREKUENT] [EVAL] ✅ Click en "${elem.textContent?.trim()}" (href: ${href})`);
-          (elem as HTMLElement).click();
-          return { success: true, clickedText: elem.textContent?.trim(), href };
-        }
-      }
-      
-      console.warn('[FREKUENT] [EVAL] ⚠️ No se encontró "Puntos de venta"');
-      
-      // Debug: mostrar elementos que contienen "punto" o "venta"
-      const related = allElements
-        .filter(el => {
-          const t = el.textContent?.trim().toLowerCase() || '';
-          return t.includes('punto') || t.includes('venta') || t.includes('sale');
-        })
-        .map(el => ({
-          text: el.textContent?.trim(),
-          href: (el as HTMLAnchorElement).href || null
-        }));
-      
-      console.log('[FREKUENT] [EVAL] Elementos relacionados con punto/venta:', related);
-      
-      return { success: false };
-    });
-    
-    if (!puntosDeVentaResult.success) {
-      console.warn('[FREKUENT] ⚠️ No se pudo hacer click en "Puntos de venta"');
-      console.warn('[FREKUENT] ⚠️ El submenú puede NO haberse expandido correctamente');
-      
-      // FALLBACK: Intentar navegar directamente por URL
-      console.log('[FREKUENT] 🔄 Intentando navegación directa a Puntos de venta...');
-      try {
-        await page.goto(FREKUENT_POINTS_OF_SALE_URL, {
-          waitUntil: 'networkidle2',
-          timeout: 20000
-        });
-        console.log('[FREKUENT] ✅ Navegación directa realizada');
-        await sleep(2500);
-      } catch (navError) {
-        console.error('[FREKUENT] ❌ Error en navegación directa:', navError);
-      }
-    } else {
-      console.log(`[FREKUENT] ✅ Click en "${puntosDeVentaResult.clickedText}"`);
-      if (puntosDeVentaResult.href) {
-        console.log(`[FREKUENT] 🔗 URL destino: ${puntosDeVentaResult.href}`);
-      }
-      
-      console.log('[FREKUENT] 🖱️ Abriendo pestaña "Tus puntos de venta"...');
-      await page.goto(FREKUENT_POINTS_OF_SALE_URL, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000
-      });
-    }
 
     const pointsReady = await waitForPointsOfSaleReady(page);
     if (!pointsReady) {

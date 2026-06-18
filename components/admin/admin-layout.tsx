@@ -31,6 +31,7 @@ interface NavItem {
   icon: React.ReactNode;
   roles?: string[];
   external?: boolean;
+  disabled?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -70,6 +71,7 @@ const navItems: NavItem[] = [
     href: '/admin/stock',
     icon: <PackageSearch className="h-5 w-5" />,
     roles: ['admin', 'operador'],
+    disabled: true,
   },
   {
     title: 'Nóminas',
@@ -106,17 +108,14 @@ function Sidebar({ className }: { className?: string }) {
             <p className="-mt-20 text-xs font-semibold text-emerald-700">Panel de Administración</p>
           </div>
           <div className="space-y-1">
-            {filteredNavItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                target={item.external ? '_blank' : undefined}
-                rel={item.external ? 'noopener noreferrer' : undefined}
-              >
+            {filteredNavItems.map((item) => {
+              const button = (
                 <Button
                   variant="ghost"
+                  disabled={item.disabled}
                   className={cn(
                     "w-full justify-start text-sm font-medium transition-all duration-200 rounded-lg",
+                    item.disabled && 'cursor-not-allowed opacity-50',
                     pathname === item.href
                       ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm'
                       : 'text-zinc-700 hover:bg-white hover:text-emerald-600 hover:shadow-sm'
@@ -124,9 +123,25 @@ function Sidebar({ className }: { className?: string }) {
                 >
                   {item.icon}
                   <span className="ml-3">{item.title}</span>
+                  {item.disabled && <span className="ml-auto text-[10px] uppercase">Próximamente</span>}
                 </Button>
-              </Link>
-            ))}
+              );
+
+              if (item.disabled) {
+                return <div key={item.href} title="Módulo en preparación">{button}</div>;
+              }
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  target={item.external ? '_blank' : undefined}
+                  rel={item.external ? 'noopener noreferrer' : undefined}
+                >
+                  {button}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>

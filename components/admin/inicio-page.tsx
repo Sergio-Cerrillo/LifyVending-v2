@@ -3,7 +3,6 @@
 import { useAuth } from '@/contexts/auth-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PackageSearch, Clock } from 'lucide-react';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function InicioPage() {
@@ -49,7 +48,7 @@ export default function InicioPage() {
 
             {/* Tarjeta de acceso rápido */}
             <div className="grid gap-6 md:grid-cols-1">
-                <Card className="bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:shadow-xl transition-all duration-300 cursor-pointer group">
+                <Card className="bg-white border-2 border-zinc-200 opacity-70">
                     <CardHeader className="pb-3 bg-gradient-to-br from-emerald-50 to-teal-50 border-b border-emerald-100">
                         <div className="flex items-center justify-between">
                             <CardTitle className="flex items-center gap-3 text-xl">
@@ -65,11 +64,9 @@ export default function InicioPage() {
                             Accede al inventario de todas las máquinas vending. Consulta productos,
                             cantidades disponibles y realiza actualizaciones de stock.
                         </p>
-                        <Link href="/admin/stock">
-                            <Button className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-semibold py-6 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
-                                Ir al Stock
-                            </Button>
-                        </Link>
+                        <Button disabled className="w-full py-6 rounded-xl">
+                            Módulo en preparación
+                        </Button>
                     </CardContent>
                 </Card>
             </div>
@@ -87,7 +84,7 @@ export default function InicioPage() {
                         <div>
                             <p className="font-semibold text-sm text-zinc-900 mb-1">Gestión de Inventario</p>
                             <p className="text-sm text-zinc-700 leading-relaxed">
-                                Consulta y gestiona el stock de productos en tiempo real
+                                El módulo de stock está temporalmente deshabilitado mientras termina su validación.
                             </p>
                         </div>
                     </div>
