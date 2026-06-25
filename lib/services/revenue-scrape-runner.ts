@@ -43,14 +43,39 @@ function round2(value: number): number {
 }
 
 function requireFrekuentCredentials() {
-  const username = process.env.FREKUENT_USERNAME || process.env.ORAIN_USERNAME;
-  const password = process.env.FREKUENT_PASSWORD || process.env.ORAIN_PASSWORD;
+  const clean = (value?: string) => {
+    const trimmed = value?.trim();
+    if (!trimmed) return '';
 
-  if (!username || !password) {
-    throw new Error('Faltan credenciales de Frekuent/Orain');
+    const isWrapped =
+      (trimmed.startsWith('"') && trimmed.endsWith('"'))
+      || (trimmed.startsWith("'") && trimmed.endsWith("'"));
+
+    return isWrapped ? trimmed.slice(1, -1).trim() : trimmed;
+  };
+
+  const frekuentUsername = clean(process.env.FREKUENT_USERNAME);
+  const frekuentPassword = clean(process.env.FREKUENT_PASSWORD);
+  const legacyUsername = clean(process.env.ORAIN_USERNAME);
+  const legacyPassword = clean(process.env.ORAIN_PASSWORD);
+
+  const hasCompleteFrekuentPair = Boolean(frekuentUsername && frekuentPassword);
+  const hasCompleteLegacyPair = Boolean(legacyUsername && legacyPassword);
+
+  if (hasCompleteFrekuentPair) {
+    console.log('[REVENUE RUNNER] Credenciales seleccionadas: FREKUENT_*');
+    return { username: frekuentUsername, password: frekuentPassword };
   }
 
-  return { username, password };
+  if (hasCompleteLegacyPair) {
+    console.log('[REVENUE RUNNER] Credenciales seleccionadas: ORAIN_*');
+    return { username: legacyUsername, password: legacyPassword };
+  }
+
+  throw new Error(
+    'Configura una pareja completa: FREKUENT_USERNAME + FREKUENT_PASSWORD '
+    + 'u ORAIN_USERNAME + ORAIN_PASSWORD'
+  );
 }
 
 async function saveFrekuentRevenueBulk(
