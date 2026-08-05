@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import dotenv from 'dotenv';
-import { executeRevenueJob } from '../lib/services/revenue-scrape-runner';
 
 dotenv.config({ path: '.env.local' });
 
 async function main() {
+  const { executeRevenueJob } = await import('../lib/services/revenue-scrape-runner');
   const startedAt = Date.now();
   console.log('[FREKUENT] Iniciando scraping diario y mensual...');
 

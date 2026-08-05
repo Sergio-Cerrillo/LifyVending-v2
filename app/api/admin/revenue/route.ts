@@ -57,12 +57,33 @@ export async function GET(request: NextRequest) {
       }, { status: 403 });
     }
 
-    // Obtener todas las máquinas con sus datos de recaudación
-    const { data: machines, error } = await supabaseAdmin
+    const frekuentFilter = 'frekuent_machine_id.not.is.null,orain_machine_id.not.is.null';
+
+    const { data: latestMachine, error: latestError } = await supabaseAdmin
+      .from('machines')
+      .select('last_scraped_at')
+      .or(frekuentFilter)
+      .not('last_scraped_at', 'is', null)
+      .order('last_scraped_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestError) {
+      throw new Error(`Error obteniendo última actualización: ${latestError.message}`);
+    }
+
+    let machinesQuery = supabaseAdmin
       .from('machines')
       .select('*')
-      .or('frekuent_machine_id.not.is.null,orain_machine_id.not.is.null')
+      .or(frekuentFilter)
       .order('name', { ascending: true });
+
+    if (latestMachine?.last_scraped_at) {
+      machinesQuery = machinesQuery.eq('last_scraped_at', latestMachine.last_scraped_at);
+    }
+
+    // Obtener máquinas con datos de la última tanda de recaudación
+    const { data: machines, error } = await machinesQuery;
 
     if (error) {
       throw new Error(`Error obteniendo máquinas: ${error.message}`);

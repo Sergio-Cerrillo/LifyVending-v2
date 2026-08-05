@@ -136,7 +136,7 @@ async function saveFrekuentRevenueBulk(
     const existing = existingByExternalId.get(frekuentId);
     if (!existing) machinesCreated += 1;
 
-    return {
+    const row: Record<string, any> = {
       id: existing?.id || crypto.randomUUID(),
       name: item.machineName,
       location: item.location,
@@ -145,15 +145,23 @@ async function saveFrekuentRevenueBulk(
       orain_machine_id: null,
       last_scraped_at: scrapedAt,
       updated_at: scrapedAt,
-      daily_total: item.daily || 0,
-      daily_card: 0,
-      daily_cash: 0,
-      daily_updated_at: scrapedAt,
-      monthly_total: item.monthly || 0,
-      monthly_card: 0,
-      monthly_cash: 0,
-      monthly_updated_at: scrapedAt,
     };
+
+    if (item.daily !== undefined) {
+      row.daily_total = item.daily;
+      row.daily_card = 0;
+      row.daily_cash = 0;
+      row.daily_updated_at = scrapedAt;
+    }
+
+    if (item.monthly !== undefined) {
+      row.monthly_total = item.monthly;
+      row.monthly_card = 0;
+      row.monthly_cash = 0;
+      row.monthly_updated_at = scrapedAt;
+    }
+
+    return row;
   });
 
   const { error: upsertError } = await supabaseAdmin

@@ -70,6 +70,9 @@ function parseEuroAmount(text: string): number {
   } else if (value.includes(',')) {
     // Formato europeo sin separador de miles
     value = value.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(?:\.\d{3})+$/.test(value)) {
+    // Formato europeo sin decimales: 1.234
+    value = value.replace(/\./g, '');
   } else {
     // Formato inglés o entero
     value = value.replace(/,/g, '');
@@ -343,11 +346,16 @@ async function setDateFilter(
       
       if (rows.length === 0) return null;
       
-      // Obtener primeras 3 filas de ventas para comparar (columna 4 = Ventas total)
+      const headers = Array.from(table.querySelectorAll('thead th'))
+        .map(header => (header.textContent || '').trim().toLowerCase());
+      const salesIndex = headers.findIndex(header => header === 'ventas');
+
+      // Obtener primeras 3 filas de ventas para comparar
       const samples = rows.slice(0, 3).map(row => {
         const cells = row.querySelectorAll('td');
-        if (cells.length >= 5) {
-          return cells[4]?.textContent?.trim() || '';
+        const cellIndex = salesIndex >= 0 ? salesIndex : 4;
+        if (cells.length > cellIndex) {
+          return cells[cellIndex]?.textContent?.trim() || '';
         }
         return '';
       });
@@ -698,10 +706,15 @@ async function setDateFilter(
           return false;
         }
         
+        const headers = Array.from(table.querySelectorAll('thead th'))
+          .map(header => (header.textContent || '').trim().toLowerCase());
+        const salesIndex = headers.findIndex(header => header === 'ventas');
+
         const currentSamples = rows.slice(0, 3).map(row => {
           const cells = row.querySelectorAll('td');
-          if (cells.length >= 5) {
-            return cells[4]?.textContent?.trim() || '';
+          const cellIndex = salesIndex >= 0 ? salesIndex : 4;
+          if (cells.length > cellIndex) {
+            return cells[cellIndex]?.textContent?.trim() || '';
           }
           return '';
         });
@@ -740,11 +753,16 @@ async function setDateFilter(
       
       if (rows.length === 0) return null;
       
+      const headers = Array.from(table.querySelectorAll('thead th'))
+        .map(header => (header.textContent || '').trim().toLowerCase());
+      const salesIndex = headers.findIndex(header => header === 'ventas');
+
       // Obtener primeras 3 filas de ventas para comparar
       const samples = rows.slice(0, 3).map(row => {
         const cells = row.querySelectorAll('td');
-        if (cells.length >= 5) {
-          return cells[4]?.textContent?.trim() || '';
+        const cellIndex = salesIndex >= 0 ? salesIndex : 4;
+        if (cells.length > cellIndex) {
+          return cells[cellIndex]?.textContent?.trim() || '';
         }
         return '';
       });
@@ -978,27 +996,33 @@ async function extractRevenueData(
       // Columna 1: Dispositivo (POS-5)
       // Columna 2: Nombre (STP 5180 ID: 67909)
       // Columna 3: Ubicación (STP GDRINK)
-      // Columna 4: Ventas (134,40 € / 86 transacciones)  ← DATO QUE NECESITAMOS
-      // Columna 5: Ventas con tarjeta (67.80 €)
-      // Columna 6: Ventas en efectivo (61.80 €)
-      // Columna 7: Ventas con app y tag (4.80 €)
-      // Columna 8: Última transacción (hoy)
-      // Columna 9: Estado (operativo)
-      // Columna 10: Botón menú (3 puntos)
+      // Frekuent puede añadir columnas intermedias, así que se resuelven por cabecera.
       
       if (cells.length < 5) {
         console.warn(`[FREKUENT] ⚠️ Fila ${index} tiene solo ${cells.length} columnas`);
         return;
       }
 
-      const deviceId = cells[1]?.textContent?.trim() || '';
-      const machineName = cells[2]?.textContent?.trim() || '';
-      const location = cells[3]?.textContent?.trim() || '';
+      const headers = Array.from(table.querySelectorAll('thead th'))
+        .map(header => (header.textContent || '').trim().toLowerCase());
+      const resolvedDeviceIndex = headers.findIndex(header => header === 'dispositivo');
+      const resolvedNameIndex = headers.findIndex(header => header === 'nombre');
+      const resolvedLocationIndex = headers.findIndex(header => header === 'ubicación');
+      const resolvedSalesIndex = headers.findIndex(header => header === 'ventas');
+
+      const deviceIndex = resolvedDeviceIndex >= 0 ? resolvedDeviceIndex : 1;
+      const nameIndex = resolvedNameIndex >= 0 ? resolvedNameIndex : 2;
+      const locationIndex = resolvedLocationIndex >= 0 ? resolvedLocationIndex : 3;
+      const salesIndex = resolvedSalesIndex >= 0 ? resolvedSalesIndex : 4;
+
+      const deviceId = cells[deviceIndex]?.textContent?.trim() || '';
+      const machineName = cells[nameIndex]?.textContent?.trim() || '';
+      const location = cells[locationIndex]?.textContent?.trim() || '';
       
-      // Extraer valor de ventas: buscar el primer <span> dentro de la celda 4
+      // Extraer valor de ventas: buscar el primer número dentro de la columna "Ventas"
       // Estructura: <td><div><div><span>134,40</span><span>€</span></div></div></td>
       let ventasText = '0 €';
-      const ventasCell = cells[4];
+      const ventasCell = cells[salesIndex];
       if (ventasCell) {
         const rawCellText = ventasCell.textContent?.replace(/\u00a0/g, ' ').trim() || '';
         const valueMatch = rawCellText.match(/\d(?:[\d.,\s]*\d)?/);
