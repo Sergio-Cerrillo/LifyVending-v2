@@ -9,12 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  LayoutDashboard,
-  FileText,
-  Package,
   DollarSign,
   Users,
-  Settings,
   Menu,
   LogOut,
   User,
@@ -60,24 +56,10 @@ const navItems: NavItem[] = [
     roles: ['admin'],
   },
   {
-    title: 'Máquinas',
-    href: 'https://frekuent.io/app/frekuent-spots/points-of-sale/your-points-of-sales',
-    icon: <Package className="h-5 w-5" />,
-    roles: ['admin'],
-    external: true,
-  },
-  {
     title: 'Stock',
     href: '/admin/stock',
     icon: <PackageSearch className="h-5 w-5" />,
     roles: ['admin', 'operador'],
-    disabled: true,
-  },
-  {
-    title: 'Nóminas',
-    href: '/admin/nominas',
-    icon: <Users className="h-5 w-5" />,
-    roles: ['admin'],
   },
 ];
 
