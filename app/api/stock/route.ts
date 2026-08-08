@@ -4,6 +4,10 @@ import {
   FrekuentApiError,
   getFrekuentStockMachines,
 } from '@/lib/frekuent';
+import {
+  TelevendApiError,
+  getTelevendStockMachines,
+} from '@/lib/televend';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -63,10 +67,14 @@ export async function GET(request: NextRequest) {
     }
 
     const machineIds = parseMachineIds(request.nextUrl.searchParams.get('machineIds'));
-    const stockMachines = await getFrekuentStockMachines(machineIds);
+    const provider = request.nextUrl.searchParams.get('provider') === 'televend' ? 'televend' : 'frekuent';
+    const stockMachines = provider === 'televend'
+      ? await getTelevendStockMachines(machineIds)
+      : await getFrekuentStockMachines(machineIds);
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('[STOCK-LIVE] Respuesta Frekuent recibida', {
+      console.log('[STOCK-LIVE] Respuesta recibida', {
+        provider,
         machines: stockMachines.length,
         filteredMachines: machineIds.length,
       });
@@ -75,6 +83,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       mode: 'live',
+      provider,
       requestedAt: new Date().toISOString(),
       selectedMachineIds: machineIds,
       stockMachines,
@@ -83,6 +92,13 @@ export async function GET(request: NextRequest) {
     console.error('[STOCK-API] Error:', error);
 
     if (error instanceof FrekuentApiError) {
+      return NextResponse.json(
+        { error: error.userMessage },
+        { status: error.status },
+      );
+    }
+
+    if (error instanceof TelevendApiError) {
       return NextResponse.json(
         { error: error.userMessage },
         { status: error.status },

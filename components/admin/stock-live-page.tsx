@@ -53,9 +53,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { LoadingInline } from '@/components/ui/loading-screen';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 interface StockProduct {
   line: string;
@@ -77,6 +77,7 @@ interface StockProduct {
 
 interface StockMachine {
   machineId: number;
+  source?: TelemetryProvider;
   label: string;
   machineNumber?: string;
   clientName?: string;
@@ -103,6 +104,7 @@ interface StockLiveResponse {
 }
 
 type TabKey = 'all' | 'empty' | 'critical' | 'normal' | 'ok';
+type TelemetryProvider = 'frekuent' | 'televend';
 type ReplenishmentAction = 'full-refill';
 
 interface PendingReplenishmentAction {
@@ -137,6 +139,22 @@ interface RailEditorState {
   rows: RailEditRow[];
 }
 
+interface QuantityEditRow {
+  key: string;
+  columnId: number;
+  line: string;
+  productName: string;
+  category?: string;
+  quantity: string;
+  capacity: number;
+  stockLabel?: string;
+}
+
+interface QuantityEditorState {
+  machine: StockMachine;
+  rows: QuantityEditRow[];
+}
+
 const tabOptions: Array<{ key: TabKey; label: string; dotClassName: string }> = [
   { key: 'all', label: 'Todas', dotClassName: 'bg-zinc-500' },
   { key: 'critical', label: 'Crítico', dotClassName: 'bg-red-600' },
@@ -145,12 +163,17 @@ const tabOptions: Array<{ key: TabKey; label: string; dotClassName: string }> = 
   { key: 'empty', label: 'Vacías', dotClassName: 'bg-zinc-950' },
 ];
 
+const telemetryProviders: Array<{ key: TelemetryProvider; label: string; description: string }> = [
+  { key: 'frekuent', label: 'Frekuent', description: 'Telemetría activa' },
+  { key: 'televend', label: 'Televend', description: 'Telemetría activa' },
+];
+
 function getErrorMessage(status: number, fallback: string) {
-  if (status === 401) return 'La sesión con Frekuent ha caducado o tu sesión de usuario no es válida.';
-  if (status === 403) return 'No tienes permisos para consultar Stock o Frekuent ha denegado el acceso.';
-  if (status === 429) return 'Frekuent está limitando las peticiones. Espera unos minutos antes de reintentar.';
-  if (status >= 500) return fallback || 'Frekuent no está disponible temporalmente.';
-  return fallback || 'No se pudo consultar Frekuent.';
+  if (status === 401) return 'La sesión con el proveedor ha caducado o tu sesión de usuario no es válida.';
+  if (status === 403) return 'No tienes permisos para consultar Stock o el proveedor ha denegado el acceso.';
+  if (status === 429) return 'El proveedor está limitando las peticiones. Espera unos minutos antes de reintentar.';
+  if (status >= 500) return fallback || 'El proveedor no está disponible temporalmente.';
+  return fallback || 'No se pudo consultar el proveedor.';
 }
 
 function formatDate(value: string | null | undefined) {
@@ -279,6 +302,81 @@ function MachineCardSkeleton() {
   );
 }
 
+function StockPageSkeleton() {
+  return (
+    <div className="w-full max-w-[100dvw] space-y-4 overflow-x-hidden px-3 pb-4 sm:space-y-6 sm:px-0 sm:pb-0">
+      <div className="w-full max-w-full overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex min-w-0 items-center gap-3">
+              <Skeleton className="hidden h-12 w-12 rounded-2xl sm:block" />
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Skeleton className="h-8 w-44 rounded-xl" />
+                  <Skeleton className="h-6 w-24 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-64 max-w-full rounded-full" />
+              </div>
+            </div>
+            <Skeleton className="h-4 w-52 rounded-full sm:ml-14" />
+          </div>
+
+          <div className="flex w-full max-w-full flex-col gap-3 md:w-auto md:min-w-[360px]">
+            <Skeleton className="h-3 w-36 rounded-full" />
+            <Skeleton className="h-14 w-full rounded-xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm font-black text-emerald-800 shadow-sm">
+        <RefreshCw className="mr-2 inline h-4 w-4 animate-spin" />
+        Cargando stocks de las fuentes...
+      </div>
+
+      <Card className="gap-0 overflow-hidden border-zinc-200 bg-white py-0 shadow-sm sm:hidden">
+        <CardContent className="grid grid-cols-2 gap-px bg-zinc-100 p-0">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="bg-white p-3">
+              <Skeleton className="h-4 w-20 rounded-full" />
+              <Skeleton className="mt-3 h-8 w-16 rounded-xl" />
+              <Skeleton className="mt-2 h-3 w-24 rounded-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="hidden w-full max-w-full grid-cols-2 gap-2 sm:grid sm:gap-3 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Card key={index} className="min-w-0 border-zinc-200 bg-white shadow-sm">
+            <CardHeader className="px-3 pb-1 pt-4 sm:px-6">
+              <Skeleton className="h-4 w-24 rounded-full" />
+            </CardHeader>
+            <CardContent className="min-w-0 px-3 pb-4 sm:px-6">
+              <Skeleton className="h-10 w-20 rounded-xl" />
+              <Skeleton className="mt-2 h-3 w-28 rounded-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <Skeleton className="h-12 w-full rounded-xl sm:hidden" />
+        <div className="hidden h-auto w-full gap-2 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:flex lg:w-auto">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-12 min-w-[112px] rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-12 w-full rounded-xl lg:max-w-md" />
+      </div>
+
+      <div className="space-y-3">
+        {Array.from({ length: 6 }).map((_, index) => <MachineCardSkeleton key={index} />)}
+      </div>
+    </div>
+  );
+}
+
 function productFillRate(product: StockProduct) {
   if (Number.isFinite(product.stockPercent)) return Math.round(product.stockPercent);
   if (product.capacity <= 0) return 0;
@@ -322,6 +420,7 @@ function createRailEditRows(machine: StockMachine): RailEditRow[] {
 }
 
 export function StockLivePage() {
+  const [telemetryProvider, setTelemetryProvider] = useState<TelemetryProvider>('frekuent');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<StockLiveResponse | null>(null);
@@ -337,6 +436,9 @@ export function StockLivePage() {
   const [loadingProductOptions, setLoadingProductOptions] = useState(false);
   const [savingRails, setSavingRails] = useState(false);
   const [confirmRailSaveOpen, setConfirmRailSaveOpen] = useState(false);
+  const [quantityEditor, setQuantityEditor] = useState<QuantityEditorState | null>(null);
+  const [savingQuantities, setSavingQuantities] = useState(false);
+  const [confirmQuantitySaveOpen, setConfirmQuantitySaveOpen] = useState(false);
 
   const machines = data?.stockMachines || [];
 
@@ -407,7 +509,7 @@ export function StockLivePage() {
         throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
       }
 
-      const response = await fetch('/api/stock', {
+      const response = await fetch(`/api/stock?provider=${telemetryProvider}`, {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
@@ -421,7 +523,7 @@ export function StockLivePage() {
       setData(payload);
       return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error desconocido consultando Frekuent';
+      const message = err instanceof Error ? err.message : `Error desconocido consultando ${telemetryProvider === 'televend' ? 'Televend' : 'Frekuent'}`;
       setError(message);
       toast.error('Error consultando Stock', { description: message });
       return false;
@@ -432,9 +534,23 @@ export function StockLivePage() {
   }
 
   useEffect(() => {
+    setData(null);
+    setError(null);
     loadStock();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [telemetryProvider]);
+
+  function changeTelemetryProvider(value: string) {
+    if (!value) return;
+    const nextProvider = value as TelemetryProvider;
+    if (nextProvider === telemetryProvider) return;
+    setLoading(true);
+    setData(null);
+    setError(null);
+    setTelemetryProvider(nextProvider);
+    setActiveTab('all');
+    setExpandedMachineIds(new Set());
+  }
 
   function toggleExpanded(machineId: number) {
     setExpandedMachineIds((current) => {
@@ -481,7 +597,7 @@ export function StockLivePage() {
       setProductOptions(Array.isArray(payload.products) ? payload.products : []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error cargando productos';
-      toast.error('No se pudo cargar el catálogo de Frekuent', { description: message });
+      toast.error('No se pudo cargar el catálogo de productos', { description: message });
     } finally {
       setLoadingProductOptions(false);
     }
@@ -493,6 +609,44 @@ export function StockLivePage() {
       rows: createRailEditRows(machine),
     });
     loadProductOptions();
+  }
+
+  function openQuantityEditor(machine: StockMachine) {
+    const rows = sortedProducts(machine.products)
+      .map((product, index) => {
+        const columnId = Number(product.railId);
+        if (!Number.isInteger(columnId) || columnId <= 0) return null;
+        return {
+          key: `${columnId}-${product.line || index}`,
+          columnId,
+          line: product.line || String(index + 1),
+          productName: product.productName,
+          category: product.category,
+          quantity: String(product.quantity),
+          capacity: product.capacity,
+          stockLabel: product.stockLabel,
+        };
+      })
+      .filter(Boolean) as QuantityEditRow[];
+
+    if (rows.length === 0) {
+      toast.error('No se puede editar esta máquina', {
+        description: 'Televend no ha devuelto identificadores de columna para guardar cantidades.',
+      });
+      return;
+    }
+
+    setQuantityEditor({ machine, rows });
+  }
+
+  function updateQuantityRow(key: string, quantity: string) {
+    setQuantityEditor((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        rows: current.rows.map((row) => (row.key === key ? { ...row, quantity } : row)),
+      };
+    });
   }
 
   function updateRailRow(key: string, patch: Partial<RailEditRow>) {
@@ -657,12 +811,93 @@ export function StockLivePage() {
     }
   }
 
+  function buildQuantityPayload() {
+    if (!quantityEditor) return [];
+
+    return quantityEditor.rows.map((row) => {
+      const quantity = parsePositiveInteger(row.quantity);
+      if (!Number.isInteger(quantity)) {
+        throw new Error(`La cantidad de la columna ${row.line} no es válida.`);
+      }
+      if (row.capacity > 0 && quantity > row.capacity) {
+        throw new Error(`La columna ${row.line} tiene más cantidad que capacidad.`);
+      }
+
+      return {
+        columnId: row.columnId,
+        quantity,
+      };
+    });
+  }
+
+  async function saveQuantityEditor() {
+    if (!quantityEditor) return;
+
+    let rows: ReturnType<typeof buildQuantityPayload>;
+    try {
+      rows = buildQuantityPayload();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Revisa las cantidades.';
+      toast.error('No se pueden guardar las cantidades', { description: message });
+      setConfirmQuantitySaveOpen(false);
+      return;
+    }
+
+    const toastId = toast.loading('Guardando cantidades en Televend...', {
+      description: `${quantityEditor.machine.label} · ${rows.length} columnas`,
+    });
+
+    try {
+      setSavingQuantities(true);
+      const accessToken = await getSessionAccessToken();
+      const response = await fetch('/api/stock/replenishment', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'televend',
+          action: 'update-quantities',
+          machineId: quantityEditor.machine.machineId,
+          rows,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'Televend no pudo guardar las cantidades.');
+      }
+
+      toast.success('Cantidades guardadas en Televend', {
+        id: toastId,
+        description: `${quantityEditor.machine.label} se ha actualizado correctamente.`,
+      });
+      setConfirmQuantitySaveOpen(false);
+      setQuantityEditor(null);
+      const refreshed = await loadStock();
+      if (!refreshed) {
+        toast.warning('Guardado correcto, pero no se pudo refrescar la vista', {
+          description: 'Pulsa “Actualizar stock” para volver a consultar Televend.',
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error guardando cantidades';
+      toast.error('No se pudieron guardar las cantidades', {
+        id: toastId,
+        description: `${quantityEditor.machine.label} · ${message}`,
+      });
+    } finally {
+      setSavingQuantities(false);
+    }
+  }
+
   async function confirmReplenishmentAction() {
     if (!pendingReplenishmentAction) return;
 
     const { action, machine } = pendingReplenishmentAction;
+    const providerLabel = telemetryProvider === 'televend' ? 'Televend' : 'Frekuent';
 
-    const toastId = toast.loading('Enviando reposición a Frekuent...', {
+    const toastId = toast.loading(`Enviando reposición a ${providerLabel}...`, {
       description: `${machine.label} · marcando llenado completo`,
     });
 
@@ -681,6 +916,7 @@ export function StockLivePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          provider: telemetryProvider,
           action: 'full-refill',
           machineId: machine.machineId,
         }),
@@ -688,7 +924,7 @@ export function StockLivePage() {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || 'Frekuent no pudo completar la reposición.');
+        throw new Error(payload.error || `${providerLabel} no pudo completar la reposición.`);
       }
 
       toast.success('Reposición registrada correctamente', {
@@ -703,7 +939,7 @@ export function StockLivePage() {
         });
       } else {
         toast.warning('Reposición registrada, pero no se pudo refrescar la vista', {
-          description: 'Pulsa “Actualizar stock” para volver a consultar Frekuent.',
+          description: `Pulsa “Actualizar stock” para volver a consultar ${providerLabel}.`,
         });
       }
     } catch (err) {
@@ -722,41 +958,89 @@ export function StockLivePage() {
   }
 
   if (loading) {
-    return <LoadingInline message="Consultando stock en Frekuent..." />;
+    return <StockPageSkeleton />;
   }
 
   return (
-    <div className="w-full max-w-full space-y-4 overflow-x-hidden px-3 pb-4 sm:space-y-6 sm:px-0 sm:pb-0">
-      <div className="w-full max-w-full rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-blue-50/30 p-4 shadow-sm sm:p-6">
+    <div className="w-full max-w-[100dvw] space-y-4 overflow-x-hidden px-3 pb-4 sm:space-y-6 sm:px-0 sm:pb-0 [&_*]:min-w-0">
+      <div className="w-full max-w-full overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3 shadow-sm sm:bg-gradient-to-br sm:from-white sm:via-emerald-50/40 sm:to-blue-50/30 sm:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="mb-3 flex items-center gap-3">
-              <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 p-3 text-white shadow-lg">
+          <div className="min-w-0">
+            <div className="mb-3 flex min-w-0 items-center gap-3">
+              <div className="hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 p-3 text-white shadow-lg sm:block">
                 <PackageSearch className="h-6 w-6" />
               </div>
-              <div>
-                <h1 className="text-2xl font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">Stock Frekuent</h1>
-                <p className="text-sm font-semibold text-zinc-700">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="break-words text-xl font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">
+                    Stock {telemetryProvider === 'frekuent' ? 'Frekuent' : 'Televend'}
+                  </h1>
+                  <Badge
+                    className={
+                      telemetryProvider === 'frekuent'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-red-200 bg-red-50 text-red-700'
+                    }
+                  >
+                    Conectado
+                  </Badge>
+                </div>
+                <p className="break-words text-sm font-semibold text-zinc-700">
                   Vista de reposición por máquina y producto
                 </p>
               </div>
             </div>
             {data?.requestedAt && (
-              <p className="text-xs font-medium text-emerald-700 sm:ml-14">
+              <p className="break-words text-xs font-medium text-emerald-700 sm:ml-14">
                 <Clock className="mr-1 inline h-3 w-3" />
                 Última consulta: {formatDate(data.requestedAt)}
               </p>
             )}
           </div>
 
-          <Button
-            onClick={loadStock}
-            disabled={refreshing}
-            className="h-12 w-full rounded-xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700 md:w-auto"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Actualizar stock
-          </Button>
+          <div className="flex w-full max-w-full flex-col gap-3 md:w-auto md:min-w-[360px]">
+            <div>
+              <p className="mb-1 text-xs font-black uppercase text-zinc-500">Fuente de telemetría</p>
+              <ToggleGroup
+                type="single"
+                value={telemetryProvider}
+                onValueChange={changeTelemetryProvider}
+                className="grid w-full grid-cols-2 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm"
+              >
+                {telemetryProviders.map((provider) => (
+                  <ToggleGroupItem
+                    key={provider.key}
+                    value={provider.key}
+                    aria-label={`Usar ${provider.label}`}
+                    className="h-auto rounded-lg px-2 py-2 text-left data-[state=on]:bg-emerald-600 data-[state=on]:text-white"
+                  >
+                    <span className="block truncate text-sm font-black">{provider.label}</span>
+                    <span className="block truncate text-[11px] font-semibold opacity-75">{provider.description}</span>
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+
+            {telemetryProvider === 'frekuent' ? (
+              <Button
+                onClick={loadStock}
+                disabled={refreshing}
+                className="h-12 w-full max-w-full rounded-xl bg-emerald-600 px-4 text-base font-bold text-white hover:bg-emerald-700"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="truncate">Actualizar stock</span>
+              </Button>
+            ) : (
+              <Button
+                onClick={loadStock}
+                disabled={refreshing}
+                className="h-12 w-full max-w-full rounded-xl bg-red-600 px-4 text-base font-bold text-white hover:bg-red-700"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="truncate">Actualizar stock</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -782,7 +1066,34 @@ export function StockLivePage() {
         </Card>
       )}
 
-      <div className="grid w-full max-w-full grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
+      <Card className="gap-0 overflow-hidden border-zinc-200 bg-white py-0 shadow-sm sm:hidden">
+        <CardContent className="px-0">
+          <div className="grid grid-cols-2 divide-x divide-y divide-zinc-100">
+            <div className="p-3">
+              <p className="text-xs font-black uppercase text-zinc-500">Máquinas</p>
+              <p className="mt-2 break-all text-2xl font-black leading-none text-zinc-900">{stats.all}</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-500">con planograma</p>
+            </div>
+            <div className="p-3">
+              <p className="text-xs font-black uppercase text-zinc-500">A reponer</p>
+              <p className="mt-2 break-all text-2xl font-black leading-none text-emerald-600">{stats.totalToReplenish}</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-500">unidades</p>
+            </div>
+            <div className="p-3">
+              <p className="text-xs font-black uppercase text-zinc-500">Prioridad</p>
+              <p className="mt-2 break-all text-2xl font-black leading-none text-red-600">{stats.empty + stats.critical}</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-500">vacías + críticas</p>
+            </div>
+            <div className="p-3">
+              <p className="text-xs font-black uppercase text-zinc-500">Llenado</p>
+              <p className="mt-2 break-all text-2xl font-black leading-none text-zinc-900">{stats.fillRate}%</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-500">global</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="hidden w-full max-w-full grid-cols-2 gap-2 sm:grid sm:gap-3 md:grid-cols-4">
         <Card className="min-w-0 border-zinc-200 bg-white shadow-sm">
           <CardHeader className="px-3 pb-1 pt-4 sm:px-6">
             <CardTitle className="text-[13px] font-bold text-zinc-600">Máquinas</CardTitle>
@@ -823,7 +1134,22 @@ export function StockLivePage() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabKey)} className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:flex sm:justify-start sm:overflow-x-auto lg:w-auto">
+          <div className="w-full sm:hidden">
+            <label className="mb-1 block text-xs font-black uppercase text-zinc-500">Estado</label>
+            <select
+              value={activeTab}
+              onChange={(event) => setActiveTab(event.target.value as TabKey)}
+              className="h-12 w-full max-w-full rounded-xl border border-zinc-200 bg-white px-3 text-base font-black text-zinc-900 shadow-sm outline-none focus:border-emerald-400"
+            >
+              {tabOptions.map((tab) => (
+                <option key={tab.key} value={tab.key}>
+                  {tab.label} ({getTabCount(tab.key)})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <TabsList className="hidden h-auto w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:flex lg:w-auto">
             {tabOptions.map((tab) => (
               <TabsTrigger
                 key={tab.key}
@@ -841,13 +1167,13 @@ export function StockLivePage() {
             ))}
           </TabsList>
 
-          <div className="relative flex-1 lg:max-w-md">
+          <div className="relative w-full flex-1 lg:max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar máquina, ID o producto..."
-              className="h-12 rounded-xl border-emerald-200 pl-9 text-base focus:border-emerald-400"
+              className="h-12 w-full max-w-full rounded-xl border-emerald-200 pl-9 text-base focus:border-emerald-400"
             />
           </div>
         </div>
@@ -893,7 +1219,7 @@ export function StockLivePage() {
                         aria-expanded={isExpanded}
                       >
                         <div className={`w-1.5 shrink-0 self-stretch rounded-full ${meta.bar}`} />
-                        <div className="min-w-0 flex-1 space-y-3">
+                        <div className="min-w-0 flex-1 space-y-3 overflow-hidden">
                           <div className="flex min-w-0 items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
@@ -909,14 +1235,16 @@ export function StockLivePage() {
                               </div>
                               <h3 className="mt-2 break-words text-lg font-black leading-tight text-zinc-900 sm:text-2xl">
                                 {machine.label}
-                              </h3>
-                              <p className="mt-1 break-words text-sm font-semibold leading-snug text-zinc-600">
-                                {subtitle || `ID Frekuent: ${machine.machineId}`}
-                              </p>
+	                              </h3>
+	                              <p className="mt-1 break-words text-sm font-semibold leading-snug text-zinc-600">
+	                                {subtitle || `ID ${telemetryProvider === 'televend' ? 'Televend' : 'Frekuent'}: ${machine.machineId}`}
+	                              </p>
                               <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-zinc-500">
-                                <span>ID {machine.machineId}</span>
-                                {machine.serialNumber && <span>Serie {machine.serialNumber}</span>}
-                                {machine.machineStatus?.length ? <span>{machine.machineStatus.join(', ')}</span> : null}
+                                <span className="break-all">ID {machine.machineId}</span>
+                                {machine.serialNumber && <span className="break-all">Serie {machine.serialNumber}</span>}
+                                {machine.machineStatus?.length ? (
+                                  <span className="break-words">{machine.machineStatus.join(', ')}</span>
+                                ) : null}
                               </div>
                             </div>
                             <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-900">
@@ -924,7 +1252,7 @@ export function StockLivePage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-2">
                             <div className="min-w-0 rounded-xl border border-zinc-200 bg-zinc-50 p-2 text-center sm:p-3">
                               <div className="break-all text-xl font-black leading-none text-zinc-900 sm:text-2xl">{machine.fillRate}%</div>
                               <div className="text-xs font-bold text-zinc-600">Lleno</div>
@@ -963,25 +1291,33 @@ export function StockLivePage() {
                               <MoreVertical className="h-4 w-4 text-zinc-500" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-[min(22rem,calc(100vw-2rem))] rounded-xl p-2">
-                            <DropdownMenuLabel className="px-3 py-2 text-xs font-black uppercase text-zinc-500">
+                          <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] max-w-[22rem] rounded-xl p-2">
+                            <DropdownMenuLabel className="truncate px-3 py-2 text-xs font-black uppercase text-zinc-500">
                               {machine.label}
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="min-h-12 cursor-pointer rounded-lg px-3 py-3 text-sm font-bold"
-                              onSelect={() => setPendingReplenishmentAction({ action: 'full-refill', machine })}
-                            >
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              <span className="min-w-0 flex-1">Llenado completo</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="min-h-12 cursor-pointer rounded-lg px-3 py-3 text-sm font-bold"
-                              onSelect={() => openRailEditor(machine)}
-                            >
-                              <SlidersHorizontal className="h-4 w-4 text-zinc-700" />
-                              <span className="min-w-0 flex-1">Editar raíles</span>
-                            </DropdownMenuItem>
+	                            <DropdownMenuItem
+	                              className="min-h-12 cursor-pointer rounded-lg px-3 py-3 text-sm font-bold"
+	                              onSelect={() => {
+	                                setPendingReplenishmentAction({ action: 'full-refill', machine });
+	                              }}
+	                            >
+	                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+	                              <span className="min-w-0 flex-1">Llenado completo</span>
+	                            </DropdownMenuItem>
+	                            <DropdownMenuItem
+	                              className="min-h-12 cursor-pointer rounded-lg px-3 py-3 text-sm font-bold"
+	                              onSelect={() => {
+	                                if (telemetryProvider === 'televend') {
+	                                  openQuantityEditor(machine);
+	                                  return;
+	                                }
+	                                openRailEditor(machine);
+	                              }}
+	                            >
+	                              <SlidersHorizontal className="h-4 w-4 text-zinc-700" />
+	                              <span className="min-w-0 flex-1">{telemetryProvider === 'televend' ? 'Editar columnas' : 'Editar raíles'}</span>
+	                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -989,9 +1325,9 @@ export function StockLivePage() {
                       {isExpanded && (
                         <div className="border-t border-zinc-100 bg-zinc-50 p-3 sm:p-5">
                           <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
+                            <div className="min-w-0">
                               <h4 className="text-lg font-black text-zinc-900">Productos</h4>
-                              <p className="text-sm font-semibold text-zinc-500">
+                              <p className="break-words text-sm font-semibold text-zinc-500">
                                 {priorityProducts.length} a reponer de {machine.totalProducts} productos
                               </p>
                             </div>
@@ -1024,7 +1360,7 @@ export function StockLivePage() {
                                     className="w-full min-w-0 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm sm:p-4"
                                   >
                                     <div className="flex min-w-0 gap-3">
-                                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-zinc-100 sm:h-16 sm:w-16">
+                                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 sm:h-16 sm:w-16 sm:rounded-2xl">
                                         {product.image ? (
                                           // eslint-disable-next-line @next/next/no-img-element
                                           <img src={product.image} alt={product.productName} className="h-full w-full object-contain p-1" />
@@ -1040,20 +1376,20 @@ export function StockLivePage() {
                                               {product.productName}
                                             </p>
                                             <p className="mt-1 break-words text-sm font-semibold text-zinc-500">
-                                              Raíl {product.line || '-'}{product.mdbCode ? ` · MDB ${product.mdbCode}` : ''} · mínimo {product.min}
+	                                              {telemetryProvider === 'televend' ? 'Col.' : 'Raíl'} {product.line || '-'}{product.mdbCode ? ` · MDB ${product.mdbCode}` : ''} · mínimo {product.min}
                                             </p>
                                           </div>
                                           <Badge className={`w-fit shrink-0 ${status.className}`}>{status.label}</Badge>
                                         </div>
 
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                          {product.category && <Badge variant="outline" className="max-w-full break-words">{product.category}</Badge>}
-                                          {price && <Badge variant="outline">{price}</Badge>}
-                                          {product.status && <Badge variant="outline">{product.status}</Badge>}
-                                          {product.stockLabel && <Badge variant="outline">{product.stockLabel}</Badge>}
+                                        <div className="mt-2 flex max-w-full flex-wrap gap-2">
+                                          {product.category && <Badge variant="outline" className="max-w-full truncate">{product.category}</Badge>}
+                                          {price && <Badge variant="outline" className="shrink-0">{price}</Badge>}
+                                          {product.status && <Badge variant="outline" className="max-w-full truncate">{product.status}</Badge>}
+                                          {product.stockLabel && <Badge variant="outline" className="max-w-full truncate">{product.stockLabel}</Badge>}
                                         </div>
 
-                                        <div className="mt-3 grid grid-cols-3 gap-2">
+                                        <div className="mt-3 grid grid-cols-[repeat(3,minmax(0,1fr))] gap-2">
                                           <div className="rounded-xl bg-zinc-50 p-2 text-center sm:p-3">
                                             <div className="text-xs font-bold text-zinc-500">Actual</div>
                                             <div className="text-xl font-black text-zinc-900 sm:text-2xl">{product.quantity}</div>
@@ -1096,9 +1432,183 @@ export function StockLivePage() {
             )}
           </TabsContent>
         ))}
-      </Tabs>
+	      </Tabs>
 
       <Dialog
+        open={Boolean(quantityEditor)}
+        onOpenChange={(open) => {
+          if (!open && !savingQuantities) {
+            setConfirmQuantitySaveOpen(false);
+            setQuantityEditor(null);
+          }
+        }}
+      >
+        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-full translate-y-[-50%] flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-[90vh] sm:max-w-3xl sm:rounded-2xl">
+          {quantityEditor && (
+            <>
+              <DialogHeader className="border-b bg-white p-4 pr-12 text-left sm:p-6 sm:pr-14">
+                <DialogTitle className="text-xl font-black leading-tight text-zinc-900 sm:text-2xl">
+                  Editar cantidades
+                </DialogTitle>
+                <DialogDescription className="break-words text-sm font-semibold text-zinc-600">
+                  {quantityEditor.machine.label} · {quantityEditor.rows.length} columnas
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex-1 overflow-y-auto bg-zinc-50 p-3 sm:p-5">
+                <div className="mb-4 grid grid-cols-3 gap-2">
+                  <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-2 text-center sm:p-3">
+                    <div className="break-all text-xl font-black leading-none text-zinc-900 sm:text-2xl">{quantityEditor.rows.length}</div>
+                    <div className="text-xs font-bold text-zinc-500">Columnas</div>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-2 text-center sm:p-3">
+                    <div className="break-all text-xl font-black leading-none text-zinc-900 sm:text-2xl">
+                      {quantityEditor.rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0)}
+                    </div>
+                    <div className="text-xs font-bold text-zinc-500">Actual</div>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-emerald-100 bg-emerald-50 p-2 text-center sm:p-3">
+                    <div className="break-all text-xl font-black leading-none text-emerald-700 sm:text-2xl">
+                      {quantityEditor.rows.reduce((sum, row) => sum + Math.max(0, row.capacity - (Number(row.quantity) || 0)), 0)}
+                    </div>
+                    <div className="text-xs font-bold text-emerald-700">Meter</div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {quantityEditor.rows.map((row) => {
+                    const currentQuantity = Number(row.quantity) || 0;
+                    const fillRate = row.capacity > 0 ? Math.round((currentQuantity / row.capacity) * 100) : 0;
+
+                    return (
+                      <div key={row.key} className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm sm:p-4">
+                        <div className="mb-3 min-w-0">
+                          <p className="text-xs font-black uppercase text-zinc-500">Columna {row.line}</p>
+                          <p className="break-words text-lg font-black leading-tight text-zinc-900">
+                            {row.productName}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {row.category && <Badge variant="outline" className="max-w-full truncate">{row.category}</Badge>}
+                            {row.stockLabel && <Badge variant="outline" className="max-w-full truncate">{row.stockLabel}</Badge>}
+                            <Badge variant="outline" className="shrink-0">Cap. {row.capacity}</Badge>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Cantidad actual</span>
+                            <Input
+                              inputMode="numeric"
+                              value={row.quantity}
+                              onChange={(event) => updateQuantityRow(row.key, event.target.value)}
+                              disabled={savingQuantities}
+                              className="h-12 rounded-xl text-base font-bold"
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={savingQuantities}
+                            onClick={() => updateQuantityRow(row.key, String(row.capacity))}
+                            className="h-12 shrink-0 rounded-xl px-3 font-black"
+                          >
+                            Llenar
+                          </Button>
+                        </div>
+
+                        <div className="mt-3">
+                          <div className="mb-1 flex items-center justify-between text-sm font-bold text-zinc-500">
+                            <span>Llenado</span>
+                            <span>{Math.max(0, Math.min(100, fillRate))}%</span>
+                          </div>
+                          <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
+                            <div
+                              className={`h-full rounded-full ${fillRate === 0 ? 'bg-red-600' : fillRate < 30 ? 'bg-orange-500' : fillRate < 70 ? 'bg-yellow-500' : 'bg-green-600'}`}
+                              style={{ width: `${Math.max(0, Math.min(100, fillRate))}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <DialogFooter className="grid grid-cols-2 gap-2 border-t bg-white p-3 sm:flex sm:flex-row sm:p-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setQuantityEditor(null)}
+                  disabled={savingQuantities}
+                  className="h-12 rounded-xl font-black"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      buildQuantityPayload();
+                      setConfirmQuantitySaveOpen(true);
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : 'Revisa las cantidades.';
+                      toast.error('No se pueden guardar las cantidades', { description: message });
+                    }
+                  }}
+                  disabled={savingQuantities}
+                  className="h-12 rounded-xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Guardar
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={confirmQuantitySaveOpen}
+        onOpenChange={(open) => {
+          if (!open && !savingQuantities) setConfirmQuantitySaveOpen(false);
+        }}
+      >
+        <AlertDialogContent className="w-[calc(100vw-2rem)] rounded-2xl sm:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black text-zinc-900">
+              Guardar cantidades
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left text-sm font-medium text-zinc-600">
+                <p className="break-words">
+                  Máquina: <span className="font-black text-zinc-900">{quantityEditor?.machine.label}</span>
+                </p>
+                <p>
+                  Se enviarán {quantityEditor?.rows.length || 0} cantidades a Televend. Esta acción cambia el stock real de la máquina.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={savingQuantities} className="h-11 rounded-xl font-bold">
+              Revisar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={savingQuantities}
+              onClick={(event) => {
+                event.preventDefault();
+                saveQuantityEditor();
+              }}
+              className="h-11 rounded-xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
+            >
+              {savingQuantities && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Sí, guardar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+	      <Dialog
         open={Boolean(railEditor)}
         onOpenChange={(open) => {
           if (!open && !savingRails) {
@@ -1142,7 +1652,7 @@ export function StockLivePage() {
                 {loadingProductOptions && (
                   <div className="mb-4 rounded-2xl border border-emerald-100 bg-white p-4 text-sm font-bold text-emerald-700">
                     <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                    Cargando catálogo de productos...
+                    Cargando catálogo de Frekuent...
                   </div>
                 )}
 
@@ -1367,7 +1877,7 @@ export function StockLivePage() {
                   Máquina: <span className="font-black text-zinc-900">{pendingReplenishmentAction?.machine.label}</span>
                 </p>
                 <p>
-                  Esta acción marcará la máquina como rellenada en Frekuent y sincronizará el planograma.
+                  Esta acción marcará la máquina como rellenada en {telemetryProvider === 'televend' ? 'Televend' : 'Frekuent'}.
                   Úsala solo después de haber repuesto físicamente la máquina.
                 </p>
               </div>

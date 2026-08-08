@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
 import type { FrekuentRailUpdateRow } from '@/lib/frekuent';
+import type { TelevendQuantityUpdateRow } from '@/lib/televend';
 import {
   FrekuentApiError,
   getFrekuentProductOptions,
   refillFrekuentMachineStock,
   updateFrekuentMachineRails,
 } from '@/lib/frekuent';
+import {
+  TelevendApiError,
+  refillTelevendMachineStock,
+  updateTelevendMachineQuantities,
+} from '@/lib/televend';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -102,6 +108,27 @@ function normalizeRailRows(value: unknown): FrekuentRailUpdateRow[] {
   });
 }
 
+function normalizeTelevendQuantityRows(value: unknown): TelevendQuantityUpdateRow[] {
+  if (!Array.isArray(value)) {
+    throw new TelevendApiError(400, 'Las cantidades enviadas no son válidas');
+  }
+
+  return value.map((row, index) => {
+    const item = row as Record<string, unknown>;
+    const columnId = numberFromPayload(item.columnId);
+    const quantity = numberFromPayload(item.quantity);
+
+    if (!Number.isInteger(columnId) || columnId <= 0) {
+      throw new TelevendApiError(400, `La columna ${index + 1} no es válida`);
+    }
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      throw new TelevendApiError(400, `La cantidad de la columna ${index + 1} no es válida`);
+    }
+
+    return { columnId, quantity };
+  });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireStockUser(request);
@@ -145,9 +172,39 @@ export async function POST(request: NextRequest) {
     const payload = await request.json().catch(() => ({}));
     const machineId = Number(payload.machineId);
     const action = typeof payload.action === 'string' ? payload.action : '';
+    const provider = payload.provider === 'televend' ? 'televend' : 'frekuent';
 
     if (!Number.isInteger(machineId) || machineId <= 0) {
       return NextResponse.json({ error: 'ID de máquina no válido' }, { status: 400 });
+    }
+
+    if (provider === 'televend') {
+      if (action === 'full-refill') {
+        await refillTelevendMachineStock(machineId);
+
+        return NextResponse.json({
+          success: true,
+          provider,
+          action,
+          machineId,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      if (action === 'update-quantities') {
+        const rows = normalizeTelevendQuantityRows(payload.rows);
+        await updateTelevendMachineQuantities(machineId, rows);
+
+        return NextResponse.json({
+          success: true,
+          provider,
+          action,
+          machineId,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return NextResponse.json({ error: 'Acción de Televend no válida' }, { status: 400 });
     }
 
     if (action === 'full-refill') {
@@ -155,6 +212,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
+        provider,
         action,
         machineId,
         updatedAt: new Date().toISOString(),
@@ -167,6 +225,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
+        provider,
         action,
         machineId,
         updatedAt: new Date().toISOString(),
@@ -181,7 +240,14 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof FrekuentApiError) {
       return NextResponse.json(
-        { error: error.message || error.userMessage },
+        { error: error.userMessage || error.message },
+        { status: error.status },
+      );
+    }
+
+    if (error instanceof TelevendApiError) {
+      return NextResponse.json(
+        { error: error.userMessage || error.message },
         { status: error.status },
       );
     }
