@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Filter,
   Loader2,
   MoreVertical,
   PackageSearch,
@@ -428,7 +427,6 @@ export function StockLivePage() {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [expandedMachineIds, setExpandedMachineIds] = useState<Set<number>>(new Set());
-  const [onlyProductsToReplenish, setOnlyProductsToReplenish] = useState(true);
   const [pendingReplenishmentAction, setPendingReplenishmentAction] = useState<PendingReplenishmentAction | null>(null);
   const [runningReplenishmentAction, setRunningReplenishmentAction] = useState(false);
   const [railEditor, setRailEditor] = useState<RailEditorState | null>(null);
@@ -1204,7 +1202,7 @@ export function StockLivePage() {
                   const isExpanded = expandedMachineIds.has(machine.machineId);
                   const allProducts = sortedProducts(machine.products);
                   const priorityProducts = allProducts.filter((product) => product.unitsToReplenish > 0);
-                  const productsToShow = onlyProductsToReplenish ? priorityProducts : allProducts;
+                  const productsToShow = allProducts;
                   const subtitle = machineSubtitle(machine);
 
                   return (
@@ -1212,15 +1210,10 @@ export function StockLivePage() {
                       key={machine.machineId}
                       className={`w-full max-w-full overflow-hidden border bg-white shadow-sm transition-all duration-200 ${meta.border}`}
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleExpanded(machine.machineId)}
-                        className="flex w-full min-w-0 items-stretch gap-2 p-3 text-left sm:gap-3 sm:p-5"
-                        aria-expanded={isExpanded}
-                      >
+                      <div className="flex w-full min-w-0 items-stretch gap-2 p-3 text-left sm:gap-3 sm:p-5">
                         <div className={`w-1.5 shrink-0 self-stretch rounded-full ${meta.bar}`} />
                         <div className="min-w-0 flex-1 space-y-3 overflow-hidden">
-                          <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge className={meta.badge}>
@@ -1247,9 +1240,6 @@ export function StockLivePage() {
                                 ) : null}
                               </div>
                             </div>
-                            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-900">
-                              {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                            </div>
                           </div>
 
                           <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-2">
@@ -1274,15 +1264,15 @@ export function StockLivePage() {
                             />
                           </div>
                         </div>
-                      </button>
+                      </div>
 
-                      <div className="border-t border-zinc-100 px-3 pb-3 sm:px-5 sm:pb-5">
+                      <div className="grid grid-cols-2 gap-2 border-t border-zinc-100 px-3 pb-3 sm:px-5 sm:pb-5">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               type="button"
                               variant="outline"
-                              className="h-11 w-full justify-between rounded-xl border-zinc-200 bg-white text-sm font-black text-zinc-900 hover:bg-zinc-50 sm:h-12 sm:text-base"
+                              className="h-11 w-full justify-between rounded-xl border-zinc-200 bg-white px-3 text-sm font-black text-zinc-900 hover:bg-zinc-50 sm:h-12 sm:px-4 sm:text-base"
                             >
                               <span className="flex items-center gap-2">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-600" />
@@ -1320,6 +1310,21 @@ export function StockLivePage() {
 	                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+
+                        <Button
+                          type="button"
+                          variant={isExpanded ? 'default' : 'outline'}
+                          onClick={() => toggleExpanded(machine.machineId)}
+                          aria-expanded={isExpanded}
+                          className={`h-11 w-full justify-between rounded-xl px-3 text-sm font-black sm:h-12 sm:px-4 sm:text-base ${
+                            isExpanded
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                              : 'border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+                          }`}
+                        >
+                          <span className="truncate">{isExpanded ? 'Ocultar' : 'Ver productos'}</span>
+                          {isExpanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                        </Button>
                       </div>
 
                       {isExpanded && (
@@ -1331,21 +1336,13 @@ export function StockLivePage() {
                                 {priorityProducts.length} a reponer de {machine.totalProducts} productos
                               </p>
                             </div>
-                            <Button
-                              variant={onlyProductsToReplenish ? 'default' : 'outline'}
-                              onClick={() => setOnlyProductsToReplenish((value) => !value)}
-                              className={`h-11 w-full rounded-xl text-sm font-black sm:w-auto ${onlyProductsToReplenish ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-white'}`}
-                            >
-                              <Filter className="mr-2 h-4 w-4" />
-                              {onlyProductsToReplenish ? 'Pendientes' : 'Todos'}
-                            </Button>
                           </div>
 
                           {productsToShow.length === 0 ? (
                             <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-center">
                               <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
-                              <p className="font-black text-green-900">Sin productos pendientes</p>
-                              <p className="mt-1 text-sm font-semibold text-green-800">Cambia a “Todos” para ver el planograma completo.</p>
+                              <p className="font-black text-green-900">Sin productos</p>
+                              <p className="mt-1 text-sm font-semibold text-green-800">No hay planograma disponible para esta máquina.</p>
                             </div>
                           ) : (
                             <div className="space-y-3">
