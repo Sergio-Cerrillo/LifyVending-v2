@@ -8,14 +8,10 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Eye,
   Filter,
-  Package,
-  PackageCheck,
   PackageSearch,
   RefreshCw,
   Search,
-  ShoppingCart,
   XCircle,
   Zap,
 } from 'lucide-react';
@@ -23,35 +19,39 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-helpers';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 interface StockProduct {
   line: string;
+  mdbCode?: string;
+  productId?: number;
+  railId?: number;
   productName: string;
+  image?: string;
   category?: string;
-  price?: string;
+  price?: number;
   quantity: number;
   capacity: number;
   unitsToReplenish: number;
   min: number;
+  stockLabel?: string;
+  stockPercent: number;
   status?: string;
 }
 
 interface StockMachine {
   machineId: number;
   label: string;
+  machineNumber?: string;
+  clientName?: string;
+  location?: string;
+  route?: string;
+  serialNumber?: string;
+  machineStatus?: string[];
   products: StockProduct[];
   totalProducts: number;
   totalCapacity: number;
@@ -97,6 +97,18 @@ function formatDate(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function formatPrice(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(value / 100);
+}
+
+function machineSubtitle(machine: StockMachine) {
+  return [machine.location, machine.clientName, machine.machineNumber].filter(Boolean).join(' · ');
 }
 
 function urgencyMeta(urgency: StockMachine['urgency']) {
@@ -203,6 +215,7 @@ function MachineCardSkeleton() {
 }
 
 function productFillRate(product: StockProduct) {
+  if (Number.isFinite(product.stockPercent)) return Math.round(product.stockPercent);
   if (product.capacity <= 0) return 0;
   return Math.round((product.quantity / product.capacity) * 100);
 }
@@ -214,10 +227,8 @@ export function StockLivePage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('all');
-  const [selectedMachine, setSelectedMachine] = useState<StockMachine | null>(null);
   const [expandedMachineIds, setExpandedMachineIds] = useState<Set<number>>(new Set());
   const [onlyProductsToReplenish, setOnlyProductsToReplenish] = useState(true);
-  const [detailProductQuery, setDetailProductQuery] = useState('');
 
   const machines = data?.stockMachines || [];
 
@@ -245,8 +256,16 @@ export function StockLivePage() {
 
       const matchesQuery = !q
         || machine.label.toLowerCase().includes(q)
+        || machine.location?.toLowerCase().includes(q)
+        || machine.clientName?.toLowerCase().includes(q)
+        || machine.machineNumber?.toLowerCase().includes(q)
         || String(machine.machineId).includes(q)
-        || machine.products.some((product) => product.productName.toLowerCase().includes(q));
+        || machine.products.some((product) => (
+          product.productName.toLowerCase().includes(q)
+          || product.category?.toLowerCase().includes(q)
+          || product.line.includes(q)
+          || product.mdbCode?.toLowerCase().includes(q)
+        ));
 
       return matchesTab && matchesQuery;
     });
@@ -268,19 +287,6 @@ export function StockLivePage() {
       return a.label.localeCompare(b.label);
     });
   }, [activeTab, machines, query]);
-
-  const detailProducts = useMemo(() => {
-    if (!selectedMachine) return [];
-    const q = detailProductQuery.trim().toLowerCase();
-    return sortedProducts(selectedMachine.products).filter((product) => {
-      const matchesQuery = !q
-        || product.productName.toLowerCase().includes(q)
-        || product.category?.toLowerCase().includes(q)
-        || product.line.includes(q);
-      const matchesReplenish = !onlyProductsToReplenish || product.unitsToReplenish > 0;
-      return matchesQuery && matchesReplenish;
-    });
-  }, [detailProductQuery, onlyProductsToReplenish, selectedMachine]);
 
   async function loadStock() {
     try {
@@ -320,13 +326,6 @@ export function StockLivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!selectedMachine) {
-      setDetailProductQuery('');
-      setOnlyProductsToReplenish(true);
-    }
-  }, [selectedMachine]);
-
   function toggleExpanded(machineId: number) {
     setExpandedMachineIds((current) => {
       const next = new Set(current);
@@ -349,17 +348,17 @@ export function StockLivePage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="rounded-xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/30 p-4 shadow-sm sm:rounded-2xl sm:p-6">
+    <div className="space-y-5 sm:space-y-6">
+      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-blue-50/30 p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-3">
-              <div className="rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 p-2.5 text-white shadow-lg sm:rounded-xl sm:p-3">
-                <PackageSearch className="h-5 w-5 sm:h-6 sm:w-6" />
+            <div className="mb-3 flex items-center gap-3">
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 p-3 text-white shadow-lg">
+                <PackageSearch className="h-6 w-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">Stock Frekuent</h1>
-                <p className="text-xs font-semibold text-zinc-700 sm:text-sm">
+                <h1 className="text-[30px] font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">Stock Frekuent</h1>
+                <p className="text-sm font-semibold text-zinc-700">
                   Vista de reposición por máquina y producto
                 </p>
               </div>
@@ -375,7 +374,7 @@ export function StockLivePage() {
           <Button
             onClick={loadStock}
             disabled={refreshing}
-            className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700 md:w-auto"
+            className="h-12 w-full rounded-xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700 md:w-auto"
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             Actualizar stock
@@ -406,58 +405,58 @@ export function StockLivePage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Card className="bg-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Máquinas</CardTitle>
+        <Card className="border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[13px] font-bold text-zinc-600">Máquinas</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.all}</div>
-            <p className="text-xs font-medium text-zinc-500">con planograma</p>
+            <div className="text-3xl font-black">{stats.all}</div>
+            <p className="text-xs font-semibold text-zinc-500">con planograma</p>
           </CardContent>
         </Card>
-        <Card className="bg-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">A reponer</CardTitle>
+        <Card className="border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[13px] font-bold text-zinc-600">A reponer</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">{stats.totalToReplenish}</div>
-            <p className="text-xs font-medium text-zinc-500">unidades totales</p>
+            <div className="text-3xl font-black text-emerald-600">{stats.totalToReplenish}</div>
+            <p className="text-xs font-semibold text-zinc-500">unidades</p>
           </CardContent>
         </Card>
-        <Card className="bg-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Vacías + Críticas</CardTitle>
+        <Card className="border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[13px] font-bold text-zinc-600">Alta prioridad</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.empty + stats.critical}</div>
-            <p className="text-xs font-medium text-zinc-500">prioridad alta</p>
+            <div className="text-3xl font-black text-red-600">{stats.empty + stats.critical}</div>
+            <p className="text-xs font-semibold text-zinc-500">vacías + críticas</p>
           </CardContent>
         </Card>
-        <Card className="bg-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Llenado medio</CardTitle>
+        <Card className="border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[13px] font-bold text-zinc-600">Llenado</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.fillRate}%</div>
-            <p className="text-xs font-medium text-zinc-500">global</p>
+            <div className="text-3xl font-black">{stats.fillRate}%</div>
+            <p className="text-xs font-semibold text-zinc-500">global</p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabKey)} className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <TabsList className="flex h-auto w-full justify-start gap-2 overflow-x-auto rounded-xl bg-zinc-100 p-1.5 lg:w-auto">
+          <TabsList className="flex h-auto w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm lg:w-auto">
             {tabOptions.map((tab) => (
               <TabsTrigger
                 key={tab.key}
                 value={tab.key}
-                className="h-12 min-w-[96px] shrink-0 justify-between gap-2 rounded-lg px-3 text-left text-xs data-[state=active]:bg-white"
+                className="h-14 min-w-[112px] shrink-0 justify-between gap-2 rounded-xl px-3 text-left text-sm data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
               >
                 <span className="flex items-center gap-2 font-semibold">
                   <span className={`h-2 w-2 rounded-full ${tab.dotClassName}`} />
                   {tab.label}
                 </span>
-                <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-bold text-zinc-800">
+                <span className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-black text-zinc-800">
                   {getTabCount(tab.key)}
                 </span>
               </TabsTrigger>
@@ -470,7 +469,7 @@ export function StockLivePage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar máquina, ID o producto..."
-              className="border-emerald-200 pl-8 focus:border-emerald-400"
+              className="h-12 rounded-xl border-emerald-200 pl-9 text-base focus:border-emerald-400"
             />
           </div>
         </div>
@@ -478,7 +477,7 @@ export function StockLivePage() {
         {(['all', 'empty', 'critical', 'normal', 'ok'] as TabKey[]).map((tab) => (
           <TabsContent key={tab} value={tab} className="space-y-4">
             {refreshing && data && (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="space-y-3">
                 {Array.from({ length: 8 }).map((_, index) => <MachineCardSkeleton key={index} />)}
               </div>
             )}
@@ -494,118 +493,186 @@ export function StockLivePage() {
             )}
 
             {!refreshing && filteredMachines.length > 0 && (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="space-y-3">
                 {filteredMachines.map((machine) => {
                   const meta = urgencyMeta(machine.urgency);
                   const UrgencyIcon = meta.icon;
                   const isExpanded = expandedMachineIds.has(machine.machineId);
-                  const priorityProducts = sortedProducts(machine.products).filter((product) => product.unitsToReplenish > 0);
-                  const productsToShow = (isExpanded ? priorityProducts : priorityProducts.slice(0, 4));
+                  const allProducts = sortedProducts(machine.products);
+                  const priorityProducts = allProducts.filter((product) => product.unitsToReplenish > 0);
+                  const productsToShow = onlyProductsToReplenish ? priorityProducts : allProducts;
+                  const subtitle = machineSubtitle(machine);
 
                   return (
                     <Card
                       key={machine.machineId}
-                      className={`flex flex-col border bg-white transition-all duration-200 hover:border-emerald-300 hover:shadow-md ${meta.border}`}
+                      className={`w-full max-w-full overflow-hidden border bg-white shadow-sm transition-all duration-200 ${meta.border}`}
                     >
-                      <CardHeader className="pb-3">
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge className={meta.badge}>
-                              <UrgencyIcon className="mr-1 h-3 w-3" />
-                              {meta.label}
-                            </Badge>
-                            {machine.outOfStockCount > 0 && (
-                              <Badge className="border-red-500 bg-red-500 text-white">
-                                {machine.outOfStockCount} vacíos
-                              </Badge>
-                            )}
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(machine.machineId)}
+                        className="flex w-full min-w-0 items-stretch gap-3 p-3 text-left sm:p-5"
+                        aria-expanded={isExpanded}
+                      >
+                        <div className={`w-1.5 shrink-0 self-stretch rounded-full ${meta.bar}`} />
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge className={meta.badge}>
+                                  <UrgencyIcon className="mr-1 h-3 w-3" />
+                                  {meta.label}
+                                </Badge>
+                                {machine.outOfStockCount > 0 && (
+                                  <Badge className="border-red-500 bg-red-500 text-white">
+                                    {machine.outOfStockCount} vacíos
+                                  </Badge>
+                                )}
+                              </div>
+                              <h3 className="mt-2 break-words text-xl font-black leading-tight text-zinc-900 sm:text-2xl">
+                                {machine.label}
+                              </h3>
+                              <p className="mt-1 break-words text-sm font-semibold leading-snug text-zinc-600">
+                                {subtitle || `ID Frekuent: ${machine.machineId}`}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-zinc-500">
+                                <span>ID {machine.machineId}</span>
+                                {machine.serialNumber && <span>Serie {machine.serialNumber}</span>}
+                                {machine.machineStatus?.length ? <span>{machine.machineStatus.join(', ')}</span> : null}
+                              </div>
+                            </div>
+                            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-900">
+                              {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                            </div>
                           </div>
-                          <div>
-                            <CardTitle className="text-base leading-snug text-zinc-900">{machine.label}</CardTitle>
-                            <CardDescription>ID Frekuent: {machine.machineId}</CardDescription>
-                          </div>
-                        </div>
-                      </CardHeader>
 
-                      <CardContent className="flex flex-1 flex-col space-y-4">
-                        <div>
-                          <div className="mb-1 flex items-center justify-between text-sm">
-                            <span className="font-medium text-zinc-600">Llenado</span>
-                            <span className="font-bold text-zinc-900">{machine.fillRate}%</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-center">
+                              <div className="text-2xl font-black text-zinc-900">{machine.fillRate}%</div>
+                              <div className="text-xs font-bold text-zinc-600">Lleno</div>
+                            </div>
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 text-center">
+                              <div className="text-2xl font-black text-emerald-700">{machine.totalToReplenish}</div>
+                              <div className="text-xs font-bold text-zinc-600">Meter</div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-center">
+                              <div className="text-2xl font-black text-zinc-900">{machine.totalAvailable}</div>
+                              <div className="text-xs font-bold text-zinc-600">Actual</div>
+                            </div>
                           </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+
+                          <div className="h-3 overflow-hidden rounded-full bg-zinc-100">
                             <div
                               className={`h-full rounded-full ${meta.bar}`}
                               style={{ width: `${Math.max(0, Math.min(100, machine.fillRate))}%` }}
                             />
                           </div>
                         </div>
+                      </button>
 
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2 text-center">
-                            <div className="text-lg font-bold text-emerald-700">{machine.totalToReplenish}</div>
-                            <div className="text-[11px] font-semibold text-zinc-600">Reponer</div>
+                      {isExpanded && (
+                        <div className="border-t border-zinc-100 bg-zinc-50 p-3 sm:p-5">
+                          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <h4 className="text-lg font-black text-zinc-900">Productos</h4>
+                              <p className="text-sm font-semibold text-zinc-500">
+                                {priorityProducts.length} a reponer de {machine.totalProducts} productos
+                              </p>
+                            </div>
+                            <Button
+                              variant={onlyProductsToReplenish ? 'default' : 'outline'}
+                              onClick={() => setOnlyProductsToReplenish((value) => !value)}
+                              className={`h-11 w-full rounded-xl text-sm font-black sm:w-auto ${onlyProductsToReplenish ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-white'}`}
+                            >
+                              <Filter className="mr-2 h-4 w-4" />
+                              {onlyProductsToReplenish ? 'Pendientes' : 'Todos'}
+                            </Button>
                           </div>
-                          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-center">
-                            <div className="text-lg font-bold text-zinc-900">{machine.totalAvailable}</div>
-                            <div className="text-[11px] font-semibold text-zinc-600">Actual</div>
-                          </div>
-                          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-center">
-                            <div className="text-lg font-bold text-zinc-900">{machine.totalCapacity}</div>
-                            <div className="text-[11px] font-semibold text-zinc-600">Capacidad</div>
-                          </div>
-                        </div>
 
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-semibold text-zinc-900">Qué reponer</h4>
-                            <Badge variant="outline">{priorityProducts.length}</Badge>
-                          </div>
-                          {priorityProducts.length === 0 ? (
-                            <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
-                              No hay productos pendientes de reposición.
+                          {productsToShow.length === 0 ? (
+                            <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-center">
+                              <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
+                              <p className="font-black text-green-900">Sin productos pendientes</p>
+                              <p className="mt-1 text-sm font-semibold text-green-800">Cambia a “Todos” para ver el planograma completo.</p>
                             </div>
                           ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               {productsToShow.map((product, index) => {
                                 const status = productStatus(product);
+                                const fillRate = productFillRate(product);
+                                const price = formatPrice(product.price);
+
                                 return (
-                                  <div key={`${machine.machineId}-${product.line}-${index}`} className="rounded-lg border border-zinc-200 p-2">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <p className="line-clamp-1 text-sm font-semibold text-zinc-900">{product.productName}</p>
-                                        <p className="text-xs text-zinc-500">Raíl {product.line || '-'} · mínimo {product.min}</p>
+                                  <div
+                                    key={`${machine.machineId}-${product.line}-${index}`}
+                                    className="w-full min-w-0 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm sm:p-4"
+                                  >
+                                    <div className="flex min-w-0 gap-3">
+                                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-zinc-100 sm:h-16 sm:w-16">
+                                        {product.image ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={product.image} alt={product.productName} className="h-full w-full object-contain p-1" />
+                                        ) : (
+                                          <span className="text-lg font-black text-zinc-900">{product.line || '-'}</span>
+                                        )}
                                       </div>
-                                      <div className="text-right">
-                                        <p className="text-sm font-bold text-emerald-700">{product.quantity}/{product.capacity}</p>
-                                        <p className="text-xs font-semibold text-red-600">+{product.unitsToReplenish}</p>
+
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                          <div className="min-w-0">
+                                            <p className="break-words text-base font-black leading-tight text-zinc-900 sm:text-lg">
+                                              {product.productName}
+                                            </p>
+                                            <p className="mt-1 break-words text-sm font-semibold text-zinc-500">
+                                              Raíl {product.line || '-'}{product.mdbCode ? ` · MDB ${product.mdbCode}` : ''} · mínimo {product.min}
+                                            </p>
+                                          </div>
+                                          <Badge className={`w-fit shrink-0 ${status.className}`}>{status.label}</Badge>
+                                        </div>
+
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          {product.category && <Badge variant="outline" className="max-w-full break-words">{product.category}</Badge>}
+                                          {price && <Badge variant="outline">{price}</Badge>}
+                                          {product.status && <Badge variant="outline">{product.status}</Badge>}
+                                          {product.stockLabel && <Badge variant="outline">{product.stockLabel}</Badge>}
+                                        </div>
+
+                                        <div className="mt-3 grid grid-cols-3 gap-2">
+                                          <div className="rounded-xl bg-zinc-50 p-2 text-center sm:p-3">
+                                            <div className="text-xs font-bold text-zinc-500">Actual</div>
+                                            <div className="text-xl font-black text-zinc-900 sm:text-2xl">{product.quantity}</div>
+                                          </div>
+                                          <div className="rounded-xl bg-zinc-50 p-2 text-center sm:p-3">
+                                            <div className="text-xs font-bold text-zinc-500">Cap.</div>
+                                            <div className="text-xl font-black text-zinc-900 sm:text-2xl">{product.capacity}</div>
+                                          </div>
+                                          <div className="rounded-xl bg-emerald-50 p-2 text-center sm:p-3">
+                                            <div className="text-xs font-bold text-emerald-700">Meter</div>
+                                            <div className="text-xl font-black text-emerald-700 sm:text-2xl">+{product.unitsToReplenish}</div>
+                                          </div>
+                                        </div>
+
+                                        <div className="mt-3">
+                                          <div className="mb-1 flex items-center justify-between text-sm font-bold text-zinc-500">
+                                            <span>Llenado del raíl</span>
+                                            <span>{fillRate}%</span>
+                                          </div>
+                                          <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
+                                            <div
+                                              className={`h-full rounded-full ${fillRate === 0 ? 'bg-red-600' : fillRate < 30 ? 'bg-orange-500' : fillRate < 70 ? 'bg-yellow-500' : 'bg-green-600'}`}
+                                              style={{ width: `${Math.max(0, Math.min(100, fillRate))}%` }}
+                                            />
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
-                                    <Badge className={`mt-2 text-[11px] ${status.className}`}>{status.label}</Badge>
                                   </div>
                                 );
                               })}
-                              {priorityProducts.length > 4 && (
-                                <Button variant="ghost" size="sm" onClick={() => toggleExpanded(machine.machineId)} className="w-full">
-                                  {isExpanded ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
-                                  {isExpanded ? 'Ver menos' : `Ver ${priorityProducts.length - 4} más`}
-                                </Button>
-                              )}
                             </div>
                           )}
                         </div>
-
-                        <div className="mt-auto border-t pt-3">
-                          <Button
-                            size="lg"
-                            onClick={() => setSelectedMachine(machine)}
-                            className="h-12 w-full bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            Revisar productos
-                          </Button>
-                        </div>
-                      </CardContent>
+                      )}
                     </Card>
                   );
                 })}
@@ -615,153 +682,6 @@ export function StockLivePage() {
         ))}
       </Tabs>
 
-      <Dialog open={Boolean(selectedMachine)} onOpenChange={(open) => !open && setSelectedMachine(null)}>
-        <DialogContent className="h-[100dvh] max-h-[100dvh] w-full max-w-full translate-y-[-50%] overflow-hidden rounded-none p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-xl lg:max-w-5xl">
-          {selectedMachine && (
-            <div className="flex h-full max-h-[100dvh] flex-col sm:max-h-[90vh]">
-              <DialogHeader className="border-b bg-white p-4 pr-12 text-left sm:p-6 sm:pr-14">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <DialogTitle className="text-xl leading-tight sm:text-2xl">{selectedMachine.label}</DialogTitle>
-                    <DialogDescription className="mt-1 text-sm">
-                      {selectedMachine.totalAvailable}/{selectedMachine.totalCapacity} unidades · {selectedMachine.fillRate}% lleno · {selectedMachine.totalToReplenish} a reponer
-                    </DialogDescription>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className={urgencyMeta(selectedMachine.urgency).badge}>{urgencyMeta(selectedMachine.urgency).label}</Badge>
-                    <Badge variant="outline">{selectedMachine.totalProducts} productos</Badge>
-                    <Badge variant="outline">{selectedMachine.outOfStockCount} vacíos</Badge>
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-4 overflow-auto bg-zinc-50 p-4 sm:p-6">
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                  <div className="rounded-lg border bg-emerald-50 p-3 sm:p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
-                      <ShoppingCart className="h-4 w-4" />
-                      A reponer
-                    </div>
-                    <div className="mt-1 text-2xl font-bold text-emerald-700">{selectedMachine.totalToReplenish}</div>
-                  </div>
-                  <div className="rounded-lg border bg-white p-3 sm:p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                      <Package className="h-4 w-4" />
-                      Actual
-                    </div>
-                    <div className="mt-1 text-2xl font-bold">{selectedMachine.totalAvailable}</div>
-                  </div>
-                  <div className="rounded-lg border bg-white p-3 sm:p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                      <PackageCheck className="h-4 w-4" />
-                      Capacidad
-                    </div>
-                    <div className="mt-1 text-2xl font-bold">{selectedMachine.totalCapacity}</div>
-                  </div>
-                  <div className="rounded-lg border bg-red-50 p-3 sm:p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-red-800">
-                      <AlertTriangle className="h-4 w-4" />
-                      Bajo/vacío
-                    </div>
-                    <div className="mt-1 text-2xl font-bold text-red-700">
-                      {selectedMachine.lowStockCount + selectedMachine.outOfStockCount}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-emerald-500" />
-                    <Input
-                      value={detailProductQuery}
-                      onChange={(event) => setDetailProductQuery(event.target.value)}
-                      placeholder="Buscar producto o raíl..."
-                      className="pl-8"
-                    />
-                  </div>
-                  <Button
-                    variant={onlyProductsToReplenish ? 'default' : 'outline'}
-                    onClick={() => setOnlyProductsToReplenish((value) => !value)}
-                    className={`h-11 w-full md:w-auto ${onlyProductsToReplenish ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-white'}`}
-                  >
-                    <Filter className="mr-2 h-4 w-4" />
-                    Solo a reponer
-                  </Button>
-                </div>
-
-                {detailProducts.length === 0 ? (
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-center">
-                    <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
-                    <p className="font-semibold text-green-900">No hay productos en esta vista</p>
-                    <p className="mt-1 text-sm text-green-800">Quita el filtro o cambia la búsqueda para ver el planograma completo.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {detailProducts.map((product, index) => {
-                        const status = productStatus(product);
-                        const fillRate = productFillRate(product);
-                        return (
-                          <div key={`${product.line}-${product.productName}-${index}`} className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
-                            <div className="flex items-start gap-3">
-                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-base font-bold text-white">
-                                {product.line || '-'}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                  <div className="min-w-0">
-                                    <p className="text-base font-bold leading-snug text-zinc-900">{product.productName}</p>
-                                    <p className="mt-1 text-xs font-medium text-zinc-500">
-                                      {product.category || 'Sin categoría'} · mínimo {product.min}
-                                    </p>
-                                  </div>
-                                  <Badge className={`w-fit ${status.className}`}>{status.label}</Badge>
-                                </div>
-
-                                <div className="mt-3 grid grid-cols-3 gap-2">
-                                  <div className="rounded-lg bg-zinc-50 p-2 text-center">
-                                    <div className="text-xs font-semibold text-zinc-500">Actual</div>
-                                    <div className="text-lg font-bold text-zinc-900">{product.quantity}</div>
-                                  </div>
-                                  <div className="rounded-lg bg-zinc-50 p-2 text-center">
-                                    <div className="text-xs font-semibold text-zinc-500">Capacidad</div>
-                                    <div className="text-lg font-bold text-zinc-900">{product.capacity}</div>
-                                  </div>
-                                  <div className="rounded-lg bg-emerald-50 p-2 text-center">
-                                    <div className="text-xs font-semibold text-emerald-700">Meter</div>
-                                    <div className="text-lg font-bold text-emerald-700">+{product.unitsToReplenish}</div>
-                                  </div>
-                                </div>
-
-                                <div className="mt-3">
-                                  <div className="mb-1 flex items-center justify-between text-xs font-semibold text-zinc-500">
-                                    <span>Llenado del raíl</span>
-                                    <span>{fillRate}%</span>
-                                  </div>
-                                  <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-                                    <div
-                                      className={`h-full rounded-full ${fillRate === 0 ? 'bg-red-600' : fillRate < 30 ? 'bg-orange-500' : fillRate < 70 ? 'bg-yellow-500' : 'bg-green-600'}`}
-                                      style={{ width: `${Math.max(0, Math.min(100, fillRate))}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-
-              <div className="border-t bg-white p-3 sm:hidden">
-                <DialogClose asChild>
-                  <Button className="h-11 w-full bg-zinc-900 text-white hover:bg-zinc-800">Cerrar revisión</Button>
-                </DialogClose>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

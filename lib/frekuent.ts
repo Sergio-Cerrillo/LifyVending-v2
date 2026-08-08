@@ -13,19 +13,31 @@ export interface FrekuentPointOfSalesActivityParams {
 
 export interface FrekuentStockProduct {
   line: string;
+  mdbCode?: string;
+  productId?: number;
+  railId?: number;
   productName: string;
+  image?: string;
   category?: string;
-  price?: string;
+  price?: number;
   quantity: number;
   capacity: number;
   unitsToReplenish: number;
   min: number;
+  stockLabel?: string;
+  stockPercent: number;
   status?: string;
 }
 
 export interface FrekuentStockMachine {
   machineId: number;
   label: string;
+  machineNumber?: string;
+  clientName?: string;
+  location?: string;
+  route?: string;
+  serialNumber?: string;
+  machineStatus?: string[];
   products: FrekuentStockProduct[];
   totalProducts: number;
   totalCapacity: number;
@@ -46,6 +58,17 @@ interface CachedFrekuentToken {
 interface FrekuentLoginResponse {
   access_token?: string;
   refresh_token?: string;
+}
+
+interface FrekuentMachineTableRow {
+  id_machine?: unknown;
+  name_machine?: unknown;
+  number_machine?: unknown;
+  client_name?: unknown;
+  route?: unknown;
+  location?: unknown;
+  serial_number?: unknown;
+  status?: unknown;
 }
 
 let cachedToken: CachedFrekuentToken | null = null;
@@ -323,6 +346,45 @@ export async function getFrekuentPointOfSalesActivity({
   });
 }
 
+export async function getFrekuentMachineMetadataMap(machineIds: number[] = []): Promise<Map<number, Partial<FrekuentStockMachine>>> {
+  const { startDate, endDate } = getMadridTodayRange();
+  const selectedIds = new Set(machineIds);
+  const metadata = new Map<number, Partial<FrekuentStockMachine>>();
+
+  const payload = await frekuentFetchWithRetry<{ data?: FrekuentMachineTableRow[] }>('/pos/table/pos', {
+    method: 'POST',
+    body: JSON.stringify({
+      page: 1,
+      pageSize: 100,
+      sort_by: 'name_machine',
+      direction: 'asc',
+      filters: {},
+      start_date: startDate,
+      end_date: endDate,
+      dates_logic: 'today',
+      search: '',
+      use_cache: true,
+      query_filters: {},
+    }),
+  }, true);
+
+  for (const row of payload.data || []) {
+    const machineId = numberFromUnknown(row.id_machine);
+    if (!machineId || (selectedIds.size > 0 && !selectedIds.has(machineId))) continue;
+
+    metadata.set(machineId, {
+      machineNumber: typeof row.number_machine === 'string' && row.number_machine.trim() ? row.number_machine.trim() : undefined,
+      clientName: typeof row.client_name === 'string' && row.client_name.trim() ? row.client_name.trim() : undefined,
+      location: typeof row.location === 'string' && row.location.trim() ? row.location.trim() : undefined,
+      route: typeof row.route === 'string' && row.route.trim() ? row.route.trim() : undefined,
+      serialNumber: row.serial_number == null ? undefined : String(row.serial_number),
+      machineStatus: Array.isArray(row.status) ? row.status.filter((item): item is string => typeof item === 'string') : undefined,
+    });
+  }
+
+  return metadata;
+}
+
 function numberFromUnknown(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -336,18 +398,25 @@ function normalizePlanogramProduct(row: Record<string, unknown>): FrekuentStockP
   const productName = typeof row.product_name === 'string' ? row.product_name.trim() : '';
   const quantity = numberFromUnknown(row.quantity);
   const capacity = numberFromUnknown(row.capacity);
+  const stockPercent = numberFromUnknown(row.percentage_stock_value);
 
   if (!productName && capacity <= 0) return null;
 
   return {
     line: String(row.number ?? ''),
+    mdbCode: row.number_mdb == null ? undefined : String(row.number_mdb),
+    productId: numberFromUnknown(row.id_product) || undefined,
+    railId: numberFromUnknown(row.id_rail) || undefined,
     productName: productName || 'Producto sin nombre',
+    image: typeof row.image === 'string' && row.image.trim() ? row.image.trim() : undefined,
     category: typeof row.category === 'string' ? row.category : undefined,
-    price: typeof row.price === 'string' ? row.price : undefined,
+    price: row.price == null ? undefined : numberFromUnknown(row.price),
     quantity,
     capacity,
     unitsToReplenish: Math.max(0, capacity - quantity),
     min: numberFromUnknown(row.min),
+    stockLabel: typeof row.percentage_stock === 'string' ? row.percentage_stock : undefined,
+    stockPercent: stockPercent || (capacity > 0 ? Math.round((quantity / capacity) * 100) : 0),
     status: typeof row.status === 'string' ? row.status : undefined,
   };
 }
@@ -455,11 +524,19 @@ export async function getFrekuentStockMachines(machineIds: number[] = []): Promi
     ? machines.filter((machine) => selectedIds.has(machine.value))
     : machines;
 
-  const stockMachines = await mapWithConcurrency(
-    selectedMachines,
-    Number(process.env.FREKUENT_STOCK_CONCURRENCY || 6),
-    getFrekuentMachinePlanogram,
-  );
+  const [stockMachines, metadataMap] = await Promise.all([
+    mapWithConcurrency(
+      selectedMachines,
+      Number(process.env.FREKUENT_STOCK_CONCURRENCY || 6),
+      getFrekuentMachinePlanogram,
+    ),
+    getFrekuentMachineMetadataMap(machineIds).catch(() => new Map()),
+  ]);
+
+  const enrichedMachines = stockMachines.map((machine) => ({
+    ...machine,
+    ...metadataMap.get(machine.machineId),
+  }));
 
   const urgencyOrder: Record<FrekuentStockMachine['urgency'], number> = {
     empty: 0,
@@ -469,7 +546,7 @@ export async function getFrekuentStockMachines(machineIds: number[] = []): Promi
     ok: 4,
   };
 
-  return stockMachines.sort((a, b) => {
+  return enrichedMachines.sort((a, b) => {
     const urgencyDiff = urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
     if (urgencyDiff !== 0) return urgencyDiff;
     if (b.totalToReplenish !== a.totalToReplenish) return b.totalToReplenish - a.totalToReplenish;
