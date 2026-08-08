@@ -9,17 +9,49 @@ import {
   ChevronUp,
   Clock,
   Filter,
+  Loader2,
+  MoreVertical,
   PackageSearch,
+  Plus,
   RefreshCw,
+  Save,
   Search,
+  SlidersHorizontal,
+  Trash2,
   XCircle,
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-helpers';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -71,6 +103,39 @@ interface StockLiveResponse {
 }
 
 type TabKey = 'all' | 'empty' | 'critical' | 'normal' | 'ok';
+type ReplenishmentAction = 'full-refill';
+
+interface PendingReplenishmentAction {
+  action: ReplenishmentAction;
+  machine: StockMachine;
+}
+
+interface ProductOption {
+  id: number;
+  name: string;
+  category?: string;
+  image?: string;
+}
+
+interface RailEditRow {
+  key: string;
+  railId?: number;
+  number: string;
+  mdbCode: string;
+  productId: string;
+  productName: string;
+  category?: string;
+  price: string;
+  quantity: string;
+  capacity: string;
+  min: string;
+  deleted?: boolean;
+}
+
+interface RailEditorState {
+  machine: StockMachine;
+  rows: RailEditRow[];
+}
 
 const tabOptions: Array<{ key: TabKey; label: string; dotClassName: string }> = [
   { key: 'all', label: 'Todas', dotClassName: 'bg-zinc-500' },
@@ -220,6 +285,42 @@ function productFillRate(product: StockProduct) {
   return Math.round((product.quantity / product.capacity) * 100);
 }
 
+function centsToEuroInput(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '0,00';
+  return (value / 100).toLocaleString('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function parsePositiveInteger(value: string) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : NaN;
+}
+
+function parseEuroToCents(value: string) {
+  const normalized = value.trim().replace(/\./g, '').replace(',', '.');
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return NaN;
+  return Math.round(parsed * 100);
+}
+
+function createRailEditRows(machine: StockMachine): RailEditRow[] {
+  return sortedProducts(machine.products).map((product, index) => ({
+    key: `${product.railId || 'new'}-${product.line || index}`,
+    railId: product.railId,
+    number: product.line || String(index + 1),
+    mdbCode: product.mdbCode || '',
+    productId: product.productId ? String(product.productId) : '',
+    productName: product.productName,
+    category: product.category,
+    price: centsToEuroInput(product.price),
+    quantity: String(product.quantity),
+    capacity: String(product.capacity),
+    min: String(product.min),
+  }));
+}
+
 export function StockLivePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -229,6 +330,13 @@ export function StockLivePage() {
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [expandedMachineIds, setExpandedMachineIds] = useState<Set<number>>(new Set());
   const [onlyProductsToReplenish, setOnlyProductsToReplenish] = useState(true);
+  const [pendingReplenishmentAction, setPendingReplenishmentAction] = useState<PendingReplenishmentAction | null>(null);
+  const [runningReplenishmentAction, setRunningReplenishmentAction] = useState(false);
+  const [railEditor, setRailEditor] = useState<RailEditorState | null>(null);
+  const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
+  const [loadingProductOptions, setLoadingProductOptions] = useState(false);
+  const [savingRails, setSavingRails] = useState(false);
+  const [confirmRailSaveOpen, setConfirmRailSaveOpen] = useState(false);
 
   const machines = data?.stockMachines || [];
 
@@ -311,10 +419,12 @@ export function StockLivePage() {
       }
 
       setData(payload);
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido consultando Frekuent';
       setError(message);
       toast.error('Error consultando Stock', { description: message });
+      return false;
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -343,13 +453,281 @@ export function StockLivePage() {
     return stats.ok;
   }
 
+  async function getSessionAccessToken() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+    }
+
+    return sessionData.session.access_token;
+  }
+
+  async function loadProductOptions() {
+    if (productOptions.length > 0 || loadingProductOptions) return;
+
+    try {
+      setLoadingProductOptions(true);
+      const accessToken = await getSessionAccessToken();
+      const response = await fetch('/api/stock/replenishment?resource=products', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No se pudieron cargar los productos.');
+      }
+
+      setProductOptions(Array.isArray(payload.products) ? payload.products : []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error cargando productos';
+      toast.error('No se pudo cargar el catálogo de Frekuent', { description: message });
+    } finally {
+      setLoadingProductOptions(false);
+    }
+  }
+
+  function openRailEditor(machine: StockMachine) {
+    setRailEditor({
+      machine,
+      rows: createRailEditRows(machine),
+    });
+    loadProductOptions();
+  }
+
+  function updateRailRow(key: string, patch: Partial<RailEditRow>) {
+    setRailEditor((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        rows: current.rows.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+      };
+    });
+  }
+
+  function updateRailProduct(key: string, productId: string) {
+    const selected = productOptions.find((product) => String(product.id) === productId);
+    updateRailRow(key, {
+      productId,
+      productName: selected?.name || '',
+      category: selected?.category,
+    });
+  }
+
+  function addRailRow() {
+    setRailEditor((current) => {
+      if (!current) return current;
+      const activeRows = current.rows.filter((row) => !row.deleted);
+      const nextNumber = activeRows.reduce((max, row) => Math.max(max, Number(row.number) || 0), 0) + 1;
+      return {
+        ...current,
+        rows: [
+          ...current.rows,
+          {
+            key: `new-${Date.now()}`,
+            number: String(nextNumber),
+            mdbCode: '',
+            productId: '',
+            productName: '',
+            price: '0,00',
+            quantity: '0',
+            capacity: '0',
+            min: '0',
+          },
+        ],
+      };
+    });
+  }
+
+  function removeRailRow(key: string) {
+    setRailEditor((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        rows: current.rows.map((row) => (row.key === key ? { ...row, deleted: true } : row)),
+      };
+    });
+  }
+
+  function restoreRailRow(key: string) {
+    updateRailRow(key, { deleted: false });
+  }
+
+  function getActiveRailRows() {
+    return railEditor?.rows.filter((row) => !row.deleted) || [];
+  }
+
+  function buildRailPayload() {
+    const rows = getActiveRailRows();
+    const usedNumbers = new Set<number>();
+
+    if (rows.length === 0) {
+      throw new Error('El planograma debe tener al menos un raíl.');
+    }
+
+    return rows.map((row) => {
+      const number = parsePositiveInteger(row.number);
+      const numberMdb = row.mdbCode.trim() ? parsePositiveInteger(row.mdbCode) : null;
+      const productId = parsePositiveInteger(row.productId);
+      const quantity = parsePositiveInteger(row.quantity);
+      const capacity = parsePositiveInteger(row.capacity);
+      const min = parsePositiveInteger(row.min);
+      const price = parseEuroToCents(row.price);
+
+      if (!Number.isInteger(number) || number <= 0) throw new Error('Hay un número de raíl no válido.');
+      if (usedNumbers.has(number)) throw new Error(`El raíl ${number} está duplicado.`);
+      usedNumbers.add(number);
+      if (numberMdb !== null && (!Number.isInteger(numberMdb) || numberMdb <= 0)) throw new Error(`El MDB del raíl ${number} no es válido.`);
+      if (!Number.isInteger(productId) || productId <= 0) throw new Error(`Selecciona producto en el raíl ${number}.`);
+      if (!Number.isInteger(quantity) || !Number.isInteger(capacity) || quantity < 0 || capacity < 0) throw new Error(`Cantidad/capacidad no válida en el raíl ${number}.`);
+      if (quantity > capacity) throw new Error(`El raíl ${number} tiene cantidad mayor que capacidad.`);
+      if (!Number.isInteger(min) || min < 0) throw new Error(`Mínimo no válido en el raíl ${number}.`);
+      if (!Number.isInteger(price) || price < 0) throw new Error(`Precio no válido en el raíl ${number}.`);
+
+      return {
+        rail: row.railId || null,
+        number,
+        number_mdb: numberMdb,
+        product_id: productId,
+        quantity,
+        capacity,
+        price,
+        min,
+      };
+    });
+  }
+
+  async function saveRailEditor() {
+    if (!railEditor) return;
+
+    let rows: ReturnType<typeof buildRailPayload>;
+    try {
+      rows = buildRailPayload();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Revisa los datos del planograma.';
+      toast.error('No se puede guardar el planograma', { description: message });
+      setConfirmRailSaveOpen(false);
+      return;
+    }
+
+    const toastId = toast.loading('Guardando planograma en Frekuent...', {
+      description: `${railEditor.machine.label} · ${rows.length} raíles`,
+    });
+
+    try {
+      setSavingRails(true);
+      const accessToken = await getSessionAccessToken();
+      const response = await fetch('/api/stock/replenishment', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'update-rails',
+          machineId: railEditor.machine.machineId,
+          rows,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'Frekuent no pudo guardar el planograma.');
+      }
+
+      toast.success('Planograma guardado y sincronizado', {
+        id: toastId,
+        description: `${railEditor.machine.label} se ha actualizado correctamente.`,
+      });
+      setConfirmRailSaveOpen(false);
+      setRailEditor(null);
+      const refreshed = await loadStock();
+      if (!refreshed) {
+        toast.warning('Guardado correcto, pero no se pudo refrescar la vista', {
+          description: 'Pulsa “Actualizar stock” para volver a consultar Frekuent.',
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error guardando planograma';
+      toast.error('No se pudo guardar el planograma', {
+        id: toastId,
+        description: `${railEditor.machine.label} · ${message}`,
+      });
+    } finally {
+      setSavingRails(false);
+    }
+  }
+
+  async function confirmReplenishmentAction() {
+    if (!pendingReplenishmentAction) return;
+
+    const { action, machine } = pendingReplenishmentAction;
+
+    const toastId = toast.loading('Enviando reposición a Frekuent...', {
+      description: `${machine.label} · marcando llenado completo`,
+    });
+
+    try {
+      setRunningReplenishmentAction(true);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+      }
+
+      const response = await fetch('/api/stock/replenishment', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'full-refill',
+          machineId: machine.machineId,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'Frekuent no pudo completar la reposición.');
+      }
+
+      toast.success('Reposición registrada correctamente', {
+        id: toastId,
+        description: `${machine.label} se ha marcado como llena. Actualizando la vista...`,
+      });
+      setPendingReplenishmentAction(null);
+      const refreshed = await loadStock();
+      if (refreshed) {
+        toast.success('Stock actualizado', {
+          description: 'La pantalla ya muestra la última lectura disponible.',
+        });
+      } else {
+        toast.warning('Reposición registrada, pero no se pudo refrescar la vista', {
+          description: 'Pulsa “Actualizar stock” para volver a consultar Frekuent.',
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error actualizando reposición';
+      toast.error('No se pudo completar la reposición', {
+        id: toastId,
+        description: `${machine.label} · ${message}`,
+        action: {
+          label: 'Reintentar',
+          onClick: () => setPendingReplenishmentAction({ action: 'full-refill', machine }),
+        },
+      });
+    } finally {
+      setRunningReplenishmentAction(false);
+    }
+  }
+
   if (loading) {
     return <LoadingInline message="Consultando stock en Frekuent..." />;
   }
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-blue-50/30 p-5 shadow-sm sm:p-6">
+    <div className="w-full max-w-full space-y-4 overflow-x-hidden px-3 pb-4 sm:space-y-6 sm:px-0 sm:pb-0">
+      <div className="w-full max-w-full rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-blue-50/30 p-4 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="mb-3 flex items-center gap-3">
@@ -357,7 +735,7 @@ export function StockLivePage() {
                 <PackageSearch className="h-6 w-6" />
               </div>
               <div>
-                <h1 className="text-[30px] font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">Stock Frekuent</h1>
+                <h1 className="text-2xl font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">Stock Frekuent</h1>
                 <p className="text-sm font-semibold text-zinc-700">
                   Vista de reposición por máquina y producto
                 </p>
@@ -404,40 +782,40 @@ export function StockLivePage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Card className="border-zinc-200 bg-white shadow-sm">
-          <CardHeader className="pb-1">
+      <div className="grid w-full max-w-full grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
+        <Card className="min-w-0 border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="px-3 pb-1 pt-4 sm:px-6">
             <CardTitle className="text-[13px] font-bold text-zinc-600">Máquinas</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black">{stats.all}</div>
+          <CardContent className="min-w-0 px-3 pb-4 sm:px-6">
+            <div className="break-all text-[clamp(1.75rem,9vw,2.5rem)] font-black leading-none">{stats.all}</div>
             <p className="text-xs font-semibold text-zinc-500">con planograma</p>
           </CardContent>
         </Card>
-        <Card className="border-zinc-200 bg-white shadow-sm">
-          <CardHeader className="pb-1">
+        <Card className="min-w-0 border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="px-3 pb-1 pt-4 sm:px-6">
             <CardTitle className="text-[13px] font-bold text-zinc-600">A reponer</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-emerald-600">{stats.totalToReplenish}</div>
+          <CardContent className="min-w-0 px-3 pb-4 sm:px-6">
+            <div className="break-all text-[clamp(1.75rem,9vw,2.5rem)] font-black leading-none text-emerald-600">{stats.totalToReplenish}</div>
             <p className="text-xs font-semibold text-zinc-500">unidades</p>
           </CardContent>
         </Card>
-        <Card className="border-zinc-200 bg-white shadow-sm">
-          <CardHeader className="pb-1">
+        <Card className="min-w-0 border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="px-3 pb-1 pt-4 sm:px-6">
             <CardTitle className="text-[13px] font-bold text-zinc-600">Alta prioridad</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-red-600">{stats.empty + stats.critical}</div>
+          <CardContent className="min-w-0 px-3 pb-4 sm:px-6">
+            <div className="break-all text-[clamp(1.75rem,9vw,2.5rem)] font-black leading-none text-red-600">{stats.empty + stats.critical}</div>
             <p className="text-xs font-semibold text-zinc-500">vacías + críticas</p>
           </CardContent>
         </Card>
-        <Card className="border-zinc-200 bg-white shadow-sm">
-          <CardHeader className="pb-1">
+        <Card className="min-w-0 border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="px-3 pb-1 pt-4 sm:px-6">
             <CardTitle className="text-[13px] font-bold text-zinc-600">Llenado</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black">{stats.fillRate}%</div>
+          <CardContent className="min-w-0 px-3 pb-4 sm:px-6">
+            <div className="break-all text-[clamp(1.75rem,9vw,2.5rem)] font-black leading-none">{stats.fillRate}%</div>
             <p className="text-xs font-semibold text-zinc-500">global</p>
           </CardContent>
         </Card>
@@ -445,12 +823,12 @@ export function StockLivePage() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabKey)} className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <TabsList className="flex h-auto w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm lg:w-auto">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:flex sm:justify-start sm:overflow-x-auto lg:w-auto">
             {tabOptions.map((tab) => (
               <TabsTrigger
                 key={tab.key}
                 value={tab.key}
-                className="h-14 min-w-[112px] shrink-0 justify-between gap-2 rounded-xl px-3 text-left text-sm data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
+                className="h-12 min-w-0 justify-between gap-2 rounded-xl px-3 text-left text-sm data-[state=active]:bg-emerald-600 data-[state=active]:text-white sm:h-14 sm:min-w-[112px] sm:shrink-0"
               >
                 <span className="flex items-center gap-2 font-semibold">
                   <span className={`h-2 w-2 rounded-full ${tab.dotClassName}`} />
@@ -511,7 +889,7 @@ export function StockLivePage() {
                       <button
                         type="button"
                         onClick={() => toggleExpanded(machine.machineId)}
-                        className="flex w-full min-w-0 items-stretch gap-3 p-3 text-left sm:p-5"
+                        className="flex w-full min-w-0 items-stretch gap-2 p-3 text-left sm:gap-3 sm:p-5"
                         aria-expanded={isExpanded}
                       >
                         <div className={`w-1.5 shrink-0 self-stretch rounded-full ${meta.bar}`} />
@@ -529,7 +907,7 @@ export function StockLivePage() {
                                   </Badge>
                                 )}
                               </div>
-                              <h3 className="mt-2 break-words text-xl font-black leading-tight text-zinc-900 sm:text-2xl">
+                              <h3 className="mt-2 break-words text-lg font-black leading-tight text-zinc-900 sm:text-2xl">
                                 {machine.label}
                               </h3>
                               <p className="mt-1 break-words text-sm font-semibold leading-snug text-zinc-600">
@@ -547,16 +925,16 @@ export function StockLivePage() {
                           </div>
 
                           <div className="grid grid-cols-3 gap-2">
-                            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-center">
-                              <div className="text-2xl font-black text-zinc-900">{machine.fillRate}%</div>
+                            <div className="min-w-0 rounded-xl border border-zinc-200 bg-zinc-50 p-2 text-center sm:p-3">
+                              <div className="break-all text-xl font-black leading-none text-zinc-900 sm:text-2xl">{machine.fillRate}%</div>
                               <div className="text-xs font-bold text-zinc-600">Lleno</div>
                             </div>
-                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 text-center">
-                              <div className="text-2xl font-black text-emerald-700">{machine.totalToReplenish}</div>
+                            <div className="min-w-0 rounded-xl border border-emerald-100 bg-emerald-50/80 p-2 text-center sm:p-3">
+                              <div className="break-all text-xl font-black leading-none text-emerald-700 sm:text-2xl">{machine.totalToReplenish}</div>
                               <div className="text-xs font-bold text-zinc-600">Meter</div>
                             </div>
-                            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-center">
-                              <div className="text-2xl font-black text-zinc-900">{machine.totalAvailable}</div>
+                            <div className="min-w-0 rounded-xl border border-zinc-200 bg-zinc-50 p-2 text-center sm:p-3">
+                              <div className="break-all text-xl font-black leading-none text-zinc-900 sm:text-2xl">{machine.totalAvailable}</div>
                               <div className="text-xs font-bold text-zinc-600">Actual</div>
                             </div>
                           </div>
@@ -569,6 +947,44 @@ export function StockLivePage() {
                           </div>
                         </div>
                       </button>
+
+                      <div className="border-t border-zinc-100 px-3 pb-3 sm:px-5 sm:pb-5">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-11 w-full justify-between rounded-xl border-zinc-200 bg-white text-sm font-black text-zinc-900 hover:bg-zinc-50 sm:h-12 sm:text-base"
+                            >
+                              <span className="flex items-center gap-2">
+                                <SlidersHorizontal className="h-4 w-4 text-emerald-600" />
+                                Reposición
+                              </span>
+                              <MoreVertical className="h-4 w-4 text-zinc-500" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-[min(22rem,calc(100vw-2rem))] rounded-xl p-2">
+                            <DropdownMenuLabel className="px-3 py-2 text-xs font-black uppercase text-zinc-500">
+                              {machine.label}
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="min-h-12 cursor-pointer rounded-lg px-3 py-3 text-sm font-bold"
+                              onSelect={() => setPendingReplenishmentAction({ action: 'full-refill', machine })}
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              <span className="min-w-0 flex-1">Llenado completo</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="min-h-12 cursor-pointer rounded-lg px-3 py-3 text-sm font-bold"
+                              onSelect={() => openRailEditor(machine)}
+                            >
+                              <SlidersHorizontal className="h-4 w-4 text-zinc-700" />
+                              <span className="min-w-0 flex-1">Editar raíles</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
 
                       {isExpanded && (
                         <div className="border-t border-zinc-100 bg-zinc-50 p-3 sm:p-5">
@@ -681,6 +1097,300 @@ export function StockLivePage() {
           </TabsContent>
         ))}
       </Tabs>
+
+      <Dialog
+        open={Boolean(railEditor)}
+        onOpenChange={(open) => {
+          if (!open && !savingRails) {
+            setConfirmRailSaveOpen(false);
+            setRailEditor(null);
+          }
+        }}
+      >
+        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-full translate-y-[-50%] flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-[90vh] sm:max-w-5xl sm:rounded-2xl">
+          {railEditor && (
+            <>
+              <DialogHeader className="border-b bg-white p-4 pr-12 text-left sm:p-6 sm:pr-14">
+                <DialogTitle className="text-xl font-black leading-tight text-zinc-900 sm:text-2xl">
+                  Editar raíles
+                </DialogTitle>
+                <DialogDescription className="break-words text-sm font-semibold text-zinc-600">
+                  {railEditor.machine.label} · {getActiveRailRows().length} raíles activos
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex-1 overflow-y-auto bg-zinc-50 p-3 sm:p-5">
+                <div className="mb-4 grid grid-cols-3 gap-2">
+                  <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-2 text-center sm:p-3">
+                    <div className="break-all text-xl font-black leading-none text-zinc-900 sm:text-2xl">{getActiveRailRows().length}</div>
+                    <div className="text-xs font-bold text-zinc-500">Raíles</div>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-2 text-center sm:p-3">
+                    <div className="break-all text-xl font-black leading-none text-zinc-900 sm:text-2xl">
+                      {getActiveRailRows().reduce((sum, row) => sum + (Number(row.quantity) || 0), 0)}
+                    </div>
+                    <div className="text-xs font-bold text-zinc-500">Actual</div>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-emerald-100 bg-emerald-50 p-2 text-center sm:p-3">
+                    <div className="break-all text-xl font-black leading-none text-emerald-700 sm:text-2xl">
+                      {getActiveRailRows().reduce((sum, row) => sum + Math.max(0, (Number(row.capacity) || 0) - (Number(row.quantity) || 0)), 0)}
+                    </div>
+                    <div className="text-xs font-bold text-emerald-700">Meter</div>
+                  </div>
+                </div>
+
+                {loadingProductOptions && (
+                  <div className="mb-4 rounded-2xl border border-emerald-100 bg-white p-4 text-sm font-bold text-emerald-700">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                    Cargando catálogo de productos...
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {railEditor.rows.map((row, index) => (
+                    <div
+                      key={row.key}
+                      className={`rounded-2xl border bg-white p-3 shadow-sm sm:p-4 ${row.deleted ? 'border-red-200 opacity-60' : 'border-zinc-200'}`}
+                    >
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-black uppercase text-zinc-500">Raíl {index + 1}</p>
+                          <p className="break-words text-lg font-black leading-tight text-zinc-900">
+                            {row.productName || 'Producto sin seleccionar'}
+                          </p>
+                          {row.category && <p className="mt-1 text-sm font-semibold text-zinc-500">{row.category}</p>}
+                        </div>
+                        {row.deleted ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => restoreRailRow(row.key)}
+                            className="h-10 shrink-0 rounded-xl font-bold"
+                          >
+                            Restaurar
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => removeRailRow(row.key)}
+                            className="h-10 shrink-0 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                            aria-label="Eliminar raíl"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <fieldset disabled={row.deleted || savingRails} className="space-y-3 disabled:pointer-events-none">
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Producto</span>
+                          <select
+                            value={row.productId}
+                            onChange={(event) => updateRailProduct(row.key, event.target.value)}
+                            className="h-12 w-full rounded-xl border border-zinc-200 bg-white px-3 text-base font-bold text-zinc-900 outline-none focus:border-emerald-400"
+                          >
+                            <option value="">Seleccionar producto</option>
+                            {productOptions.map((product) => (
+                              <option key={product.id} value={product.id}>
+                                {product.name}{product.category ? ` · ${product.category}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Número</span>
+                            <Input
+                              inputMode="numeric"
+                              value={row.number}
+                              onChange={(event) => updateRailRow(row.key, { number: event.target.value })}
+                              className="h-12 rounded-xl text-base font-bold"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">MDB</span>
+                            <Input
+                              inputMode="numeric"
+                              value={row.mdbCode}
+                              onChange={(event) => updateRailRow(row.key, { mdbCode: event.target.value })}
+                              placeholder="-"
+                              className="h-12 rounded-xl text-base font-bold"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Precio</span>
+                            <Input
+                              inputMode="decimal"
+                              value={row.price}
+                              onChange={(event) => updateRailRow(row.key, { price: event.target.value })}
+                              className="h-12 rounded-xl text-base font-bold"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Mínimo</span>
+                            <Input
+                              inputMode="numeric"
+                              value={row.min}
+                              onChange={(event) => updateRailRow(row.key, { min: event.target.value })}
+                              className="h-12 rounded-xl text-base font-bold"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Cantidad</span>
+                            <Input
+                              inputMode="numeric"
+                              value={row.quantity}
+                              onChange={(event) => updateRailRow(row.key, { quantity: event.target.value })}
+                              className="h-12 rounded-xl text-base font-bold"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Capacidad</span>
+                            <Input
+                              inputMode="numeric"
+                              value={row.capacity}
+                              onChange={(event) => updateRailRow(row.key, { capacity: event.target.value })}
+                              className="h-12 rounded-xl text-base font-bold"
+                            />
+                          </label>
+                        </div>
+                      </fieldset>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <DialogFooter className="grid grid-cols-2 gap-2 border-t bg-white p-3 sm:flex sm:flex-row sm:p-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addRailRow}
+                  disabled={savingRails}
+                  className="h-12 rounded-xl font-black sm:mr-auto"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Añadir
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRailEditor(null)}
+                  disabled={savingRails}
+                  className="h-12 rounded-xl font-black"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      buildRailPayload();
+                      setConfirmRailSaveOpen(true);
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : 'Revisa los datos del planograma.';
+                      toast.error('No se puede guardar el planograma', { description: message });
+                    }
+                  }}
+                  disabled={savingRails}
+                  className="col-span-2 h-12 rounded-xl bg-emerald-600 font-black text-white hover:bg-emerald-700 sm:col-span-1"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Guardar
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={confirmRailSaveOpen}
+        onOpenChange={(open) => {
+          if (!open && !savingRails) setConfirmRailSaveOpen(false);
+        }}
+      >
+        <AlertDialogContent className="w-[calc(100vw-2rem)] rounded-2xl sm:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black text-zinc-900">
+              Guardar planograma
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left text-sm font-medium text-zinc-600">
+                <p className="break-words">
+                  Máquina: <span className="font-black text-zinc-900">{railEditor?.machine.label}</span>
+                </p>
+                <p>
+                  Se enviarán {getActiveRailRows().length} raíles a Frekuent y se sincronizará el planograma.
+                  Esta acción cambia el stock/configuración real de la máquina.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={savingRails} className="h-11 rounded-xl font-bold">
+              Revisar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={savingRails}
+              onClick={(event) => {
+                event.preventDefault();
+                saveRailEditor();
+              }}
+              className="h-11 rounded-xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
+            >
+              {savingRails && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Sí, guardar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(pendingReplenishmentAction)}
+        onOpenChange={(open) => {
+          if (!open && !runningReplenishmentAction) setPendingReplenishmentAction(null);
+        }}
+      >
+        <AlertDialogContent className="w-[calc(100vw-2rem)] rounded-2xl sm:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black text-zinc-900">
+              Confirmar llenado completo
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left text-sm font-medium text-zinc-600">
+                <p className="break-words">
+                  Máquina: <span className="font-black text-zinc-900">{pendingReplenishmentAction?.machine.label}</span>
+                </p>
+                <p>
+                  Esta acción marcará la máquina como rellenada en Frekuent y sincronizará el planograma.
+                  Úsala solo después de haber repuesto físicamente la máquina.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={runningReplenishmentAction} className="h-11 rounded-xl font-bold">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={runningReplenishmentAction}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmReplenishmentAction();
+              }}
+              className="h-11 rounded-xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
+            >
+              {runningReplenishmentAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Sí, marcar lleno
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

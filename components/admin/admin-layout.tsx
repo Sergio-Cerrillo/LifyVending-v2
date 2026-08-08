@@ -182,7 +182,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen light">
+    <div className="flex min-h-screen overflow-x-hidden light">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-64 border-r border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-blue-50 shadow-sm">
         <Sidebar />
@@ -199,10 +199,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col bg-gradient-to-br from-zinc-50 via-white to-emerald-50/30">
+      <div className="flex min-w-0 flex-1 flex-col bg-gradient-to-br from-zinc-50 via-white to-emerald-50/30">
         {/* Top Bar */}
         <header className="sticky top-0 z-40 border-b border-emerald-100 bg-white/95 backdrop-blur-sm shadow-sm">
-          <div className="flex h-16 items-center gap-4 px-6">
+          <div className="flex h-16 min-w-0 items-center gap-3 px-3 sm:gap-4 sm:px-6">
             <Button
               variant="ghost"
               size="icon"
@@ -241,7 +241,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
+        <main className="min-w-0 flex-1 overflow-auto overflow-x-hidden">
           <div className="mx-auto w-full max-w-7xl px-0 py-0 sm:px-6 sm:py-8 lg:px-8">{children}</div>
         </main>
       </div>

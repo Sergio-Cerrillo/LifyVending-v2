@@ -49,6 +49,25 @@ export interface FrekuentStockMachine {
   urgency: 'empty' | 'critical' | 'normal' | 'ok' | 'unknown';
 }
 
+export interface FrekuentProductOption {
+  id: number;
+  name: string;
+  category?: string;
+  image?: string;
+}
+
+export interface FrekuentRailUpdateRow {
+  rail: number | string | null;
+  machine_id?: number;
+  number: number;
+  number_mdb: number | null;
+  product_id: number;
+  quantity: number;
+  capacity: number;
+  price: number;
+  min: number;
+}
+
 interface CachedFrekuentToken {
   accessToken: string;
   refreshToken?: string;
@@ -69,6 +88,13 @@ interface FrekuentMachineTableRow {
   location?: unknown;
   serial_number?: unknown;
   status?: unknown;
+}
+
+interface FrekuentProductTableRow {
+  id?: unknown;
+  name?: unknown;
+  product_category?: unknown;
+  url?: unknown;
 }
 
 let cachedToken: CachedFrekuentToken | null = null;
@@ -270,7 +296,14 @@ async function frekuentFetchWithRetry<T>(
       throw await buildFrekuentError(response);
     }
 
-    return await response.json() as T;
+    const text = await response.text();
+    if (!text.trim()) return {} as T;
+
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return text as T;
+    }
   } catch (error) {
     if (error instanceof FrekuentApiError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
@@ -383,6 +416,87 @@ export async function getFrekuentMachineMetadataMap(machineIds: number[] = []): 
   }
 
   return metadata;
+}
+
+export async function refillFrekuentMachineStock(machineId: number): Promise<void> {
+  if (!Number.isInteger(machineId) || machineId <= 0) {
+    throw new FrekuentApiError(400, 'ID de máquina no válido');
+  }
+
+  await frekuentFetchWithRetry<unknown>(
+    `/pos/refill/stock?id_machine=${machineId}`,
+    { method: 'POST' },
+    true,
+  );
+
+  await frekuentFetchWithRetry<unknown>(
+    `/pos/sync/planogram?id_machine=${machineId}`,
+    { method: 'POST' },
+    true,
+  );
+}
+
+export async function getFrekuentProductOptions(): Promise<FrekuentProductOption[]> {
+  const payload = await frekuentFetchWithRetry<{ data?: FrekuentProductTableRow[] }>(
+    '/pos/products/table',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        page: 1,
+        pageSize: 1000,
+        sort_by: 'name',
+        direction: 'asc',
+        filters: {},
+        search: '',
+        query_filters: {},
+      }),
+    },
+    true,
+  );
+
+  return (payload.data || [])
+    .map((row) => ({
+      id: numberFromUnknown(row.id),
+      name: typeof row.name === 'string' ? row.name.trim() : '',
+      category: typeof row.product_category === 'string' && row.product_category.trim() ? row.product_category.trim() : undefined,
+      image: typeof row.url === 'string' && row.url.trim() ? row.url.trim() : undefined,
+    }))
+    .filter((product) => product.id > 0 && product.name);
+}
+
+export async function updateFrekuentMachineRails(machineId: number, rows: FrekuentRailUpdateRow[]): Promise<void> {
+  if (!Number.isInteger(machineId) || machineId <= 0) {
+    throw new FrekuentApiError(400, 'ID de máquina no válido');
+  }
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new FrekuentApiError(400, 'El planograma debe tener al menos un raíl');
+  }
+
+  await frekuentFetchWithRetry<unknown>(
+    `/pos/machine/rail?id_machine=${machineId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'x-action-id': 'points-of-sale.planogram.update',
+      },
+      body: JSON.stringify({
+        service: 'vending',
+        with_mdb: 0,
+        rows: rows.map((row) => ({
+          ...row,
+          machine_id: machineId,
+        })),
+      }),
+    },
+    true,
+  );
+
+  await frekuentFetchWithRetry<unknown>(
+    `/pos/sync/planogram?id_machine=${machineId}`,
+    { method: 'POST' },
+    true,
+  );
 }
 
 function numberFromUnknown(value: unknown): number {
@@ -530,7 +644,7 @@ export async function getFrekuentStockMachines(machineIds: number[] = []): Promi
       Number(process.env.FREKUENT_STOCK_CONCURRENCY || 6),
       getFrekuentMachinePlanogram,
     ),
-    getFrekuentMachineMetadataMap(machineIds).catch(() => new Map()),
+    getFrekuentMachineMetadataMap(machineIds).catch(() => new Map<number, Partial<FrekuentStockMachine>>()),
   ]);
 
   const enrichedMachines = stockMachines.map((machine) => ({
