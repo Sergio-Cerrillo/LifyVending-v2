@@ -1495,14 +1495,17 @@ export function StockLivePage() {
                         </div>
 
                         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-                          <label className="block">
-                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Cantidad actual</span>
+                          <label className="block rounded-2xl border border-emerald-300 bg-emerald-50 p-2 shadow-[0_0_0_1px_rgba(16,185,129,0.12)]">
+                            <span className="mb-1 flex items-center gap-1 text-xs font-black uppercase text-emerald-800">
+                              <Zap className="h-3.5 w-3.5" />
+                              Cantidad actual
+                            </span>
                             <Input
                               inputMode="numeric"
                               value={row.quantity}
                               onChange={(event) => updateQuantityRow(row.key, event.target.value)}
                               disabled={savingQuantities}
-                              className="h-12 rounded-xl text-base font-bold"
+                              className="h-14 rounded-xl border-emerald-300 bg-white text-center text-2xl font-black text-emerald-900 shadow-sm focus-visible:ring-emerald-500"
                             />
                           </label>
                           <Button
@@ -1750,13 +1753,16 @@ export function StockLivePage() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-2">
-                          <label className="block">
-                            <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Cantidad</span>
+                          <label className="block rounded-2xl border border-emerald-300 bg-emerald-50 p-2 shadow-[0_0_0_1px_rgba(16,185,129,0.12)]">
+                            <span className="mb-1 flex items-center gap-1 text-xs font-black uppercase text-emerald-800">
+                              <Zap className="h-3.5 w-3.5" />
+                              Cantidad
+                            </span>
                             <Input
                               inputMode="numeric"
                               value={row.quantity}
                               onChange={(event) => updateRailRow(row.key, { quantity: event.target.value })}
-                              className="h-12 rounded-xl text-base font-bold"
+                              className="h-14 rounded-xl border-emerald-300 bg-white text-center text-2xl font-black text-emerald-900 shadow-sm focus-visible:ring-emerald-500"
                             />
                           </label>
                           <label className="block">
