@@ -1,112 +1,61 @@
 "use client"
 
-import { ArrowRight, Phone, Mail, Clock } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useEffect, useRef, useState } from "react"
+import { ArrowRight, Clock, Mail, Phone } from "lucide-react"
 
 export function CallToAction() {
-  const [isVisible, setIsVisible] = useState(false)
-  const sectionRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsVisible(true)
-          }
-        })
-      },
-      { threshold: 0.2 },
-    )
-
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current)
-    }
-
-    return () => observer.disconnect()
-  }, [])
-
   return (
-    <section id="contacto" ref={sectionRef} className="relative py-16 sm:py-24 lg:py-32 px-4 sm:px-6 lg:px-8 overflow-hidden">
-      <div className="max-w-5xl mx-auto relative z-10">
-        <div
-          className={`glass rounded-2xl p-12 md:p-20 text-center relative overflow-hidden border border-primary/10 ${isVisible ? "animate-scale-in" : "opacity-0"}`}
-        >
-          <div className="relative z-10">
-            <div
-              className={`inline-flex items-center gap-2 glass px-6 py-3 rounded-full mb-8 border border-primary/10 ${isVisible ? "animate-bounce-in" : "opacity-0"}`}
-              style={{ animationDelay: "0.2s" }}
-            >
-              <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-              <span className="text-sm font-medium text-primary dark:text-accent">Únete a 500+ Empresas</span>
-            </div>
-
-            <h2
-              className={`text-4xl sm:text-5xl font-semibold mb-6 leading-tight tracking-tight ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
-              style={{ animationDelay: "0.3s" }}
-            >
-              <span className="block bg-gradient-to-r from-primary to-emerald-600 bg-clip-text text-transparent mb-2">
-                ¿Listo para el Futuro?
-              </span>
-            </h2>
-
-            <p
-              className={`text-lg text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
-              style={{ animationDelay: "0.4s" }}
-            >
-              Da el salto a la tecnología de vending más avanzada de Mallorca
-            </p>
-
-            <div
-              className={`flex flex-col sm:flex-row gap-4 justify-center mb-16 ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
-              style={{ animationDelay: "0.5s" }}
-            >
-              <Button
-                size="lg"
-                className="touch-feedback group text-base px-10 py-6 bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
-              >
-                <span className="flex items-center gap-2">
-                  Solicitar Presupuesto
-                  <ArrowRight className="group-hover:translate-x-1 transition-transform" size={18} />
-                </span>
-              </Button>
-            </div>
-
-            <div className="grid sm:grid-cols-3 gap-6 pt-12 border-t border-border/50">
-              {[
-                { icon: Phone, label: "Teléfono", value: "+34 692 129 851" },
-                { icon: Mail, label: "Email", value: "info@lifyvending.com" },
-                { icon: Clock, label: "Horario", value: "24/7 Todo el año" },
-              ].map((item, i) => (
-                <div
-                  key={i}
-                  className={`glass glass-hover rounded-xl p-6 group touch-feedback border border-primary/10 ${isVisible ? "animate-scale-in" : "opacity-0"}`}
-                  style={{ animationDelay: `${0.6 + i * 0.1}s` }}
-                >
-                  <item.icon
-                    className="text-primary mx-auto mb-3 group-hover:scale-105 transition-transform"
-                    size={28}
-                  />
-                  <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">{item.label}</p>
-                  <p className="font-semibold text-foreground">{item.value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-12 inline-flex items-center gap-3 glass px-6 py-3 rounded-full border border-primary/10">
-              <div className="flex -space-x-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="w-8 h-8 rounded-full bg-primary/20 border-2 border-background"
-                  />
-                ))}
+    <section id="contacto" className="relative overflow-hidden px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
+      <div className="relative z-10 mx-auto max-w-7xl">
+        <div className="overflow-hidden rounded-[2.25rem] bg-zinc-950 p-6 text-white shadow-2xl shadow-zinc-950/20 sm:p-10 lg:p-14">
+          <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+            <div>
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3">
+                <span className="h-2 w-2 rounded-full bg-primary" />
+                <span className="text-sm font-black text-primary">Empezamos cuando quieras</span>
               </div>
-              <span className="text-sm font-medium">
-                <span className="text-primary dark:text-accent font-semibold">70+</span> empresas confían en nosotros
-              </span>
+              <h2 className="text-[clamp(3rem,10vw,7.3rem)] font-black leading-[0.86] tracking-[-0.07em]">
+                Cuéntanos tu espacio.
+              </h2>
+              <p className="mt-6 max-w-2xl text-lg font-semibold leading-8 text-zinc-300 sm:text-xl">
+                Te diremos qué máquina encaja, qué surtido tendría sentido y cómo operarlo sin inversión inicial para ti.
+              </p>
             </div>
+
+            <div className="space-y-3">
+              <a
+                href="https://wa.me/34692129851?text=Hola%2C%20quiero%20estudiar%20una%20propuesta%20de%20vending%20para%20mi%20espacio."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-14 items-center justify-between rounded-full bg-primary px-6 text-base font-black text-white shadow-xl shadow-primary/20 transition hover:-translate-y-1 hover:bg-primary/90"
+              >
+                WhatsApp directo
+                <ArrowRight className="h-5 w-5" />
+              </a>
+              <a
+                href="mailto:info@lifyvending.com"
+                className="flex h-14 items-center justify-between rounded-full border border-white/15 bg-white/5 px-6 text-base font-black text-white transition hover:-translate-y-1 hover:bg-white hover:text-zinc-950"
+              >
+                info@lifyvending.com
+                <Mail className="h-5 w-5" />
+              </a>
+            </div>
+          </div>
+
+          <div className="mt-10 grid gap-3 border-t border-white/10 pt-8 sm:grid-cols-3">
+            {[
+              { icon: Phone, label: "Teléfono", value: "(+34) 692 12 98 51" },
+              { icon: Mail, label: "Email", value: "info@lifyvending.com" },
+              { icon: Clock, label: "Servicio", value: "Operación todo el año" },
+            ].map((item) => {
+              const Icon = item.icon
+              return (
+                <div key={item.label} className="rounded-2xl bg-white/5 p-5">
+                  <Icon className="mb-4 h-6 w-6 text-primary" />
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-500">{item.label}</p>
+                  <p className="mt-2 text-base font-black text-zinc-100">{item.value}</p>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>

@@ -27,19 +27,24 @@ export function Navigation() {
 
   return (
     <nav
-      className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled ? "glass py-3" : "bg-transparent py-6"
-        }`}
+      className="pointer-events-none fixed inset-x-0 top-3 z-50 px-3 transition-all duration-500 sm:top-5 sm:px-5"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div
+        className={`pointer-events-auto mx-auto max-w-7xl rounded-[1.75rem] border border-white/30 px-4 shadow-2xl shadow-zinc-950/10 ring-1 ring-white/25 backdrop-blur-md backdrop-saturate-150 transition-all duration-500 sm:px-6 lg:px-8 ${
+          scrolled
+            ? "bg-white/[0.22] py-2"
+            : "bg-white/[0.16] py-3 sm:py-4"
+        }`}
+      >
         <div className="flex justify-between items-center">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-4 group">
-            <div className="relative w-20 h-20 flex items-center justify-center transform group-hover:scale-110 transition-all duration-300">
+            <div className="relative flex h-14 w-14 items-center justify-center transition-all duration-300 group-hover:scale-105 sm:h-16 sm:w-16">
               <Image
                 src="/logo.png"
                 alt="Lify Vending Logo"
-                width={80}
-                height={80}
+                width={64}
+                height={64}
                 className="object-contain"
               />
             </div>
@@ -57,10 +62,9 @@ export function Navigation() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="relative px-4 py-2 text-foreground/80 hover:text-foreground font-medium transition-colors group"
+                className="relative rounded-full px-4 py-2 font-semibold text-foreground/80 transition-colors hover:bg-white/20 hover:text-foreground"
               >
                 {item.label}
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
               </Link>
             ))}
 
@@ -69,7 +73,7 @@ export function Navigation() {
             <Link href="#contacto">
               <Button
                 size="lg"
-                className="ml-4 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transform hover:scale-105 transition-all duration-300 font-bold text-white"
+                className="ml-4 rounded-2xl bg-gradient-to-r from-primary to-secondary font-bold text-white shadow-lg shadow-primary/20 transition-all duration-300 hover:scale-[1.03] hover:from-primary/90 hover:to-secondary/90 hover:shadow-xl hover:shadow-primary/30"
               >
                 Solicitar Información
               </Button>
@@ -79,7 +83,7 @@ export function Navigation() {
               <Button
                 variant="ghost"
                 size="lg"
-                className="ml-4 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transform hover:scale-105 transition-all duration-300 font-bold text-white"
+                className="ml-4 rounded-2xl bg-gradient-to-r from-primary to-secondary font-bold text-white shadow-lg shadow-primary/20 transition-all duration-300 hover:scale-[1.03] hover:from-primary/90 hover:to-secondary/90 hover:shadow-xl hover:shadow-primary/30"
               >
 
                 <Lock className="h-4 w-4" />
@@ -92,7 +96,7 @@ export function Navigation() {
           <div className="lg:hidden flex items-center gap-4">
             <ModeToggle />
             <button
-              className="glass p-3 rounded-lg hover:scale-110 transition-transform border border-foreground/20"
+              className="rounded-2xl border border-white/30 bg-white/35 p-3 shadow-sm backdrop-blur-md transition-transform hover:scale-105"
               onClick={() => setIsOpen(!isOpen)}
               aria-label="Toggle menu"
             >
@@ -103,13 +107,13 @@ export function Navigation() {
 
         {/* Mobile Slide Menu */}
         {isOpen && (
-          <div className="lg:hidden mt-6 glass rounded-2xl p-6 animate-slide-up max-w-sm mx-auto">
+          <div className="mx-auto mt-4 max-w-sm animate-slide-up rounded-[1.5rem] border border-white/30 bg-white/35 p-5 shadow-2xl shadow-zinc-950/10 backdrop-blur-md lg:hidden">
             <div className="space-y-3">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-primary/10 transition-colors font-medium text-foreground"
+                  className="flex items-center gap-3 rounded-2xl px-4 py-3 font-semibold text-foreground transition-colors hover:bg-white/30"
                   onClick={() => setIsOpen(false)}
                 >
                   {item.label}

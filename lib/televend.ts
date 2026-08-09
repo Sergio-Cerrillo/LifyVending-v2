@@ -564,7 +564,7 @@ function computeUrgency(values: {
     ? Math.round((values.totalAvailable / values.totalCapacity) * 100)
     : 0;
 
-  if (fillRate < 35 || values.lowStockCount > 0) return 'critical';
+  if (fillRate < 65) return 'critical';
   if (fillRate < 75) return 'normal';
   return 'ok';
 }

@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { ArrowRight, CheckCircle2, ChevronDown, PackageCheck, Sparkles } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export function HeroSection() {
   const heroRef = useRef<HTMLDivElement>(null)
@@ -10,103 +11,113 @@ export function HeroSection() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsVisible(true)
-          }
-        })
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting)
       },
-      { threshold: 0.1 },
+      { threshold: 0.12 },
     )
 
-    if (heroRef.current) {
-      observer.observe(heroRef.current)
-    }
-
+    if (heroRef.current) observer.observe(heroRef.current)
     return () => observer.disconnect()
   }, [])
 
   return (
-    <section ref={heroRef} className="relative min-h-screen flex items-center justify-center">
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 sm:pt-40 lg:pt-32 pb-20 sm:pb-28 lg:pb-32 text-center">
-        <div
-          className={`inline-flex items-center gap-2 glass px-6 py-3 rounded-full mb-8 ${isVisible ? "animate-bounce-in" : "opacity-0"}`}
-        >
-          <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-          <span className="text-sm font-medium text-primary dark:text-accent">Tu negocio sin inversión ni riesgos</span>
-        </div>
+    <section ref={heroRef} className="relative flex min-h-[100svh] items-center overflow-hidden px-4 pb-20 pt-32 sm:px-6 sm:pt-36 lg:px-8">
+      <div className="absolute inset-0 z-0 overflow-hidden bg-zinc-950">
+        <iframe
+          title="Lify Vending background video"
+          src="https://www.youtube-nocookie.com/embed/qVCyXG2-ecQ?autoplay=1&mute=1&controls=0&loop=1&playlist=qVCyXG2-ecQ&playsinline=1&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&disablekb=1&fs=0"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[120vh] min-h-full w-[213.34vh] min-w-[120vw] -translate-x-1/2 -translate-y-1/2 scale-110 border-0 opacity-70"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+        <div className="absolute inset-0 bg-zinc-950/68 sm:bg-zinc-950/48" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_56%,rgba(9,9,11,0.92),rgba(9,9,11,0.55)_18%,transparent_34%)] sm:hidden" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_35%,rgba(16,185,129,0.28),transparent_38%)]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/90 via-zinc-950/55 to-zinc-950/20" />
+        <div className="absolute inset-x-0 bottom-0 h-[42%] bg-gradient-to-b from-transparent via-[#f7f8f6]/80 to-[#f7f8f6]" />
+        <div className="absolute -bottom-28 left-1/2 h-56 w-[86vw] -translate-x-1/2 rounded-full bg-white/35 blur-3xl" />
+      </div>
 
-        <h1
-          className={`text-5xl sm:text-6xl lg:text-7xl font-semibold mb-8 leading-tight tracking-tight ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
-          style={{ animationDelay: "0.1s" }}
-        >
-          <span className="block mb-2 bg-gradient-to-r from-primary via-emerald-600 to-emerald-500 bg-clip-text text-transparent">
-            Máquinas Vending
-          </span>
-          <span className="block text-foreground relative">
-            <span className="absolute inset-0 blur-3xl bg-primary/30 transform scale-110"></span>
-            <span className="relative">Solo Beneficios</span>
-          </span>
-        </h1>
+      <div className="relative z-10 mx-auto w-full max-w-7xl">
+        <div className="max-w-5xl text-left">
+          <div
+            className={`mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-3 text-white shadow-2xl shadow-zinc-950/20 backdrop-blur-xl ${
+              isVisible ? "animate-bounce-in" : "opacity-0"
+            }`}
+          >
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-sm font-bold">Tu negocio sin inversión ni riesgos</span>
+          </div>
 
-        <p
-          className={`text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto mb-12 leading-relaxed ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
-          style={{ animationDelay: "0.2s" }}
-        >
-          Nosotros instalamos, mantenemos y reponemos. Tú solo recibes tu <span className="text-primary font-semibold">comisión</span> sin preocupaciones
-        </p>
+          <h1
+            className={`text-[clamp(3.5rem,14vw,9rem)] font-black leading-[0.86] tracking-[-0.07em] text-white drop-shadow-2xl ${
+              isVisible ? "animate-reveal-up" : "opacity-0"
+            }`}
+            style={{ animationDelay: "0.1s" }}
+          >
+            Máquinas vending. Solo beneficios.
+          </h1>
 
-        <div
-          className={`flex flex-col sm:flex-row justify-center gap-6 mb-16 ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
-          style={{ animationDelay: "0.3s" }}
-        >
-          {[
-            { value: "0€", label: "Inversión" },
-            { value: "100%", label: "Mantenimiento" },
-            { value: "24/7", label: "Soporte" },
-          ].map((stat, index) => (
-            <div
-              key={index}
-              className="glass glass-hover rounded-xl px-8 py-6 min-w-40 group touch-feedback border border-primary/10"
-              style={{
-                animationDelay: `${0.4 + index * 0.1}s`,
-              }}
-            >
-              <div className="text-4xl font-bold bg-gradient-to-br from-primary to-emerald-600 bg-clip-text text-transparent mb-1">
-                {stat.value}
+          <p
+            className={`mt-7 max-w-2xl text-lg font-semibold leading-8 text-zinc-100 sm:text-xl ${
+              isVisible ? "animate-reveal-up" : "opacity-0"
+            }`}
+            style={{ animationDelay: "0.2s" }}
+          >
+            Instalamos, mantenemos, monitorizamos y reponemos. Tú ofreces un servicio premium sin ocuparte de la operativa.
+          </p>
+
+          <div
+            className={`mt-8 grid max-w-2xl grid-cols-3 gap-3 ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
+            style={{ animationDelay: "0.3s" }}
+          >
+            {[
+              { value: "0€", label: "Inversión" },
+              { value: "24/7", label: "Servicio" },
+              { value: "Datos", label: "Control" },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-xl border border-white/15 bg-white/10 p-4 text-center text-white shadow-2xl shadow-zinc-950/10 backdrop-blur-xl">
+                <div className="text-2xl font-black tracking-tight text-primary sm:text-4xl">{stat.value}</div>
+                <div className="mt-1 text-[11px] font-black uppercase tracking-wide text-zinc-200 sm:text-xs">{stat.label}</div>
               </div>
-              <div className="text-sm text-muted-foreground uppercase tracking-wide font-medium">{stat.label}</div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        <div
-          className={`flex flex-col sm:flex-row gap-4 justify-center mb-16 ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
-          style={{ animationDelay: "0.7s" }}
-        >
-          <Link href="#contacto">
-            <Button
-              size="lg"
-              className="touch-feedback text-base px-10 py-6 bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
-            >
-              <span className="flex items-center gap-2">
-                <span>Solicitar Información</span>
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </span>
-            </Button>
-          </Link>
-        </div>
+          <div
+            className={`mt-8 flex flex-col gap-3 sm:flex-row ${isVisible ? "animate-reveal-up" : "opacity-0"}`}
+            style={{ animationDelay: "0.45s" }}
+          >
+            <Link href="#contacto">
+              <Button size="lg" className="h-14 w-full rounded-full bg-primary px-8 text-base font-black text-white shadow-xl shadow-primary/25 hover:bg-primary/90 sm:w-auto">
+                Solicitar información
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+            <Link href="#servicios">
+              <Button size="lg" variant="outline" className="h-14 w-full rounded-full border-white/20 bg-white/95 px-8 text-base font-black text-zinc-950 shadow-sm hover:bg-white sm:w-auto">
+                Ver servicios
+                <ChevronDown className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
 
-        <div className={`text-sm text-muted-foreground ${isVisible ? "animate-fade-in" : "opacity-0"}`} style={{ animationDelay: "0.9s" }}>
-          Más de 500 clientes confían en nosotros • Mantenimiento incluido • Soporte 24/7
+          <div
+            className={`mt-7 flex flex-col gap-2 text-sm font-bold text-zinc-100 sm:flex-row sm:items-center sm:gap-5 ${
+              isVisible ? "animate-fade-in" : "opacity-0"
+            }`}
+            style={{ animationDelay: "0.65s" }}
+          >
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
+              Mantenimiento incluido
+            </span>
+            <span className="flex items-center gap-2">
+              <PackageCheck className="h-4 w-4 text-primary" />
+              Reposición inteligente
+            </span>
+          </div>
         </div>
       </div>
     </section>

@@ -162,6 +162,18 @@ const tabOptions: Array<{ key: TabKey; label: string; dotClassName: string }> = 
   { key: 'empty', label: 'Vacías', dotClassName: 'bg-zinc-950' },
 ];
 
+function mobileTabClassName(tab: TabKey) {
+  const activeClassNames: Record<TabKey, string> = {
+    all: 'data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white',
+    empty: 'data-[state=active]:border-zinc-950 data-[state=active]:bg-zinc-950 data-[state=active]:text-white',
+    critical: 'data-[state=active]:border-red-600 data-[state=active]:bg-red-600 data-[state=active]:text-white',
+    normal: 'data-[state=active]:border-yellow-500 data-[state=active]:bg-yellow-500 data-[state=active]:text-white',
+    ok: 'data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white',
+  };
+
+  return activeClassNames[tab];
+}
+
 const telemetryProviders: Array<{ key: TelemetryProvider; label: string; description: string }> = [
   { key: 'frekuent', label: 'Frekuent', description: 'Telemetría activa' },
   { key: 'televend', label: 'Televend', description: 'Telemetría activa' },
@@ -213,7 +225,7 @@ function urgencyMeta(urgency: StockMachine['urgency']) {
   if (urgency === 'critical') {
     return {
       label: 'CRÍTICO',
-      description: 'Reposición prioritaria',
+      description: 'Menos del 65%',
       icon: AlertTriangle,
       badge: 'bg-red-600 text-white border-red-600',
       border: 'border-red-300',
@@ -224,7 +236,7 @@ function urgencyMeta(urgency: StockMachine['urgency']) {
   if (urgency === 'normal') {
     return {
       label: 'NORMAL',
-      description: 'Revisar en ruta',
+      description: '65% a 74%',
       icon: Zap,
       badge: 'bg-yellow-500 text-white border-yellow-500',
       border: 'border-yellow-300',
@@ -245,7 +257,7 @@ function urgencyMeta(urgency: StockMachine['urgency']) {
   }
   return {
     label: 'BIEN',
-    description: 'Sin prioridad',
+    description: '75% o más',
     icon: CheckCircle2,
     badge: 'bg-green-600 text-white border-green-600',
     border: 'border-green-300',
@@ -1132,20 +1144,23 @@ export function StockLivePage() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabKey)} className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="w-full sm:hidden">
-            <label className="mb-1 block text-xs font-black uppercase text-zinc-500">Estado</label>
-            <select
-              value={activeTab}
-              onChange={(event) => setActiveTab(event.target.value as TabKey)}
-              className="h-12 w-full max-w-full rounded-xl border border-zinc-200 bg-white px-3 text-base font-black text-zinc-900 shadow-sm outline-none focus:border-emerald-400"
-            >
-              {tabOptions.map((tab) => (
-                <option key={tab.key} value={tab.key}>
-                  {tab.label} ({getTabCount(tab.key)})
-                </option>
-              ))}
-            </select>
-          </div>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:hidden">
+            {tabOptions.map((tab) => (
+              <TabsTrigger
+                key={tab.key}
+                value={tab.key}
+                className={`h-16 min-w-0 justify-between rounded-xl border border-zinc-100 bg-zinc-50 px-3 text-left text-zinc-900 shadow-sm transition-all data-[state=active]:shadow-lg ${tab.key === 'all' ? 'col-span-2' : ''} ${mobileTabClassName(tab.key)}`}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tab.dotClassName}`} />
+                  <span className="truncate text-sm font-black">{tab.label}</span>
+                </span>
+                <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-black text-zinc-900 shadow-sm">
+                  {getTabCount(tab.key)}
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
           <TabsList className="hidden h-auto w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:flex lg:w-auto">
             {tabOptions.map((tab) => (
@@ -1408,7 +1423,7 @@ export function StockLivePage() {
                                           </div>
                                           <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
                                             <div
-                                              className={`h-full rounded-full ${fillRate === 0 ? 'bg-red-600' : fillRate < 30 ? 'bg-orange-500' : fillRate < 70 ? 'bg-yellow-500' : 'bg-green-600'}`}
+                                              className={`h-full rounded-full ${fillRate < 65 ? 'bg-red-600' : fillRate < 75 ? 'bg-yellow-500' : 'bg-green-600'}`}
                                               style={{ width: `${Math.max(0, Math.min(100, fillRate))}%` }}
                                             />
                                           </div>
@@ -1523,7 +1538,7 @@ export function StockLivePage() {
                           </div>
                           <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
                             <div
-                              className={`h-full rounded-full ${fillRate === 0 ? 'bg-red-600' : fillRate < 30 ? 'bg-orange-500' : fillRate < 70 ? 'bg-yellow-500' : 'bg-green-600'}`}
+                              className={`h-full rounded-full ${fillRate < 65 ? 'bg-red-600' : fillRate < 75 ? 'bg-yellow-500' : 'bg-green-600'}`}
                               style={{ width: `${Math.max(0, Math.min(100, fillRate))}%` }}
                             />
                           </div>

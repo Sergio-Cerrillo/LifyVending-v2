@@ -546,9 +546,8 @@ function getMachineUrgency(params: {
   if (params.totalProducts === 0) return 'unknown';
   if (params.totalCapacity > 0 && params.totalAvailable === 0) return 'empty';
 
-  const emptyLaneRate = params.outOfStockCount / params.totalProducts;
-  if (params.fillRate < 30 || params.outOfStockCount >= 4 || emptyLaneRate >= 0.2) return 'critical';
-  if (params.fillRate < 70 || params.lowStockCount > 0 || params.outOfStockCount > 0) return 'normal';
+  if (params.fillRate < 65) return 'critical';
+  if (params.fillRate < 75) return 'normal';
   return 'ok';
 }
 
