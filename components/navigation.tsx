@@ -5,11 +5,11 @@ import Link from "next/link"
 import { Menu, X, Lock } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { ModeToggle } from "@/components/mode-toggle"
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const overHero = !scrolled
 
   useEffect(() => {
     const handleScroll = () => {
@@ -32,7 +32,7 @@ export function Navigation() {
       <div
         className={`pointer-events-auto mx-auto max-w-7xl rounded-[1.75rem] border border-white/30 px-4 shadow-2xl shadow-zinc-950/10 ring-1 ring-white/25 backdrop-blur-md backdrop-saturate-150 transition-all duration-500 sm:px-6 lg:px-8 ${
           scrolled
-            ? "bg-white/[0.22] py-2"
+            ? "bg-white/70 py-2"
             : "bg-white/[0.16] py-3 sm:py-4"
         }`}
       >
@@ -52,7 +52,7 @@ export function Navigation() {
               <span className="font-bold text-2xl bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
                 Lify Vending
               </span>
-              <div className="text-xs text-muted-foreground font-light">Tu negocio sin inversión</div>
+              <div className={`text-xs font-semibold transition-colors ${overHero ? "text-white/70" : "text-zinc-600"}`}>Tu negocio sin inversión</div>
             </div>
           </Link>
 
@@ -62,13 +62,13 @@ export function Navigation() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="relative rounded-full px-4 py-2 font-semibold text-foreground/80 transition-colors hover:bg-white/20 hover:text-foreground"
+                className={`relative rounded-full px-4 py-2 font-semibold transition-colors hover:bg-white/20 ${
+                  overHero ? "text-white/90 hover:text-white" : "text-zinc-800 hover:text-zinc-950"
+                }`}
               >
                 {item.label}
               </Link>
             ))}
-
-            <ModeToggle />
 
             <Link href="#contacto">
               <Button
@@ -94,7 +94,6 @@ export function Navigation() {
 
           {/* Mobile Menu Button */}
           <div className="lg:hidden flex items-center gap-4">
-            <ModeToggle />
             <button
               className="rounded-2xl border border-white/30 bg-white/35 p-3 shadow-sm backdrop-blur-md transition-transform hover:scale-105"
               onClick={() => setIsOpen(!isOpen)}

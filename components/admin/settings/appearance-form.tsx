@@ -14,14 +14,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Loader2, Save, Palette } from 'lucide-react';
-import { updateAppearanceConfig } from '@/lib/services/settings-service';
 import type { AppearanceSettings } from '@/lib/types/settings';
 
 const formSchema = z.object({
-  theme: z.enum(['light', 'dark', 'system']),
+  theme: z.literal('light'),
   primary_color: z.string().min(4).max(7),
   logo_url: z.string().url('URL inválida').optional().or(z.literal('')),
   favicon_url: z.string().url('URL inválida').optional().or(z.literal('')),
@@ -43,7 +41,10 @@ export function AppearanceForm({ initialData }: AppearanceFormProps) {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData,
+    defaultValues: {
+      ...initialData,
+      theme: 'light',
+    },
   });
 
   async function onSubmit(values: FormValues) {
@@ -52,7 +53,7 @@ export function AppearanceForm({ initialData }: AppearanceFormProps) {
       const response = await fetch('/api/admin/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'appearance', data: values }),
+        body: JSON.stringify({ type: 'appearance', data: { ...values, theme: 'light' } }),
       });
       
       if (response.ok) {
@@ -83,34 +84,7 @@ export function AppearanceForm({ initialData }: AppearanceFormProps) {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Theme Settings */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="theme"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tema</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona tema" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="light">Claro</SelectItem>
-                        <SelectItem value="dark">Oscuro</SelectItem>
-                        <SelectItem value="system">Sistema</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Tema de color de la aplicación
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               <FormField
                 control={form.control}
                 name="primary_color"

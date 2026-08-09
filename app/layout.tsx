@@ -3,7 +3,6 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
 import { AnimatedBackground } from "@/components/animated-background"
 import { Toaster } from "@/components/ui/sonner"
 
@@ -31,13 +30,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <body className={`font-sans antialiased`}>
+    <html lang="es" className="light" data-theme="light">
+      <body className="light font-sans antialiased" data-theme="light">
         <AnimatedBackground />
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
-          <div className="relative z-10">{children}</div>
-          <Toaster />
-        </ThemeProvider>
+        <div className="relative z-10">{children}</div>
+        <Toaster />
         <Analytics />
       </body>
     </html>

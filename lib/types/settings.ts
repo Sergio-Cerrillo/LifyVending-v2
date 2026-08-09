@@ -58,7 +58,7 @@ export interface NotificationsConfig {
 }
 
 export interface AppearanceConfig {
-  theme: 'light' | 'dark' | 'system';
+  theme: 'light';
   primary_color: string;
   logo_url?: string;
   favicon_url?: string;

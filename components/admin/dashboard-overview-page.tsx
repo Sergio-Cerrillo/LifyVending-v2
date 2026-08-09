@@ -16,7 +16,9 @@ import {
     Banknote,
     Activity,
     CheckCircle,
-    AlertCircle
+    AlertCircle,
+    AlertTriangle,
+    XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -46,6 +48,226 @@ interface DashboardStats {
         totalCash: number;
         machineCount: number;
     };
+}
+
+type ProviderKey = 'frekuent' | 'televend';
+
+interface ProviderMachineStatus {
+    provider: ProviderKey;
+    requestedAt: string;
+    total: number;
+    empty: number;
+    critical: number;
+    normal: number;
+    ok: number;
+    unknown: number;
+    fillRate: number;
+    totalToReplenish: number;
+}
+
+interface ProviderStatusState {
+    loading: boolean;
+    data: ProviderMachineStatus | null;
+    error: string | null;
+}
+
+function MachineStatusSkeleton() {
+    return (
+        <Card className="overflow-hidden border border-zinc-200 bg-white">
+            <CardHeader className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <Skeleton className="h-5 w-28 animate-pulse" />
+                    <Skeleton className="h-9 w-9 rounded-xl animate-pulse" />
+                </div>
+                <Skeleton className="h-9 w-20 animate-pulse" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                    {[1, 2, 3, 4].map((item) => (
+                        <Skeleton key={item} className="h-16 rounded-xl animate-pulse" />
+                    ))}
+                </div>
+                <Skeleton className="h-3 rounded-full animate-pulse" />
+            </CardContent>
+        </Card>
+    );
+}
+
+function ProviderMachineStatusCard({
+    label,
+    state,
+    onRetry,
+}: {
+    label: string;
+    state: ProviderStatusState;
+    onRetry: () => void;
+}) {
+    if (state.loading) return <MachineStatusSkeleton />;
+
+    if (state.error || !state.data) {
+        return (
+            <Card className="border-red-200 bg-red-50/70">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base font-bold text-red-700">
+                        <AlertCircle className="h-5 w-5" />
+                        {label}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <p className="text-sm font-medium text-red-700">{state.error || 'No se pudo cargar el estado'}</p>
+                    <Button type="button" variant="outline" onClick={onRetry} className="border-red-200 bg-white text-red-700 hover:bg-red-50">
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Reintentar
+                    </Button>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    const statusItems = [
+        { label: 'Vacías', value: state.data.empty, className: 'bg-zinc-950 text-white', icon: XCircle },
+        { label: 'Críticas', value: state.data.critical, className: 'bg-red-600 text-white', icon: AlertTriangle },
+        { label: 'Normal', value: state.data.normal, className: 'bg-yellow-500 text-white', icon: AlertCircle },
+        { label: 'Bien', value: state.data.ok, className: 'bg-green-600 text-white', icon: CheckCircle },
+    ];
+
+    return (
+        <Card className="overflow-hidden border border-zinc-200 bg-white shadow-sm">
+            <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <CardTitle className="text-lg font-black text-zinc-900">{label}</CardTitle>
+                        <p className="mt-1 text-xs font-semibold text-zinc-500">
+                            {state.data.totalToReplenish.toLocaleString('es-ES')} unidades a reponer
+                        </p>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2 text-right">
+                        <p className="text-2xl font-black leading-none text-emerald-700">{state.data.total}</p>
+                        <p className="text-[10px] font-black uppercase text-emerald-700">máquinas</p>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                    {statusItems.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                            <div key={item.label} className={`rounded-xl p-3 ${item.className}`}>
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-black uppercase opacity-90">{item.label}</span>
+                                    <Icon className="h-4 w-4 shrink-0" />
+                                </div>
+                                <p className="mt-2 text-2xl font-black leading-none">{item.value}</p>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div>
+                    <div className="mb-1 flex items-center justify-between text-xs font-bold text-zinc-500">
+                        <span>Llenado medio</span>
+                        <span>{state.data.fillRate}%</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
+                        <div
+                            className={`h-full rounded-full ${state.data.fillRate < 65 ? 'bg-red-600' : state.data.fillRate < 75 ? 'bg-yellow-500' : 'bg-green-600'}`}
+                            style={{ width: `${Math.max(0, Math.min(100, state.data.fillRate))}%` }}
+                        />
+                    </div>
+                    {state.data.unknown > 0 && (
+                        <p className="mt-2 text-xs font-semibold text-zinc-500">
+                            {state.data.unknown} {state.data.unknown === 1 ? 'máquina sin datos' : 'máquinas sin datos'}
+                        </p>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function MachineStatusOverview() {
+    const [providers, setProviders] = useState<Record<ProviderKey, ProviderStatusState>>({
+        frekuent: { loading: true, data: null, error: null },
+        televend: { loading: true, data: null, error: null },
+    });
+
+    async function loadProvider(provider: ProviderKey) {
+        setProviders((current) => ({
+            ...current,
+            [provider]: { ...current[provider], loading: true, error: null },
+        }));
+
+        try {
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !sessionData.session) {
+                throw new Error('Sesión no válida');
+            }
+
+            const response = await fetch(`/api/admin/stock-status?provider=${provider}`, {
+                headers: {
+                    Authorization: `Bearer ${sessionData.session.access_token}`,
+                },
+            });
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || `No se pudo cargar ${provider}`);
+            }
+
+            setProviders((current) => ({
+                ...current,
+                [provider]: { loading: false, data: result.status, error: null },
+            }));
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Error consultando proveedor';
+            setProviders((current) => ({
+                ...current,
+                [provider]: { loading: false, data: null, error: message },
+            }));
+        }
+    }
+
+    useEffect(() => {
+        loadProvider('frekuent');
+        loadProvider('televend');
+    }, []);
+
+    return (
+        <section className="space-y-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h2 className="text-xl font-black tracking-tight text-zinc-900">Estado de máquinas</h2>
+                    <p className="text-sm font-semibold text-zinc-500">Carga independiente del dashboard principal</p>
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={() => {
+                        loadProvider('frekuent');
+                        loadProvider('televend');
+                    }}
+                    disabled={providers.frekuent.loading || providers.televend.loading}
+                >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${(providers.frekuent.loading || providers.televend.loading) ? 'animate-spin' : ''}`} />
+                    Actualizar estados
+                </Button>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+                <ProviderMachineStatusCard
+                    label="Frekuent"
+                    state={providers.frekuent}
+                    onRetry={() => loadProvider('frekuent')}
+                />
+                <ProviderMachineStatusCard
+                    label="Televend"
+                    state={providers.televend}
+                    onRetry={() => loadProvider('televend')}
+                />
+            </div>
+        </section>
+    );
 }
 
 export function DashboardOverviewPage() {
@@ -205,6 +427,8 @@ export function DashboardOverviewPage() {
                     </CardContent>
                 </Card>
             )}
+
+            <MachineStatusOverview />
 
             {/* Contenido del dashboard */}
             {stats && !loading && (

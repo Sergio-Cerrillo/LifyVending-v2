@@ -54,14 +54,9 @@ export function Footer() {
               rel="noopener noreferrer"
             >
               <img
-                src="/logo-full-w.png"
-                alt="SCWebStudio"
-                className="hidden h-16 w-auto transition-transform group-hover:scale-105 dark:block"
-              />
-              <img
                 src="/logo-full-b.png"
                 alt="SCWebStudio"
-                className="block h-16 w-auto transition-transform group-hover:scale-105 dark:hidden"
+                className="h-16 w-auto transition-transform group-hover:scale-105"
               />
             </Link>
           </div>
