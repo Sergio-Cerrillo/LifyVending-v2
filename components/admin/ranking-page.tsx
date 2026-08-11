@@ -106,8 +106,8 @@ function urgencyClass(urgency: Urgency) {
 
 function RankingSkeleton() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-52 rounded-3xl" />
+    <div className="w-full max-w-[100dvw] space-y-6 overflow-x-hidden px-3 sm:px-0">
+      <Skeleton className="h-32 rounded-2xl" />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
           <Skeleton key={item} className="h-32 rounded-2xl" />
@@ -195,22 +195,24 @@ function MachineRankingCard({
         ) : (
           <div className="divide-y divide-zinc-100">
             {machines.map((machine, index) => (
-              <div key={machine.id} className="flex items-center gap-3 p-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-sm font-black text-zinc-700">
-                  {index < 3 ? <Medal className="h-4 w-4" /> : index + 1}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <p className="min-w-0 truncate text-sm font-black text-zinc-900 sm:text-base">{machine.name}</p>
-                    <Badge variant="outline" className="shrink-0 text-[10px] font-black uppercase">
-                      {providerLabel(machine.provider)}
-                    </Badge>
+              <div key={machine.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-sm font-black text-zinc-700">
+                    {index < 3 ? <Medal className="h-4 w-4" /> : index + 1}
                   </div>
-                  <p className="mt-1 truncate text-xs font-semibold text-zinc-500">
-                    {machine.location || 'Sin ubicación'}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p className="min-w-0 truncate text-sm font-black text-zinc-900 sm:text-base">{machine.name}</p>
+                      <Badge variant="outline" className="shrink-0 text-[10px] font-black uppercase">
+                        {providerLabel(machine.provider)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 truncate text-xs font-semibold text-zinc-500">
+                      {machine.location || 'Sin ubicación'}
+                    </p>
+                  </div>
                 </div>
-                <div className="shrink-0 text-right">{metric(machine)}</div>
+                <div className="shrink-0 text-left sm:text-right">{metric(machine)}</div>
               </div>
             ))}
           </div>
@@ -265,36 +267,40 @@ export function RankingPage() {
   if (loading) return <RankingSkeleton />;
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-950 p-5 text-white shadow-sm sm:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-black uppercase text-emerald-100">
-              <Trophy className="h-3.5 w-3.5" />
-              Ranking operativo
+    <div className="w-full max-w-[100dvw] space-y-4 overflow-x-hidden px-3 pb-4 sm:space-y-6 sm:px-0 sm:pb-0 [&_*]:min-w-0">
+      <section className="w-full max-w-full overflow-hidden rounded-2xl border border-emerald-100 bg-white p-3 shadow-sm sm:bg-gradient-to-br sm:from-white sm:via-emerald-50/40 sm:to-blue-50/30 sm:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex min-w-0 items-center gap-3">
+              <div className="hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 p-3 text-white shadow-lg sm:block">
+                <Trophy className="h-6 w-6" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="break-words text-xl font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">
+                  Ranking de máquinas
+                </h1>
+                <p className="break-words text-sm font-semibold text-zinc-700">
+                  Ventas, reposición y señales de atención ordenadas para decidir rápido qué revisar
+                </p>
+              </div>
             </div>
-            <h1 className="text-4xl font-black leading-none tracking-tight sm:text-5xl lg:text-6xl">
-              Ranking de máquinas
-            </h1>
-            <p className="mt-4 max-w-2xl text-base font-semibold leading-relaxed text-zinc-300 sm:text-lg">
-              Ventas, reposición y señales de atención ordenadas para decidir rápido qué revisar.
+            <p className="break-words text-xs font-medium text-emerald-700 sm:ml-14">
+              Última actualización: {formatDate(data?.lastUpdate || null)}
+              <span className="mx-2 text-zinc-300">/</span>
+              {data?.summary.providers.frekuent.machines || 0} Frekuent
+              <span className="mx-2 text-zinc-300">/</span>
+              {data?.summary.providers.televend.machines || 0} Televend
             </p>
           </div>
           <Button
             type="button"
             onClick={() => loadRankings(false)}
             disabled={refreshing}
-            className="h-12 rounded-2xl bg-emerald-500 px-5 font-black text-white hover:bg-emerald-600"
+            className="h-12 w-full max-w-full rounded-xl bg-emerald-600 px-4 text-base font-bold text-white hover:bg-emerald-700 md:w-auto"
           >
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Actualizando...' : 'Actualizar ranking'}
+            <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="truncate">{refreshing ? 'Actualizando...' : 'Actualizar ranking'}</span>
           </Button>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 text-xs font-bold text-zinc-300">
-          <span>Última actualización: {formatDate(data?.lastUpdate || null)}</span>
-          <span className="hidden sm:inline">/</span>
-          <span>{data?.summary.providers.frekuent.machines || 0} Frekuent</span>
-          <span>{data?.summary.providers.televend.machines || 0} Televend</span>
         </div>
       </section>
 
