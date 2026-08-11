@@ -11,6 +11,21 @@ export interface FrekuentPointOfSalesActivityParams {
   machineIds?: number[];
 }
 
+export interface FrekuentRevenueMachine {
+  machineId: number;
+  machineName: string;
+  machineNumber?: string;
+  clientName?: string;
+  location?: string;
+  serialNumber?: string;
+  totalMoney: number;
+  totalSales: number;
+  totalCard: number;
+  totalCash: number;
+  totalCashless: number;
+  numberTransactions: number;
+}
+
 export interface FrekuentStockProduct {
   line: string;
   mdbCode?: string;
@@ -80,6 +95,7 @@ interface FrekuentLoginResponse {
 }
 
 interface FrekuentMachineTableRow {
+  main_id?: unknown;
   id_machine?: unknown;
   name_machine?: unknown;
   number_machine?: unknown;
@@ -88,6 +104,12 @@ interface FrekuentMachineTableRow {
   location?: unknown;
   serial_number?: unknown;
   status?: unknown;
+  total_money?: unknown;
+  total_sales?: unknown;
+  total_card?: unknown;
+  total_cash?: unknown;
+  total_cashless?: unknown;
+  number_transactions?: unknown;
 }
 
 interface FrekuentProductTableRow {
@@ -377,6 +399,98 @@ export async function getFrekuentPointOfSalesActivity({
       },
     }),
   });
+}
+
+function centsToEuros(value: unknown): number {
+  return Math.round((numberFromUnknown(value) / 100) * 100) / 100;
+}
+
+function normalizeRevenueMachine(row: FrekuentMachineTableRow): FrekuentRevenueMachine | null {
+  const machineId = numberFromUnknown(row.id_machine ?? row.main_id);
+  const machineName = typeof row.name_machine === 'string' ? row.name_machine.trim() : '';
+
+  if (!machineId || !machineName) return null;
+
+  return {
+    machineId,
+    machineName,
+    machineNumber: typeof row.number_machine === 'string' && row.number_machine.trim() ? row.number_machine.trim() : undefined,
+    clientName: typeof row.client_name === 'string' && row.client_name.trim() ? row.client_name.trim() : undefined,
+    location: typeof row.location === 'string' && row.location.trim() ? row.location.trim() : undefined,
+    serialNumber: typeof row.serial_number === 'string' && row.serial_number.trim() ? row.serial_number.trim() : undefined,
+    totalMoney: centsToEuros(row.total_money),
+    totalSales: centsToEuros(row.total_sales),
+    totalCard: centsToEuros(row.total_card),
+    totalCash: centsToEuros(row.total_cash),
+    totalCashless: centsToEuros(row.total_cashless),
+    numberTransactions: Math.round(numberFromUnknown(row.number_transactions)),
+  };
+}
+
+export async function getFrekuentRevenueMachines({
+  startDate,
+  endDate,
+  datesLogic = 'custom',
+  pageSize = 200,
+}: {
+  startDate: string;
+  endDate: string;
+  datesLogic?: 'today' | 'current_month' | 'custom';
+  pageSize?: number;
+}): Promise<FrekuentRevenueMachine[]> {
+  const firstPayload = await frekuentFetchWithRetry<{ data?: FrekuentMachineTableRow[]; total?: number; recordsTotal?: number }>(
+    '/pos/table/pos',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        page: 1,
+        pageSize,
+        sort_by: 'name_machine',
+        direction: 'asc',
+        filters: {},
+        start_date: startDate,
+        end_date: endDate,
+        dates_logic: datesLogic,
+        search: '',
+        use_cache: false,
+        query_filters: {},
+      }),
+    },
+    true,
+  );
+
+  const rows = [...(firstPayload.data || [])];
+  const total = numberFromUnknown(firstPayload.total ?? firstPayload.recordsTotal);
+  const totalPages = total > pageSize ? Math.ceil(total / pageSize) : 1;
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const payload = await frekuentFetchWithRetry<{ data?: FrekuentMachineTableRow[] }>(
+      '/pos/table/pos',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          page,
+          pageSize,
+          sort_by: 'name_machine',
+          direction: 'asc',
+          filters: {},
+          start_date: startDate,
+          end_date: endDate,
+          dates_logic: datesLogic,
+          search: '',
+          use_cache: false,
+          query_filters: {},
+        }),
+      },
+      true,
+    );
+
+    rows.push(...(payload.data || []));
+  }
+
+  return rows
+    .map(normalizeRevenueMachine)
+    .filter(Boolean) as FrekuentRevenueMachine[];
 }
 
 export async function getFrekuentMachineMetadataMap(machineIds: number[] = []): Promise<Map<number, Partial<FrekuentStockMachine>>> {

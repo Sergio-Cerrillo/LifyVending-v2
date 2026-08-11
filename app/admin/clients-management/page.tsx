@@ -24,7 +24,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Settings, RefreshCw, User, Building, Eye, Trash2, Calendar } from 'lucide-react';
+import { Plus, Settings, RefreshCw, User, Building, Eye, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
 import { LoadingInline } from '@/components/ui/loading-screen';
@@ -457,12 +457,6 @@ export default function AdminClientsPage() {
                       <Button variant="ghost" size="sm" className="border border-zinc-200 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors">
                         <Eye className="w-4 h-4 mr-2" />
                         Ver
-                      </Button>
-                    </Link>
-                    <Link href={`/admin/clients/${client.id}/historical`}>
-                      <Button variant="ghost" size="sm" className="border border-amber-200 text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500 transition-colors font-semibold">
-                        <Calendar className="w-4 h-4 mr-2" />
-                        Ajuste histórico
                       </Button>
                     </Link>
                     <Link href={`/admin/clients/${client.id}`}>

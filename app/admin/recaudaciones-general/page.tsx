@@ -3,20 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CheckCircle2,
-  CircleDashed,
   Clock,
   DollarSign,
   EuroIcon,
-  Loader2,
   RefreshCw,
   TrendingUp,
-  XCircle,
-  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-helpers';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingInline } from '@/components/ui/loading-screen';
@@ -47,22 +41,12 @@ interface RevenueData {
   lastUpdate: string | null;
 }
 
-type JobState = {
-  status: 'idle' | 'queued' | 'running' | 'success' | 'error';
-  message?: string;
-  durationSeconds?: number;
-};
-
-const IDLE_JOB: JobState = { status: 'idle' };
-
 export default function AdminRevenueGeneralPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<RevenueData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [job, setJob] = useState<JobState>(IDLE_JOB);
-  const manualEnabled = process.env.NEXT_PUBLIC_ENABLE_MANUAL_SCRAPING !== 'false';
 
   async function authenticatedFetch(url: string, init?: RequestInit) {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -80,91 +64,33 @@ export default function AdminRevenueGeneralPage() {
     });
   }
 
-  async function loadRevenueData(showLoader = true) {
+  async function loadRevenueData(showLoader = true, showToast = false) {
     try {
       if (showLoader) setLoading(true);
+      if (!showLoader) setRefreshing(true);
       setError(null);
       const response = await authenticatedFetch('/api/admin/revenue');
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'No se pudieron cargar las recaudaciones');
       setData(payload);
+      if (showToast) {
+        toast.success('Datos actualizados', {
+          description: 'La vista muestra la última información disponible.',
+        });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       setError(message);
       toast.error('Error cargando recaudaciones', { description: message });
     } finally {
       if (showLoader) setLoading(false);
-    }
-  }
-
-  async function loadJobStatus() {
-    if (!manualEnabled) return;
-
-    try {
-      const response = await authenticatedFetch('/api/admin/revenue/jobs');
-      if (!response.ok) return;
-      const payload = await response.json();
-      const latest = payload.byAction?.frekuent;
-      if (!latest) return;
-
-      const status =
-        latest.status === 'completed' ? 'success' :
-        latest.status === 'error' ? 'error' :
-        latest.status;
-
-      setJob({
-        status,
-        message: latest.error_message || latest.phase,
-        durationSeconds: latest.result_json?.durationSeconds,
-      });
-
-      if (status === 'success') {
-        await loadRevenueData(false);
-      }
-    } catch {
-      // El estado es auxiliar y no debe bloquear la lectura de recaudaciones.
+      setRefreshing(false);
     }
   }
 
   useEffect(() => {
     loadRevenueData();
-    loadJobStatus();
   }, []);
-
-  useEffect(() => {
-    if (!manualEnabled) return;
-    const interval = window.setInterval(loadJobStatus, 5000);
-    return () => window.clearInterval(interval);
-  }, [manualEnabled]);
-
-  async function runFrekuentScraping() {
-    try {
-      setSubmitting(true);
-      setJob({ status: 'queued', message: 'Encolando ejecución' });
-
-      const response = await authenticatedFetch('/api/admin/revenue/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'frekuent' }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'No se pudo encolar el scraping');
-
-      setJob({
-        status: 'success',
-        message: 'Completado',
-        durationSeconds: payload.result?.durationSeconds,
-      });
-      await loadRevenueData(false);
-      toast.success('Scraping de Frekuent completado');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error desconocido';
-      setJob({ status: 'error', message });
-      toast.error('Error ejecutando Frekuent', { description: message });
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   if (loading) return <LoadingInline message="Cargando recaudaciones..." />;
 
@@ -193,27 +119,17 @@ export default function AdminRevenueGeneralPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {manualEnabled && (
-              <Button
-                onClick={runFrekuentScraping}
-                disabled={submitting || job.status === 'queued' || job.status === 'running'}
-                className="bg-blue-600 text-white hover:bg-blue-700"
-              >
-                {submitting || job.status === 'running'
-                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  : <Zap className="mr-2 h-4 w-4" />}
-                Actualizar Frekuent
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => loadRevenueData()} disabled={loading}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refrescar vista
+            <Button
+              onClick={() => loadRevenueData(false, true)}
+              disabled={refreshing}
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Actualizando...' : 'Actualizar datos'}
             </Button>
           </div>
         </div>
       </div>
-
-      {manualEnabled && <JobStatusCard job={job} />}
 
       {error && (
         <Card className="border-red-200">
@@ -257,30 +173,6 @@ export default function AdminRevenueGeneralPage() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function JobStatusCard({ job }: { job: JobState }) {
-  const badge =
-    job.status === 'running' ? <Badge className="bg-blue-100 text-blue-700"><Loader2 className="mr-1 h-3 w-3 animate-spin" />Ejecutando</Badge> :
-    job.status === 'queued' ? <Badge variant="outline" className="text-amber-700"><CircleDashed className="mr-1 h-3 w-3" />En cola</Badge> :
-    job.status === 'success' ? <Badge className="bg-emerald-100 text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />Completado</Badge> :
-    job.status === 'error' ? <Badge className="bg-red-100 text-red-700"><XCircle className="mr-1 h-3 w-3" />Error</Badge> :
-    <Badge variant="outline">Sin actividad</Badge>;
-
-  return (
-    <Card>
-      <CardContent className="flex items-center justify-between gap-4 pt-6">
-        <div>
-          <p className="font-semibold text-zinc-900">Estado del scraping Frekuent</p>
-          <p className="text-sm text-zinc-600">{job.message || 'Sin ejecuciones recientes'}</p>
-          {typeof job.durationSeconds === 'number' && (
-            <p className="text-xs text-emerald-700">Duración: {job.durationSeconds}s</p>
-          )}
-        </div>
-        {badge}
-      </CardContent>
-    </Card>
   );
 }
 

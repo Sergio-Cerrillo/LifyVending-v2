@@ -4,14 +4,14 @@
  * DASHBOARD DEL CLIENTE
  * 
  * Muestra:
- * - Recaudación NETA (daily, weekly, monthly)
+ * - Recaudación visible del cliente (daily, weekly, monthly)
  * - Lista de máquinas asignadas
  * - Timestamp de última actualización automática
  * 
  * IMPORTANTE:
- * - Los datos se actualizan automáticamente cada hora (Vercel Cron)
- * - El cliente NO puede forzar scraping (solo admin)
- * - Solo se muestra recaudación NETA (comisión ya aplicada)
+ * - Los datos se refrescan desde servidor cuando la información guardada queda antigua
+ * - El cliente NO accede a proveedores externos ni a valores internos de cálculo
+ * - Solo se muestran importes autorizados para el cliente
  */
 
 import { useEffect, useState } from 'react';
@@ -30,7 +30,6 @@ interface DashboardData {
     companyName: string | null;
   };
   commission: {
-    hidePercent: number;
     paymentPercent: number;
   };
   machines: Array<{
@@ -194,7 +193,7 @@ export default function ClientDashboardPage() {
             {data.profile.companyName || data.profile.displayName || 'Mi Dashboard'}
           </h1>
           <p className="text-muted-foreground">
-            Recaudación neta de sus máquinas de vending
+            Recaudación de sus máquinas de vending
           </p>
         </div>
         <div className="flex gap-2">
@@ -227,7 +226,7 @@ export default function ClientDashboardPage() {
             <div className="flex-1">
               <h3 className="font-semibold text-emerald-900 mb-1">Actualización Automática</h3>
               <p className="text-sm text-emerald-800 mb-2">
-                Los datos de recaudación se actualizan automáticamente <strong>cada día alrededor de las 09:00</strong> de la mañana.
+                Los datos de recaudación se actualizan automáticamente cuando hay información nueva disponible.
               </p>
               {data.lastUpdate && (
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-emerald-200">
@@ -277,7 +276,7 @@ export default function ClientDashboardPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Recaudación Diaria (Neta)
+                  Recaudación Diaria
                 </CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -294,7 +293,7 @@ export default function ClientDashboardPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Recaudación Mensual (Neta)
+                  Recaudación Mensual
                 </CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -313,7 +312,7 @@ export default function ClientDashboardPage() {
             <CardHeader>
               <CardTitle>Mis Máquinas ({data.machines.length})</CardTitle>
               <CardDescription>
-                Recaudación individual por máquina (valores netos)
+                Recaudación individual por máquina
               </CardDescription>
             </CardHeader>
             <CardContent>

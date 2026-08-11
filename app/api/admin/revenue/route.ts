@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
+import { ensureRevenueFreshness } from '@/lib/services/revenue-refresh-service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,6 +57,10 @@ export async function GET(request: NextRequest) {
         requiredRole: 'admin'
       }, { status: 403 });
     }
+
+    await ensureRevenueFreshness().catch((refreshError) => {
+      console.error('[REVENUE API] No se pudo refrescar recaudación antes de responder:', refreshError);
+    });
 
     const frekuentFilter = 'frekuent_machine_id.not.is.null,orain_machine_id.not.is.null';
 

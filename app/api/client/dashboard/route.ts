@@ -1,10 +1,11 @@
 /**
- * API: Dashboard del cliente (recaudación NETA)
+ * API: Dashboard del cliente
  * GET /api/client/dashboard
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
+import { ensureRevenueFreshness } from '@/lib/services/revenue-refresh-service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,6 +48,10 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Perfil cliente verificado');
 
+    await ensureRevenueFreshness().catch((refreshError) => {
+      console.error('[CLIENT-DASHBOARD] No se pudo refrescar recaudación en segundo plano del request:', refreshError);
+    });
+
     // Obtener settings del cliente (comisión)
     const { data: settings } = await supabaseAdmin
       .from('client_settings')
@@ -54,7 +59,7 @@ export async function GET(request: NextRequest) {
       .eq('client_id', user.id)
       .single();
 
-    // Obtener recaudación neta por periodo usando la función SQL
+    // Obtener recaudación visible por periodo usando la función SQL
     const periods: Array<'daily' | 'weekly' | 'monthly'> = ['daily', 'weekly', 'monthly'];
     
     const revenueByPeriod: Record<string, any> = {};
@@ -138,7 +143,6 @@ export async function GET(request: NextRequest) {
         companyName: profile.company_name
       },
       commission: {
-        hidePercent: settings?.commission_hide_percent || 0,
         paymentPercent: settings?.commission_payment_percent || 0
       },
       machines,

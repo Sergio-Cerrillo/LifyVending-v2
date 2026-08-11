@@ -1,21 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowRight,
   Banknote,
-  Clock,
   Euro,
+  Medal,
   Package,
   RefreshCw,
   Trophy,
   WifiOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '@/contexts/auth-context';
 import { supabase } from '@/lib/supabase-helpers';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,7 +40,7 @@ interface RankingMachine {
   stockUpdatedAt: string | null;
 }
 
-interface HomeRankingsPayload {
+interface RankingPayload {
   success: boolean;
   generatedAt: string;
   lastUpdate: string | null;
@@ -66,11 +65,12 @@ interface HomeRankingsPayload {
   };
 }
 
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Buenos días';
-  if (hour < 20) return 'Buenas tardes';
-  return 'Buenas noches';
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 2,
+  }).format(value || 0);
 }
 
 function formatDate(value: string | null) {
@@ -78,25 +78,10 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat('es-ES', {
     day: '2-digit',
     month: '2-digit',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
-}
-
-function formatToday() {
-  return new Date().toLocaleDateString('es-ES', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 2,
-  }).format(value || 0);
 }
 
 function providerLabel(provider: Provider) {
@@ -119,10 +104,10 @@ function urgencyClass(urgency: Urgency) {
   return 'bg-emerald-600 text-white';
 }
 
-function InicioSkeleton() {
+function RankingSkeleton() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-44 rounded-3xl" />
+      <Skeleton className="h-52 rounded-3xl" />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
           <Skeleton key={item} className="h-32 rounded-2xl" />
@@ -130,7 +115,7 @@ function InicioSkeleton() {
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-80 rounded-2xl" />
+          <Skeleton key={item} className="h-96 rounded-2xl" />
         ))}
       </div>
     </div>
@@ -151,28 +136,28 @@ function SummaryCard({
   tone?: 'default' | 'danger' | 'success';
 }) {
   const toneClass = tone === 'danger'
-    ? 'border-red-100 bg-red-50/60 text-red-700'
+    ? 'border-red-100 bg-red-50/70'
     : tone === 'success'
-      ? 'border-emerald-100 bg-emerald-50/70 text-emerald-700'
-      : 'border-zinc-200 bg-white text-zinc-900';
+      ? 'border-emerald-100 bg-emerald-50/80'
+      : 'border-zinc-200 bg-white';
 
   return (
-    <Card className={`overflow-hidden shadow-sm ${toneClass}`}>
+    <Card className={`shadow-sm ${toneClass}`}>
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase text-zinc-500">{title}</p>
-            <p className="mt-3 break-words text-3xl font-black leading-none tracking-tight sm:text-4xl">{value}</p>
+            <p className="mt-3 break-words text-3xl font-black leading-none text-zinc-900 sm:text-4xl">{value}</p>
             <p className="mt-2 text-sm font-semibold text-zinc-500">{subtitle}</p>
           </div>
-          <div className="rounded-2xl bg-white/80 p-3 shadow-sm">{icon}</div>
+          <div className="rounded-2xl bg-white p-3 shadow-sm">{icon}</div>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function RankingCard({
+function MachineRankingCard({
   title,
   description,
   machines,
@@ -211,8 +196,8 @@ function RankingCard({
           <div className="divide-y divide-zinc-100">
             {machines.map((machine, index) => (
               <div key={machine.id} className="flex items-center gap-3 p-4">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-sm font-black text-zinc-700">
-                  {index + 1}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-sm font-black text-zinc-700">
+                  {index < 3 ? <Medal className="h-4 w-4" /> : index + 1}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -235,14 +220,11 @@ function RankingCard({
   );
 }
 
-export default function InicioPage() {
+export function RankingPage() {
   const router = useRouter();
-  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [data, setData] = useState<HomeRankingsPayload | null>(null);
-
-  const displayName = useMemo(() => currentUser?.name?.split('@')[0] || 'equipo', [currentUser?.name]);
+  const [data, setData] = useState<RankingPayload | null>(null);
 
   async function loadRankings(showLoader = true) {
     try {
@@ -266,12 +248,10 @@ export default function InicioPage() {
       }
 
       setData(payload);
-      if (!showLoader) {
-        toast.success('Rankings actualizados');
-      }
+      if (!showLoader) toast.success('Ranking actualizado');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error cargando inicio';
-      toast.error('No se pudo cargar el inicio', { description: message });
+      const message = error instanceof Error ? error.message : 'Error cargando ranking';
+      toast.error('No se pudo cargar el ranking', { description: message });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -282,7 +262,7 @@ export default function InicioPage() {
     loadRankings();
   }, []);
 
-  if (loading) return <InicioSkeleton />;
+  if (loading) return <RankingSkeleton />;
 
   return (
     <div className="space-y-6">
@@ -290,32 +270,25 @@ export default function InicioPage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-black uppercase text-emerald-100">
-              <Clock className="h-3.5 w-3.5" />
-              {formatToday()}
+              <Trophy className="h-3.5 w-3.5" />
+              Ranking operativo
             </div>
             <h1 className="text-4xl font-black leading-none tracking-tight sm:text-5xl lg:text-6xl">
-              {getGreeting()}, {displayName}
+              Ranking de máquinas
             </h1>
             <p className="mt-4 max-w-2xl text-base font-semibold leading-relaxed text-zinc-300 sm:text-lg">
-              Lo importante del día: ventas, stock crítico y máquinas que necesitan atención.
+              Ventas, reposición y señales de atención ordenadas para decidir rápido qué revisar.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row lg:items-center">
-            <Button
-              type="button"
-              onClick={() => loadRankings(false)}
-              disabled={refreshing}
-              className="h-12 rounded-2xl bg-emerald-500 px-5 font-black text-white hover:bg-emerald-600"
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Actualizando...' : 'Actualizar'}
-            </Button>
-            <Link href="/admin/stock">
-              <Button type="button" variant="secondary" className="h-12 w-full rounded-2xl px-5 font-black sm:w-auto">
-                Ver stock
-              </Button>
-            </Link>
-          </div>
+          <Button
+            type="button"
+            onClick={() => loadRankings(false)}
+            disabled={refreshing}
+            className="h-12 rounded-2xl bg-emerald-500 px-5 font-black text-white hover:bg-emerald-600"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Actualizando...' : 'Actualizar ranking'}
+          </Button>
         </div>
         <div className="mt-6 flex flex-wrap gap-2 text-xs font-bold text-zinc-300">
           <span>Última actualización: {formatDate(data?.lastUpdate || null)}</span>
@@ -329,7 +302,7 @@ export default function InicioPage() {
         <SummaryCard
           title="Ventas hoy"
           value={formatCurrency(data?.summary.totalDaily || 0)}
-          subtitle="recaudación operativa"
+          subtitle="total operativo"
           icon={<Euro className="h-5 w-5 text-emerald-700" />}
           tone="success"
         />
@@ -355,7 +328,7 @@ export default function InicioPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <RankingCard
+        <MachineRankingCard
           title="Top ventas de hoy"
           description="Máquinas que más están facturando hoy"
           machines={data?.rankings.topDaily || []}
@@ -365,7 +338,7 @@ export default function InicioPage() {
             <p className="text-base font-black text-emerald-700">{formatCurrency(machine.dailyTotal)}</p>
           )}
         />
-        <RankingCard
+        <MachineRankingCard
           title="Top ventas del mes"
           description="Rendimiento acumulado del mes actual"
           machines={data?.rankings.topMonthly || []}
@@ -375,7 +348,7 @@ export default function InicioPage() {
             <p className="text-base font-black text-zinc-900">{formatCurrency(machine.monthlyTotal)}</p>
           )}
         />
-        <RankingCard
+        <MachineRankingCard
           title="Prioridad de reposición"
           description="Máquinas ordenadas por urgencia de stock"
           machines={data?.rankings.stockPriority || []}
@@ -386,11 +359,11 @@ export default function InicioPage() {
               <Badge className={`${urgencyClass(machine.urgency)} text-[10px] font-black uppercase`}>
                 {urgencyLabel(machine.urgency)}
               </Badge>
-              <p className="text-xs font-black text-zinc-500">{machine.fillRate ?? 0}%</p>
+              <p className="text-xs font-black text-zinc-500">{machine.fillRate ?? 0}% llenado</p>
             </div>
           )}
         />
-        <RankingCard
+        <MachineRankingCard
           title="Sin ventas hoy"
           description="Máquinas con ventas este mes pero sin movimiento hoy"
           machines={data?.rankings.noSalesToday || []}
@@ -399,10 +372,7 @@ export default function InicioPage() {
           metric={(machine) => (
             <div className="space-y-1">
               <p className="text-sm font-black text-zinc-900">{formatCurrency(machine.monthlyTotal)}</p>
-              <div className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-black uppercase text-zinc-600">
-                <Trophy className="h-3 w-3" />
-                mes
-              </div>
+              <p className="text-[10px] font-black uppercase text-zinc-500">mes</p>
             </div>
           )}
         />
@@ -413,7 +383,7 @@ export default function InicioPage() {
           <Card className="border-zinc-200 bg-white shadow-sm transition-colors group-hover:border-emerald-300">
             <CardContent className="flex items-center justify-between gap-4 p-5">
               <div>
-                <p className="text-base font-black text-zinc-900">Abrir operativa de stock</p>
+                <p className="text-base font-black text-zinc-900">Abrir stock</p>
                 <p className="mt-1 text-sm font-semibold text-zinc-500">Revisar productos, railes y reposición.</p>
               </div>
               <Package className="h-5 w-5 text-emerald-700" />
@@ -424,7 +394,7 @@ export default function InicioPage() {
           <Card className="border-zinc-200 bg-white shadow-sm transition-colors group-hover:border-emerald-300">
             <CardContent className="flex items-center justify-between gap-4 p-5">
               <div>
-                <p className="text-base font-black text-zinc-900">Ver recaudaciones</p>
+                <p className="text-base font-black text-zinc-900">Abrir recaudaciones</p>
                 <p className="mt-1 text-sm font-semibold text-zinc-500">Consultar detalle diario y mensual.</p>
               </div>
               <Euro className="h-5 w-5 text-emerald-700" />
