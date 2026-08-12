@@ -50,6 +50,16 @@ interface DashboardStats {
     };
 }
 
+interface LatestSale {
+    id: string;
+    provider: 'frekuent' | 'televend';
+    machineName: string;
+    productName: string;
+    datetime: string;
+    paymentMethod: string;
+    amount: number;
+}
+
 type ProviderKey = 'frekuent' | 'televend';
 
 interface ProviderMachineStatus {
@@ -270,8 +280,58 @@ function MachineStatusOverview() {
     );
 }
 
+function providerLabel(provider: LatestSale['provider']) {
+    return provider === 'televend' ? 'Televend' : 'Frekuent';
+}
+
+function LatestSalesCard({ sales }: { sales: LatestSale[] }) {
+    return (
+        <Card className="overflow-hidden border border-zinc-200 bg-white shadow-sm">
+            <CardHeader className="border-b border-zinc-100 bg-zinc-50/80">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <CardTitle className="text-xl font-black text-zinc-900">Últimas ventas</CardTitle>
+                        <p className="mt-1 text-sm font-semibold text-zinc-500">Movimientos recientes de las fuentes conectadas</p>
+                    </div>
+                    <Activity className="h-5 w-5 text-emerald-600" />
+                </div>
+            </CardHeader>
+            <CardContent className="p-0">
+                {sales.length === 0 ? (
+                    <div className="p-6 text-sm font-semibold text-zinc-500">No hay ventas recientes disponibles.</div>
+                ) : (
+                    <div className="divide-y divide-zinc-100">
+                        {sales.map((sale) => (
+                            <div key={sale.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${sale.provider === 'televend' ? 'bg-red-50 text-red-700' : 'bg-violet-50 text-violet-700'}`}>
+                                            {providerLabel(sale.provider)}
+                                        </span>
+                                        <span className="text-xs font-bold text-zinc-400">
+                                            {format(new Date(sale.datetime), 'HH:mm', { locale: es })}
+                                        </span>
+                                    </div>
+                                    <p className="break-words text-base font-black leading-tight text-zinc-900">{sale.productName}</p>
+                                    <p className="mt-1 break-words text-sm font-semibold text-zinc-500">
+                                        {sale.machineName} · {sale.paymentMethod}
+                                    </p>
+                                </div>
+                                <p className="shrink-0 text-xl font-black text-emerald-700 sm:text-right">
+                                    {sale.amount.toFixed(2)} €
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
 export function DashboardOverviewPage() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [latestSales, setLatestSales] = useState<LatestSale[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -292,17 +352,25 @@ export function DashboardOverviewPage() {
                 return;
             }
 
-            const response = await fetch('/api/admin/revenue', {
-                headers: {
-                    'Authorization': `Bearer ${sessionData.session.access_token}`
-                }
-            });
+            const headers = {
+                'Authorization': `Bearer ${sessionData.session.access_token}`
+            };
 
-            if (!response.ok) {
-                throw new Error(`Error del servidor: ${response.status}`);
+            const [revenueResponse, latestSalesResponse] = await Promise.allSettled([
+                fetch('/api/admin/revenue', { headers }),
+                fetch('/api/admin/latest-sales?limit=10', { headers }),
+            ]);
+
+            if (revenueResponse.status === 'rejected' || !revenueResponse.value.ok) {
+                throw new Error(`Error del servidor: ${revenueResponse.status === 'fulfilled' ? revenueResponse.value.status : 'sin respuesta'}`);
             }
 
-            const revenueData = await response.json();
+            const revenueData = await revenueResponse.value.json();
+
+            if (latestSalesResponse.status === 'fulfilled' && latestSalesResponse.value.ok) {
+                const latestSalesData = await latestSalesResponse.value.json();
+                setLatestSales(Array.isArray(latestSalesData.sales) ? latestSalesData.sales : []);
+            }
 
             // Transformar datos al formato esperado
             const transformedStats: DashboardStats = {
@@ -427,8 +495,6 @@ export function DashboardOverviewPage() {
                     </CardContent>
                 </Card>
             )}
-
-            <MachineStatusOverview />
 
             {/* Contenido del dashboard */}
             {stats && !loading && (
@@ -621,25 +687,9 @@ export function DashboardOverviewPage() {
                         </Card>
                     </div>
 
-                    {/* Nota informativa */}
-                    <Card className="border border-blue-200 bg-blue-50/50">
-                        <CardContent className="pt-6">
-                            <div className="flex items-start gap-3">
-                                <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center shrink-0 mt-0.5">
-                                    <Activity className="h-3 w-3 text-white" />
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-sm font-medium text-zinc-900">
-                                        Datos en tiempo casi real
-                                    </p>
-                                    <p className="text-sm text-zinc-600">
-                                        El sistema actualiza automáticamente las recaudaciones cada hora mediante scraping programado.
-                                        Para ver detalles por máquina, visita la sección de <strong>Recaudaciones Totales</strong>.
-                                    </p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <LatestSalesCard sales={latestSales} />
+
+                    <MachineStatusOverview />
                 </>
             )}
 

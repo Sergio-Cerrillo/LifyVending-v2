@@ -103,22 +103,6 @@ function providerLabel(provider: Provider) {
   return provider === 'televend' ? 'Televend' : 'Frekuent';
 }
 
-function urgencyLabel(urgency: Urgency) {
-  if (urgency === 'empty') return 'Vacía';
-  if (urgency === 'critical') return 'Crítica';
-  if (urgency === 'normal') return 'Normal';
-  if (urgency === 'unknown') return 'Sin datos';
-  return 'Bien';
-}
-
-function urgencyClass(urgency: Urgency) {
-  if (urgency === 'empty') return 'bg-zinc-950 text-white';
-  if (urgency === 'critical') return 'bg-red-600 text-white';
-  if (urgency === 'normal') return 'bg-yellow-500 text-white';
-  if (urgency === 'unknown') return 'bg-zinc-200 text-zinc-700';
-  return 'bg-emerald-600 text-white';
-}
-
 function InicioSkeleton() {
   return (
     <div className="space-y-6">
@@ -373,21 +357,6 @@ export default function InicioPage() {
           emptyText="Todavía no hay acumulado mensual."
           metric={(machine) => (
             <p className="text-base font-black text-zinc-900">{formatCurrency(machine.monthlyTotal)}</p>
-          )}
-        />
-        <RankingCard
-          title="Prioridad de reposición"
-          description="Máquinas ordenadas por urgencia de stock"
-          machines={data?.rankings.stockPriority || []}
-          href="/admin/stock"
-          emptyText="No hay máquinas pendientes de reposición."
-          metric={(machine) => (
-            <div className="space-y-1">
-              <Badge className={`${urgencyClass(machine.urgency)} text-[10px] font-black uppercase`}>
-                {urgencyLabel(machine.urgency)}
-              </Badge>
-              <p className="text-xs font-black text-zinc-500">{machine.fillRate ?? 0}%</p>
-            </div>
           )}
         />
         <RankingCard

@@ -62,30 +62,13 @@ export async function GET(request: NextRequest) {
       console.error('[REVENUE API] No se pudo refrescar recaudación antes de responder:', refreshError);
     });
 
-    const frekuentFilter = 'frekuent_machine_id.not.is.null,orain_machine_id.not.is.null';
+    const revenueProviderFilter = 'frekuent_machine_id.not.is.null,orain_machine_id.not.is.null,televend_machine_id.not.is.null';
 
-    const { data: latestMachine, error: latestError } = await supabaseAdmin
-      .from('machines')
-      .select('last_scraped_at')
-      .or(frekuentFilter)
-      .not('last_scraped_at', 'is', null)
-      .order('last_scraped_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (latestError) {
-      throw new Error(`Error obteniendo última actualización: ${latestError.message}`);
-    }
-
-    let machinesQuery = supabaseAdmin
+    const machinesQuery = supabaseAdmin
       .from('machines')
       .select('*')
-      .or(frekuentFilter)
+      .or(revenueProviderFilter)
       .order('name', { ascending: true });
-
-    if (latestMachine?.last_scraped_at) {
-      machinesQuery = machinesQuery.eq('last_scraped_at', latestMachine.last_scraped_at);
-    }
 
     // Obtener máquinas con datos de la última tanda de recaudación
     const { data: machines, error } = await machinesQuery;
@@ -94,15 +77,28 @@ export async function GET(request: NextRequest) {
       throw new Error(`Error obteniendo máquinas: ${error.message}`);
     }
 
+    const latestByProvider = (machines || []).reduce((acc: Record<string, number>, machine: any) => {
+      const provider = machine.televend_machine_id ? 'televend' : 'frekuent';
+      const timestamp = machine.last_scraped_at ? new Date(machine.last_scraped_at).getTime() : 0;
+      if (timestamp > (acc[provider] || 0)) acc[provider] = timestamp;
+      return acc;
+    }, {});
+
+    const currentMachines = (machines || []).filter((machine: any) => {
+      const provider = machine.televend_machine_id ? 'televend' : 'frekuent';
+      const timestamp = machine.last_scraped_at ? new Date(machine.last_scraped_at).getTime() : 0;
+      return timestamp > 0 && timestamp === latestByProvider[provider];
+    });
+
     // Formatear datos (solo daily y monthly, weekly eliminado)
-    const formattedMachines = (machines || []).map((machine: any) => {
+    const formattedMachines = currentMachines.map((machine: any) => {
       return {
         id: machine.id,
         name: machine.name,
         location: machine.location,
         status: machine.status,
         lastScraped: machine.last_scraped_at,
-        source: 'frekuent',
+        source: machine.televend_machine_id ? 'televend' : 'frekuent',
         daily: {
           total: machine.daily_total || 0,
           card: machine.daily_card || 0,

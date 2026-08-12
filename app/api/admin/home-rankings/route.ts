@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
+import { ensureRevenueFreshness } from '@/lib/services/revenue-refresh-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,11 +91,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
+    await ensureRevenueFreshness().catch((refreshError) => {
+      console.error('[ADMIN-HOME-RANKINGS] No se pudo refrescar recaudación antes de responder:', refreshError);
+    });
+
     const [machinesResult, stockResult] = await Promise.all([
       supabaseAdmin
         .from('machines')
         .select('id, name, location, status, frekuent_machine_id, televend_machine_id, daily_total, monthly_total, daily_updated_at, monthly_updated_at, last_scraped_at')
-        .or('frekuent_machine_id.not.is.null,televend_machine_id.not.is.null')
+        .or('frekuent_machine_id.not.is.null,orain_machine_id.not.is.null,televend_machine_id.not.is.null')
         .order('name', { ascending: true }),
       supabaseAdmin
         .from('machine_stock_current')
@@ -113,7 +118,20 @@ export async function GET(request: NextRequest) {
       stockByMachine.set(row.machine_id, row);
     }
 
-    const machines = ((machinesResult.data || []) as MachineRow[]).map((machine) => {
+    const latestByProvider = ((machinesResult.data || []) as MachineRow[]).reduce((acc: Record<Provider, number>, machine) => {
+      const provider = getProvider(machine);
+      const timestamp = machine.last_scraped_at ? new Date(machine.last_scraped_at).getTime() : 0;
+      if (timestamp > (acc[provider] || 0)) acc[provider] = timestamp;
+      return acc;
+    }, { frekuent: 0, televend: 0 });
+
+    const currentProviderMachines = ((machinesResult.data || []) as MachineRow[]).filter((machine) => {
+      const provider = getProvider(machine);
+      const timestamp = machine.last_scraped_at ? new Date(machine.last_scraped_at).getTime() : 0;
+      return timestamp > 0 && timestamp === latestByProvider[provider];
+    });
+
+    const machines = currentProviderMachines.map((machine) => {
       const stock = stockByMachine.get(machine.id);
       const fillRate = getFillRate(stock);
       const provider = getProvider(machine);

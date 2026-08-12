@@ -11,6 +11,16 @@ export interface FrekuentPointOfSalesActivityParams {
   machineIds?: number[];
 }
 
+export interface FrekuentLatestSale {
+  id: string;
+  machineId: number;
+  machineName?: string;
+  productName: string;
+  datetime: string;
+  paymentMethod: string;
+  amount: number;
+}
+
 export interface FrekuentRevenueMachine {
   machineId: number;
   machineName: string;
@@ -117,6 +127,17 @@ interface FrekuentProductTableRow {
   name?: unknown;
   product_category?: unknown;
   url?: unknown;
+}
+
+interface FrekuentActivityTableRow {
+  main_id?: unknown;
+  id?: unknown;
+  datetime?: unknown;
+  product_name?: unknown;
+  machine_number?: unknown;
+  machine_name?: unknown;
+  type_payment?: unknown;
+  money_adjusted?: unknown;
 }
 
 let cachedToken: CachedFrekuentToken | null = null;
@@ -491,6 +512,76 @@ export async function getFrekuentRevenueMachines({
   return rows
     .map(normalizeRevenueMachine)
     .filter(Boolean) as FrekuentRevenueMachine[];
+}
+
+function normalizeFrekuentActivitySale(row: FrekuentActivityTableRow, machineId: number): FrekuentLatestSale | null {
+  const id = String(row.main_id ?? row.id ?? '');
+  const productName = typeof row.product_name === 'string' ? row.product_name.trim() : '';
+  const datetime = typeof row.datetime === 'string' ? row.datetime : '';
+
+  if (!id || !productName || !datetime) return null;
+
+  return {
+    id,
+    machineId,
+    machineName: typeof row.machine_name === 'string' && row.machine_name.trim()
+      ? row.machine_name.trim()
+      : typeof row.machine_number === 'string' && row.machine_number.trim()
+        ? row.machine_number.trim()
+        : undefined,
+    productName,
+    datetime,
+    paymentMethod: typeof row.type_payment === 'string' && row.type_payment.trim()
+      ? row.type_payment.trim()
+      : 'Pago',
+    amount: centsToEuros(row.money_adjusted),
+  };
+}
+
+export async function getFrekuentLatestSales({
+  machineIds,
+  startDate,
+  endDate,
+  perMachineLimit = 4,
+}: {
+  machineIds: number[];
+  startDate: string;
+  endDate: string;
+  perMachineLimit?: number;
+}): Promise<FrekuentLatestSale[]> {
+  const selectedIds = machineIds.filter((id) => Number.isInteger(id) && id > 0);
+  if (selectedIds.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    selectedIds.map(async (machineId) => {
+      const payload = await frekuentFetchWithRetry<{ data?: FrekuentActivityTableRow[] }>(
+        `/pos/pos/activity/table?machine=${machineId}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            page: 1,
+            pageSize: perMachineLimit,
+            sort_by: 'datetime',
+            direction: 'desc',
+            filters: {},
+            start_date: startDate,
+            end_date: endDate,
+            dates_logic: 'today',
+            search: '',
+            use_cache: false,
+            query_filters: {},
+          }),
+        },
+        true,
+      );
+
+      return (payload.data || [])
+        .map((row) => normalizeFrekuentActivitySale(row, machineId))
+        .filter(Boolean) as FrekuentLatestSale[];
+    }),
+  );
+
+  return results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
 }
 
 export async function getFrekuentMachineMetadataMap(machineIds: number[] = []): Promise<Map<number, Partial<FrekuentStockMachine>>> {

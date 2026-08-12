@@ -2,6 +2,7 @@ import type { FrekuentStockMachine, FrekuentStockProduct } from '@/lib/frekuent'
 
 const TELEVEND_AUTH_BASE = 'https://auth.televendcloud.com/auth/realms/televend/protocol/openid-connect';
 const TELEVEND_PLANOGRAMS_BASE = 'https://api-cloud.televendcloud.com/planograms/v1';
+const TELEVEND_MACHINIST_BASE = 'https://api-cloud.televendcloud.com/machinist/api/v1';
 const TELEVEND_LEGACY_BASE = 'https://televendcloud.com';
 
 interface CachedTelevendToken {
@@ -84,8 +85,57 @@ interface TelevendProductRow {
   image_url?: unknown;
 }
 
+interface TelevendRevenueAggregateRow {
+  total_revenue?: unknown;
+  number_of_sale_vends?: unknown;
+  total_quantity?: unknown;
+}
+
+interface TelevendVendRow {
+  vend_id?: unknown;
+  machine_id?: unknown;
+  machine_caption?: unknown;
+  location_caption?: unknown;
+  timestamp?: unknown;
+  product_caption?: unknown;
+  value?: unknown;
+  quantity?: unknown;
+  payment_type?: unknown;
+  payment_type_caption?: unknown;
+}
+
+interface TelevendPaymentBreakdown {
+  totalCard: number;
+  totalCash: number;
+  detailTotal: number;
+}
+
 export interface TelevendQuantityUpdateRow {
   columnId: number;
+  quantity: number;
+}
+
+export interface TelevendRevenueMachine {
+  machineId: number;
+  machineName: string;
+  externalId?: string;
+  location?: string;
+  totalRevenue: number;
+  totalSales: number;
+  totalQuantity: number;
+  totalCard: number;
+  totalCash: number;
+}
+
+export interface TelevendLatestSale {
+  id: string;
+  machineId: number;
+  machineName?: string;
+  location?: string;
+  productName: string;
+  datetime: string;
+  paymentMethod: string;
+  amount: number;
   quantity: number;
 }
 
@@ -466,6 +516,31 @@ async function televendFetch<T>(path: string, init: RequestInit = {}, retry = tr
   return (text ? JSON.parse(text) : {}) as T;
 }
 
+async function televendMachinistFetch<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const token = await getFreshTelevendToken();
+  const response = await fetch(`${TELEVEND_MACHINIST_BASE}${path}`, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token.accessToken}`,
+      ...(init.headers || {}),
+    },
+    cache: 'no-store',
+  });
+
+  if (response.status === 401 && retry) {
+    cachedToken = null;
+    return televendMachinistFetch<T>(path, init, false);
+  }
+
+  if (!response.ok) {
+    throw await buildTelevendError(response);
+  }
+
+  const text = await response.text();
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
 async function mapLimited<T, R>(
   items: T[],
   limit: number,
@@ -490,6 +565,223 @@ async function getTelevendMachines(): Promise<TelevendMachineRow[]> {
     `/tenants/${getTelevendTenantId()}/companies/${getTelevendCompanyId()}/machines?page=1&page_size=200`,
   );
   return Array.isArray(payload.content) ? payload.content : [];
+}
+
+async function getTelevendMachineRevenueAggregate({
+  machineId,
+  fromTimestamp,
+  toTimestamp,
+}: {
+  machineId: number;
+  fromTimestamp: string;
+  toTimestamp: string;
+}): Promise<TelevendRevenueAggregateRow> {
+  const params = new URLSearchParams({
+    from_timestamp: fromTimestamp,
+    to_timestamp: toTimestamp,
+    machine_detail_id: String(machineId),
+    machine_mode: 'live',
+  });
+
+  return televendMachinistFetch<TelevendRevenueAggregateRow>(
+    `/tenants/${getTelevendTenantId()}/companies/${getTelevendCompanyId()}/vends/aggregates?${params.toString()}`,
+  );
+}
+
+async function getTelevendMachineVendsPage({
+  machineId,
+  fromTimestamp,
+  toTimestamp,
+  page,
+  pageSize,
+}: {
+  machineId: number;
+  fromTimestamp: string;
+  toTimestamp: string;
+  page: number;
+  pageSize: number;
+}): Promise<TelevendListResponse<TelevendVendRow>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    from_timestamp: fromTimestamp,
+    to_timestamp: toTimestamp,
+    order_by: '-timestamp',
+    machine_detail_id: String(machineId),
+    machine_mode: 'live',
+  });
+
+  return televendMachinistFetch<TelevendListResponse<TelevendVendRow>>(
+    `/tenants/${getTelevendTenantId()}/companies/${getTelevendCompanyId()}/vends?${params.toString()}`,
+  );
+}
+
+function isCashTelevendPayment(vend: TelevendVendRow) {
+  const caption = stringFromUnknown(vend.payment_type_caption)?.toLowerCase() || '';
+  const paymentType = String(vend.payment_type ?? '').toLowerCase();
+  return /cash|efectivo|moneda|coin|billete|bill/.test(caption) || ['1', 'cash'].includes(paymentType);
+}
+
+async function getTelevendMachinePaymentBreakdown({
+  machineId,
+  fromTimestamp,
+  toTimestamp,
+}: {
+  machineId: number;
+  fromTimestamp: string;
+  toTimestamp: string;
+}): Promise<TelevendPaymentBreakdown> {
+  const pageSize = Number(process.env.TELEVEND_VENDS_PAGE_SIZE || 100);
+  const maxPages = Number(process.env.TELEVEND_VENDS_MAX_PAGES || 200);
+  let page = 1;
+  let totalCard = 0;
+  let totalCash = 0;
+
+  while (page <= maxPages) {
+    const payload = await getTelevendMachineVendsPage({
+      machineId,
+      fromTimestamp,
+      toTimestamp,
+      page,
+      pageSize,
+    });
+    const rows = Array.isArray(payload.content) ? payload.content : [];
+
+    for (const vend of rows) {
+      const amount = numberFromUnknown(vend.value);
+      if (isCashTelevendPayment(vend)) {
+        totalCash += amount;
+      } else {
+        totalCard += amount;
+      }
+    }
+
+    if (!payload.meta?.has_next_page || rows.length === 0) break;
+    page += 1;
+  }
+
+  return {
+    totalCard: Math.round(totalCard * 100) / 100,
+    totalCash: Math.round(totalCash * 100) / 100,
+    detailTotal: Math.round((totalCard + totalCash) * 100) / 100,
+  };
+}
+
+function normalizeTelevendRevenueMachine(
+  machine: TelevendMachineRow,
+  aggregate: TelevendRevenueAggregateRow,
+  breakdown: TelevendPaymentBreakdown,
+): TelevendRevenueMachine | null {
+  const machineId = Math.round(numberFromUnknown(machine.id));
+  if (machineId <= 0) return null;
+
+  return {
+    machineId,
+    machineName: stringFromUnknown(machine.caption) || `Televend ${machineId}`,
+    externalId: stringFromUnknown(machine.external_id),
+    location: machineLocation(machine),
+    totalRevenue: Math.round(numberFromUnknown(aggregate.total_revenue) * 100) / 100,
+    totalSales: Math.round(numberFromUnknown(aggregate.number_of_sale_vends)),
+    totalQuantity: Math.round(numberFromUnknown(aggregate.total_quantity)),
+    totalCard: breakdown.totalCard,
+    totalCash: breakdown.totalCash,
+  };
+}
+
+export async function getTelevendRevenueMachines({
+  fromTimestamp,
+  toTimestamp,
+  machineIds = [],
+}: {
+  fromTimestamp: string;
+  toTimestamp: string;
+  machineIds?: number[];
+}): Promise<TelevendRevenueMachine[]> {
+  const machines = await getTelevendMachines();
+  const selectedIds = new Set(machineIds);
+  const selectedMachines = selectedIds.size > 0
+    ? machines.filter((machine) => selectedIds.has(Math.round(numberFromUnknown(machine.id))))
+    : machines;
+
+  const revenues = await mapLimited(
+    selectedMachines.filter((machine) => Math.round(numberFromUnknown(machine.id)) > 0),
+    Number(process.env.TELEVEND_REVENUE_CONCURRENCY || 6),
+    async (machine) => {
+      const machineId = Math.round(numberFromUnknown(machine.id));
+      const aggregate = await getTelevendMachineRevenueAggregate({
+        machineId,
+        fromTimestamp,
+        toTimestamp,
+      });
+      const breakdown = await getTelevendMachinePaymentBreakdown({
+        machineId,
+        fromTimestamp,
+        toTimestamp,
+      }).catch(() => ({ totalCard: 0, totalCash: 0, detailTotal: 0 }));
+
+      if (breakdown.detailTotal <= 0 && numberFromUnknown(aggregate.total_revenue) > 0) {
+        breakdown.totalCard = Math.round(numberFromUnknown(aggregate.total_revenue) * 100) / 100;
+      }
+
+      return normalizeTelevendRevenueMachine(machine, aggregate, breakdown);
+    },
+  );
+
+  return revenues.filter(Boolean) as TelevendRevenueMachine[];
+}
+
+function normalizeTelevendLatestSale(row: TelevendVendRow): TelevendLatestSale | null {
+  const machineId = Math.round(numberFromUnknown(row.machine_id));
+  const id = String(row.vend_id ?? '');
+  const productName = stringFromUnknown(row.product_caption) || '';
+  const datetime = stringFromUnknown(row.timestamp) || '';
+
+  if (!id || !machineId || !productName || !datetime) return null;
+
+  return {
+    id,
+    machineId,
+    machineName: stringFromUnknown(row.machine_caption),
+    location: stringFromUnknown(row.location_caption),
+    productName,
+    datetime,
+    paymentMethod: stringFromUnknown(row.payment_type_caption) || 'Pago',
+    amount: Math.round(numberFromUnknown(row.value) * 100) / 100,
+    quantity: Math.round(numberFromUnknown(row.quantity)),
+  };
+}
+
+export async function getTelevendLatestSales({
+  fromTimestamp,
+  toTimestamp,
+  machineIds = [],
+  limit = 20,
+}: {
+  fromTimestamp: string;
+  toTimestamp: string;
+  machineIds?: number[];
+  limit?: number;
+}): Promise<TelevendLatestSale[]> {
+  const selectedIds = machineIds.filter((id) => Number.isInteger(id) && id > 0).slice(0, 24);
+  const perMachineLimit = Math.max(1, Math.min(20, limit));
+
+  const results = await Promise.allSettled(
+    selectedIds.map(async (machineId) => {
+      const payload = await getTelevendMachineVendsPage({
+        machineId,
+        fromTimestamp,
+        toTimestamp,
+        page: 1,
+        pageSize: perMachineLimit,
+      });
+
+      return (payload.content || [])
+        .map(normalizeTelevendLatestSale)
+        .filter(Boolean) as TelevendLatestSale[];
+    }),
+  );
+
+  return results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
 }
 
 async function getTelevendProductsMap(): Promise<Map<number, TelevendProductRow>> {

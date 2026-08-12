@@ -1,5 +1,5 @@
-import { RankingPage } from '@/components/admin/ranking-page';
+import { redirect } from 'next/navigation';
 
 export default function AdminRankingRoute() {
-  return <RankingPage />;
+  redirect('/admin/recaudaciones-general');
 }

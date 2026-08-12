@@ -5,7 +5,11 @@ import {
   getMadridTodayRange,
   type FrekuentRevenueMachine,
 } from '@/lib/frekuent';
-import { generateFrekuentId } from '@/lib/machine-id-utils';
+import {
+  getTelevendRevenueMachines,
+  type TelevendRevenueMachine,
+} from '@/lib/televend';
+import { generateFrekuentId, generateTelevendId } from '@/lib/machine-id-utils';
 
 const FRESHNESS_MINUTES = Number(process.env.REVENUE_REFRESH_FRESHNESS_MINUTES || 30);
 
@@ -18,6 +22,13 @@ interface SavedMachineRevenue {
   revenue: FrekuentRevenueMachine;
 }
 
+interface SavedTelevendMachineRevenue {
+  machineDbId: string;
+  televendMachineId: string;
+  normalizedId: string;
+  revenue: TelevendRevenueMachine;
+}
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -28,12 +39,16 @@ function isFresh(value: string | null | undefined, freshnessMinutes = FRESHNESS_
 }
 
 async function getActiveFrekuentJob() {
+  return getActiveRevenueJob('frekuent');
+}
+
+async function getActiveRevenueJob(action: 'frekuent' | 'televend') {
   const staleCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
   const { data } = await supabaseAdmin
     .from('revenue_scrape_jobs' as any)
     .select('id, started_at, requested_at')
-    .eq('action', 'frekuent')
+    .eq('action', action)
     .in('status', ['queued', 'running'])
     .gte('requested_at', staleCutoff)
     .order('requested_at', { ascending: false })
@@ -44,13 +59,17 @@ async function getActiveFrekuentJob() {
 }
 
 async function acquireFrekuentRefreshJob() {
-  const active = await getActiveFrekuentJob();
+  return acquireRevenueRefreshJob('frekuent');
+}
+
+async function acquireRevenueRefreshJob(action: 'frekuent' | 'televend') {
+  const active = await getActiveRevenueJob(action);
   if (active) return { acquired: false as const, jobId: active.id };
 
   const { data, error } = await supabaseAdmin
     .from('revenue_scrape_jobs' as any)
     .insert({
-      action: 'frekuent',
+      action,
       status: 'running',
       phase: 'api_refresh',
       progress: 10,
@@ -63,11 +82,11 @@ async function acquireFrekuentRefreshJob() {
   if (error) {
     const conflict = error.code === '23505' || /duplicate|unique|uq_revenue_jobs_action_active/i.test(error.message || '');
     if (conflict) {
-      const existing = await getActiveFrekuentJob();
+      const existing = await getActiveRevenueJob(action);
       return { acquired: false as const, jobId: existing?.id || null };
     }
 
-    // Algunas instalaciones antiguas no admitían action='frekuent'. No bloqueamos el refresco por eso.
+    // Algunas instalaciones antiguas no admitían estos valores de action. No bloqueamos el refresco por eso.
     if (/check constraint|violates check/i.test(error.message || '')) {
       return { acquired: true as const, jobId: null };
     }
@@ -79,6 +98,15 @@ async function acquireFrekuentRefreshJob() {
 }
 
 async function finishFrekuentRefreshJob(
+  jobId: string | null,
+  status: 'completed' | 'error',
+  result: unknown,
+  errorMessage?: string,
+) {
+  return finishRevenueRefreshJob(jobId, status, result, errorMessage);
+}
+
+async function finishRevenueRefreshJob(
   jobId: string | null,
   status: 'completed' | 'error',
   result: unknown,
@@ -128,6 +156,68 @@ function currentMadridMonthRange(now = new Date()) {
   };
 }
 
+function madridParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+
+  return {
+    year: Number(parts.find((part) => part.type === 'year')?.value),
+    month: Number(parts.find((part) => part.type === 'month')?.value),
+    day: Number(parts.find((part) => part.type === 'day')?.value),
+  };
+}
+
+function madridLocalToUtcIso({
+  year,
+  month,
+  day,
+  hour,
+  minute = 0,
+  second = 0,
+  millisecond = 0,
+}: {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute?: number;
+  second?: number;
+  millisecond?: number;
+}) {
+  const offsetProbe = formatDateForFrekuent(new Date(Date.UTC(year, month - 1, day, 12, 0, 0)), 'Europe/Madrid');
+  const offset = offsetProbe.slice(-6);
+  const localIso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}.${String(millisecond).padStart(3, '0')}${offset}`;
+  return new Date(localIso).toISOString();
+}
+
+function getTelevendMadridTodayRange(now = new Date()) {
+  const { year, month, day } = madridParts(now);
+  return {
+    fromTimestamp: madridLocalToUtcIso({ year, month, day, hour: 0 }),
+    toTimestamp: madridLocalToUtcIso({ year, month, day, hour: 23, minute: 59, second: 59, millisecond: 999 }),
+  };
+}
+
+function televendMadridMonthRange(year: number, month: number) {
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    fromTimestamp: madridLocalToUtcIso({ year, month, day: 1, hour: 0 }),
+    toTimestamp: madridLocalToUtcIso({ year, month, day: lastDay, hour: 23, minute: 59, second: 59, millisecond: 999 }),
+  };
+}
+
+function currentTelevendMadridMonthRange(now = new Date()) {
+  const { year, month } = madridParts(now);
+  return {
+    fromTimestamp: madridLocalToUtcIso({ year, month, day: 1, hour: 0 }),
+    toTimestamp: now.toISOString(),
+  };
+}
+
 function previousMadridMonth(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Madrid',
@@ -163,6 +253,23 @@ async function latestFrekuentRevenueUpdate() {
   return data?.last_scraped_at as string | null | undefined;
 }
 
+async function latestTelevendRevenueUpdate() {
+  const { data, error } = await supabaseAdmin
+    .from('machines')
+    .select('last_scraped_at')
+    .not('televend_machine_id', 'is', null)
+    .not('last_scraped_at', 'is', null)
+    .order('last_scraped_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`No se pudo comprobar la última actualización de Televend: ${error.message}`);
+  }
+
+  return data?.last_scraped_at as string | null | undefined;
+}
+
 async function loadExistingFrekuentMachines() {
   const { data, error } = await supabaseAdmin
     .from('machines')
@@ -181,6 +288,28 @@ async function loadExistingFrekuentMachines() {
     if (machine.frekuent_machine_id) byExternalId.set(String(machine.frekuent_machine_id), machine.id);
     if (machine.orain_machine_id) byExternalId.set(String(machine.orain_machine_id), machine.id);
     if (machine.name) byNormalizedName.set(generateFrekuentId(machine.name), machine.id);
+  }
+
+  return { byExternalId, byNormalizedName };
+}
+
+async function loadExistingTelevendMachines() {
+  const { data, error } = await supabaseAdmin
+    .from('machines')
+    .select('id, name, televend_machine_id')
+    .not('televend_machine_id', 'is', null);
+
+  if (error) {
+    throw new Error(`No se pudieron leer máquinas Televend existentes: ${error.message}`);
+  }
+
+  const byExternalId = new Map<string, string>();
+  const byNormalizedName = new Map<string, string>();
+
+  for (const row of data || []) {
+    const machine = row as any;
+    if (machine.televend_machine_id) byExternalId.set(String(machine.televend_machine_id), machine.id);
+    if (machine.name) byNormalizedName.set(generateTelevendId(machine.name), machine.id);
   }
 
   return { byExternalId, byNormalizedName };
@@ -252,6 +381,73 @@ async function saveFrekuentRevenue(
   return saved;
 }
 
+async function saveTelevendRevenue(
+  revenues: TelevendRevenueMachine[],
+  period: RevenuePeriodKind,
+  scrapedAt: string,
+): Promise<SavedTelevendMachineRevenue[]> {
+  const existing = await loadExistingTelevendMachines();
+  const saved: SavedTelevendMachineRevenue[] = [];
+
+  const rows = revenues.map((revenue) => {
+    const numericId = String(revenue.machineId);
+    const normalizedId = generateTelevendId(revenue.machineName);
+    const machineDbId = existing.byExternalId.get(numericId)
+      || existing.byExternalId.get(normalizedId)
+      || existing.byNormalizedName.get(normalizedId)
+      || crypto.randomUUID();
+
+    existing.byExternalId.set(numericId, machineDbId);
+    existing.byExternalId.set(normalizedId, machineDbId);
+    existing.byNormalizedName.set(normalizedId, machineDbId);
+
+    saved.push({
+      machineDbId,
+      televendMachineId: numericId,
+      normalizedId,
+      revenue,
+    });
+
+    const row: Record<string, unknown> = {
+      id: machineDbId,
+      name: revenue.machineName,
+      location: revenue.location || 'Sin ubicación',
+      status: 'active',
+      frekuent_machine_id: null,
+      orain_machine_id: null,
+      televend_machine_id: numericId,
+      last_scraped_at: scrapedAt,
+      updated_at: scrapedAt,
+    };
+
+    if (period === 'daily') {
+      row.daily_total = revenue.totalRevenue;
+      row.daily_card = revenue.totalCard;
+      row.daily_cash = revenue.totalCash;
+      row.daily_updated_at = scrapedAt;
+    } else {
+      row.monthly_total = revenue.totalRevenue;
+      row.monthly_card = revenue.totalCard;
+      row.monthly_cash = revenue.totalCash;
+      row.monthly_updated_at = scrapedAt;
+    }
+
+    return row;
+  });
+
+  if (rows.length === 0) return [];
+
+  const { error } = await supabaseAdmin
+    .from('machines')
+    .upsert(rows as any[], { onConflict: 'id' });
+
+  if (error) {
+    throw new Error(`No se pudo guardar recaudación Televend ${period}: ${error.message}`);
+  }
+
+  return saved;
+}
+
 async function mapFrekuentRevenueToExistingMachines(
   revenues: FrekuentRevenueMachine[],
 ): Promise<SavedMachineRevenue[]> {
@@ -277,6 +473,31 @@ async function mapFrekuentRevenueToExistingMachines(
     .filter(Boolean) as SavedMachineRevenue[];
 }
 
+async function mapTelevendRevenueToExistingMachines(
+  revenues: TelevendRevenueMachine[],
+): Promise<SavedTelevendMachineRevenue[]> {
+  const existing = await loadExistingTelevendMachines();
+
+  return revenues
+    .map((revenue) => {
+      const numericId = String(revenue.machineId);
+      const normalizedId = generateTelevendId(revenue.machineName);
+      const machineDbId = existing.byExternalId.get(numericId)
+        || existing.byExternalId.get(normalizedId)
+        || existing.byNormalizedName.get(normalizedId);
+
+      if (!machineDbId) return null;
+
+      return {
+        machineDbId,
+        televendMachineId: numericId,
+        normalizedId,
+        revenue,
+      };
+    })
+    .filter(Boolean) as SavedTelevendMachineRevenue[];
+}
+
 async function insertHistoricalVisibleAmount(payload: {
   clientId: string;
   machineId: string;
@@ -289,6 +510,7 @@ async function insertHistoricalVisibleAmount(payload: {
   commissionAmount: number;
   sourceRangeStart: string;
   sourceRangeEnd: string;
+  sourceProvider: 'frekuent' | 'televend';
 }) {
   const baseRow = {
     client_id: payload.clientId,
@@ -307,7 +529,7 @@ async function insertHistoricalVisibleAmount(payload: {
     hidden_percent_applied: payload.hiddenPercent,
     payment_percent_applied: payload.paymentPercent,
     commission_amount: payload.commissionAmount,
-    source_provider: 'frekuent',
+    source_provider: payload.sourceProvider,
     source_range_start: payload.sourceRangeStart,
     source_range_end: payload.sourceRangeEnd,
     status: 'published',
@@ -398,9 +620,76 @@ export async function refreshFrekuentRevenueIfStale() {
   }
 }
 
+export async function refreshTelevendRevenueNow() {
+  const scrapedAt = new Date().toISOString();
+  const todayRange = getTelevendMadridTodayRange();
+  const monthRange = currentTelevendMadridMonthRange();
+
+  const [daily, monthly] = await Promise.all([
+    getTelevendRevenueMachines(todayRange),
+    getTelevendRevenueMachines(monthRange),
+  ]);
+
+  const dailySaved = await saveTelevendRevenue(daily, 'daily', scrapedAt);
+  const monthlySaved = await saveTelevendRevenue(monthly, 'monthly', scrapedAt);
+
+  return {
+    refreshed: true,
+    requestedAt: scrapedAt,
+    daily: {
+      machines: dailySaved.length,
+      total: round2(daily.reduce((sum, item) => sum + item.totalRevenue, 0)),
+      sales: daily.reduce((sum, item) => sum + item.totalSales, 0),
+      quantity: daily.reduce((sum, item) => sum + item.totalQuantity, 0),
+    },
+    monthly: {
+      machines: monthlySaved.length,
+      total: round2(monthly.reduce((sum, item) => sum + item.totalRevenue, 0)),
+      sales: monthly.reduce((sum, item) => sum + item.totalSales, 0),
+      quantity: monthly.reduce((sum, item) => sum + item.totalQuantity, 0),
+    },
+  };
+}
+
+export async function refreshTelevendRevenueIfStale() {
+  const latestUpdate = await latestTelevendRevenueUpdate();
+
+  if (isFresh(latestUpdate)) {
+    return {
+      refreshed: false,
+      reason: 'fresh',
+      latestUpdate: latestUpdate || null,
+    };
+  }
+
+  const lock = await acquireRevenueRefreshJob('televend');
+  if (!lock.acquired) {
+    return {
+      refreshed: false,
+      reason: 'already_running',
+      latestUpdate: latestUpdate || null,
+    };
+  }
+
+  try {
+    const result = await refreshTelevendRevenueNow();
+    await finishRevenueRefreshJob(lock.jobId, 'completed', result);
+    return result;
+  } catch (error) {
+    await finishRevenueRefreshJob(
+      lock.jobId,
+      'error',
+      null,
+      error instanceof Error ? error.message : String(error),
+    );
+    throw error;
+  }
+}
+
 export async function closePendingPreviousMonth() {
   const { year, month } = previousMadridMonth();
   const range = madridMonthRange(year, month);
+  const televendRange = televendMadridMonthRange(year, month);
 
   const { data: assignments, error: assignmentsError } = await supabaseAdmin
     .from('client_machine_assignments')
@@ -442,13 +731,29 @@ export async function closePendingPreviousMonth() {
     };
   }
 
-  const revenues = await getFrekuentRevenueMachines({
-    ...range,
-    datesLogic: 'custom',
-    pageSize: 200,
-  });
-  const mappedRevenues = await mapFrekuentRevenueToExistingMachines(revenues);
-  const revenueByMachineId = new Map(mappedRevenues.map((item) => [item.machineDbId, item.revenue]));
+  const [frekuentRevenues, televendRevenues] = await Promise.allSettled([
+    getFrekuentRevenueMachines({
+      ...range,
+      datesLogic: 'custom',
+      pageSize: 200,
+    }),
+    getTelevendRevenueMachines(televendRange),
+  ]);
+
+  const mappedFrekuentRevenues = frekuentRevenues.status === 'fulfilled'
+    ? await mapFrekuentRevenueToExistingMachines(frekuentRevenues.value)
+    : [];
+  const mappedTelevendRevenues = televendRevenues.status === 'fulfilled'
+    ? await mapTelevendRevenueToExistingMachines(televendRevenues.value)
+    : [];
+
+  const revenueByMachineId = new Map<string, { amount: number; sourceProvider: 'frekuent' | 'televend' }>();
+  for (const item of mappedFrekuentRevenues) {
+    revenueByMachineId.set(item.machineDbId, { amount: item.revenue.totalMoney, sourceProvider: 'frekuent' });
+  }
+  for (const item of mappedTelevendRevenues) {
+    revenueByMachineId.set(item.machineDbId, { amount: item.revenue.totalRevenue, sourceProvider: 'televend' });
+  }
 
   const clientIds = Array.from(new Set((assignments || []).map((row: any) => row.client_id).filter(Boolean)));
   const { data: settings, error: settingsError } = await supabaseAdmin
@@ -465,13 +770,13 @@ export async function closePendingPreviousMonth() {
 
   for (const assignment of pendingAssignments) {
     const row = assignment as any;
-    const revenue = revenueByMachineId.get(row.machine_id);
-    if (!revenue) continue;
+    const revenueInfo = revenueByMachineId.get(row.machine_id);
+    if (!revenueInfo) continue;
 
     const clientSettings = settingsByClient.get(row.client_id) || {};
     const hiddenPercent = Number(clientSettings.commission_hide_percent || 0);
     const paymentPercent = Number(clientSettings.commission_payment_percent || 0);
-    const visibleAmount = round2(revenue.totalMoney * (1 - hiddenPercent / 100));
+    const visibleAmount = round2(revenueInfo.amount * (1 - hiddenPercent / 100));
     const commissionAmount = round2(visibleAmount * (paymentPercent / 100));
 
     await insertHistoricalVisibleAmount({
@@ -480,12 +785,13 @@ export async function closePendingPreviousMonth() {
       year,
       month,
       visibleAmount,
-      grossAmount: revenue.totalMoney,
+      grossAmount: revenueInfo.amount,
       hiddenPercent,
       paymentPercent,
       commissionAmount,
-      sourceRangeStart: range.startDate,
-      sourceRangeEnd: range.endDate,
+      sourceRangeStart: revenueInfo.sourceProvider === 'televend' ? televendRange.fromTimestamp : range.startDate,
+      sourceRangeEnd: revenueInfo.sourceProvider === 'televend' ? televendRange.toTimestamp : range.endDate,
+      sourceProvider: revenueInfo.sourceProvider,
     });
 
     created += 1;
@@ -500,13 +806,15 @@ export async function closePendingPreviousMonth() {
 }
 
 export async function ensureRevenueFreshness() {
-  const [refresh, monthlyClose] = await Promise.allSettled([
+  const [refresh, televendRefresh, monthlyClose] = await Promise.allSettled([
     refreshFrekuentRevenueIfStale(),
+    refreshTelevendRevenueIfStale(),
     closePendingPreviousMonth(),
   ]);
 
   return {
     refresh: refresh.status === 'fulfilled' ? refresh.value : { refreshed: false, error: refresh.reason instanceof Error ? refresh.reason.message : String(refresh.reason) },
+    televendRefresh: televendRefresh.status === 'fulfilled' ? televendRefresh.value : { refreshed: false, error: televendRefresh.reason instanceof Error ? televendRefresh.reason.message : String(televendRefresh.reason) },
     monthlyClose: monthlyClose.status === 'fulfilled' ? monthlyClose.value : { closed: false, error: monthlyClose.reason instanceof Error ? monthlyClose.reason.message : String(monthlyClose.reason) },
   };
 }

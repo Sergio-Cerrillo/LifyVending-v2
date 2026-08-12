@@ -281,16 +281,9 @@ function productStatus(product: StockProduct) {
 
 function sortedProducts(products: StockProduct[]) {
   return [...products].sort((a, b) => {
-    const statusWeight = (p: StockProduct) => {
-      if (p.capacity > 0 && p.quantity === 0) return 0;
-      if (p.unitsToReplenish > 0 && (p.quantity <= p.min || p.quantity / p.capacity < 0.3)) return 1;
-      if (p.unitsToReplenish > 0) return 2;
-      return 3;
-    };
-    const diff = statusWeight(a) - statusWeight(b);
-    if (diff !== 0) return diff;
-    if (b.unitsToReplenish !== a.unitsToReplenish) return b.unitsToReplenish - a.unitsToReplenish;
-    return Number(a.line || 0) - Number(b.line || 0);
+    const lineDiff = Number(a.line || 0) - Number(b.line || 0);
+    if (lineDiff !== 0) return lineDiff;
+    return a.productName.localeCompare(b.productName, 'es');
   });
 }
 

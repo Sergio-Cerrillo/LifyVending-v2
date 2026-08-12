@@ -15,9 +15,9 @@ import {
   LogOut,
   User,
   PackageSearch,
+  ClipboardList,
   BarChart3,
   Home,
-  Trophy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -45,16 +45,10 @@ const navItems: NavItem[] = [
     roles: ['admin'],
   },
   {
-    title: 'Recaudaciones Totales',
+    title: 'Recaudacion',
     href: '/admin/recaudaciones-general',
     icon: <DollarSign className="h-5 w-5" />,
     roles: ['admin'],
-  },
-  {
-    title: 'Ranking',
-    href: '/admin/ranking',
-    icon: <Trophy className="h-5 w-5" />,
-    roles: ['admin', 'operador'],
   },
   {
     title: 'Gestión de Clientes',
@@ -66,6 +60,12 @@ const navItems: NavItem[] = [
     title: 'Stock',
     href: '/admin/stock',
     icon: <PackageSearch className="h-5 w-5" />,
+    roles: ['admin', 'operador'],
+  },
+  {
+    title: 'Preparación Reparto',
+    href: '/admin/preparacion-reparto',
+    icon: <ClipboardList className="h-5 w-5" />,
     roles: ['admin', 'operador'],
   },
 ];
