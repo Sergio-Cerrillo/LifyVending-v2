@@ -182,8 +182,17 @@ function LoadListContent({ products }: { products: AggregatedProduct[] }) {
             {product.machines.map((machine) => (
               <div key={`${product.key}-${machine.machineId}-${machine.line}`} className="rounded-xl bg-zinc-50 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="min-w-0 truncate text-sm font-black text-zinc-900">{machine.machineLabel}</p>
-                  <Badge variant="outline" className="shrink-0">+{machine.units}</Badge>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-black uppercase tracking-wide text-zinc-500">
+                      {machine.machineLabel}
+                    </p>
+                    <p className="mt-0.5 text-sm font-black text-zinc-900">
+                      Rail {machine.line || '-'}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 border-emerald-200 bg-white text-emerald-700">
+                    +{machine.units} uds
+                  </Badge>
                 </div>
               </div>
             ))}
