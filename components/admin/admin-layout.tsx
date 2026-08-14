@@ -16,6 +16,7 @@ import {
   User,
   PackageSearch,
   ClipboardList,
+  FileText,
   BarChart3,
   Home,
 } from 'lucide-react';
@@ -67,6 +68,12 @@ const navItems: NavItem[] = [
     href: '/admin/preparacion-reparto',
     icon: <ClipboardList className="h-5 w-5" />,
     roles: ['admin', 'operador'],
+  },
+  {
+    title: 'Documentación',
+    href: '/admin/documentacion-recaudaciones',
+    icon: <FileText className="h-5 w-5" />,
+    roles: ['admin'],
   },
 ];
 

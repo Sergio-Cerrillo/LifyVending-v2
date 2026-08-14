@@ -584,6 +584,67 @@ export async function getFrekuentLatestSales({
   return results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
 }
 
+export async function getFrekuentSalesByProduct({
+  machineIds,
+  startDate,
+  endDate,
+  datesLogic = 'current_month',
+  pageSize = 500,
+}: {
+  machineIds: number[];
+  startDate: string;
+  endDate: string;
+  datesLogic?: 'today' | 'current_month' | 'custom';
+  pageSize?: number;
+}): Promise<FrekuentLatestSale[]> {
+  const selectedIds = machineIds.filter((id) => Number.isInteger(id) && id > 0);
+  if (selectedIds.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    selectedIds.map(async (machineId) => {
+      const sales: FrekuentLatestSale[] = [];
+      let page = 1;
+      let hasMore = true;
+
+      while (hasMore && page <= 20) {
+        const payload = await frekuentFetchWithRetry<{ data?: FrekuentActivityTableRow[]; total?: number; recordsTotal?: number }>(
+          `/pos/pos/activity/table?machine=${machineId}`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              page,
+              pageSize,
+              sort_by: 'datetime',
+              direction: 'desc',
+              filters: {},
+              start_date: startDate,
+              end_date: endDate,
+              dates_logic: datesLogic,
+              search: '',
+              use_cache: false,
+              query_filters: {},
+            }),
+          },
+          true,
+        );
+
+        const rows = (payload.data || [])
+          .map((row) => normalizeFrekuentActivitySale(row, machineId))
+          .filter(Boolean) as FrekuentLatestSale[];
+
+        sales.push(...rows);
+        const total = numberFromUnknown(payload.total ?? payload.recordsTotal);
+        hasMore = total > page * pageSize && rows.length > 0;
+        page += 1;
+      }
+
+      return sales;
+    }),
+  );
+
+  return results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+}
+
 export async function getFrekuentMachineMetadataMap(machineIds: number[] = []): Promise<Map<number, Partial<FrekuentStockMachine>>> {
   const { startDate, endDate } = getMadridTodayRange();
   const selectedIds = new Set(machineIds);
