@@ -1242,10 +1242,10 @@ function PriceEditorInput({
   value: number;
   onValueChange: (value: string) => void;
 }) {
-  const [draft, setDraft] = useState(Number.isFinite(value) && value > 0 ? String(value) : '');
+  const [draft, setDraft] = useState(Number.isFinite(value) ? String(value) : '0');
 
   useEffect(() => {
-    setDraft(Number.isFinite(value) && value > 0 ? String(value) : '');
+    setDraft(Number.isFinite(value) ? String(value) : '0');
   }, [value]);
 
   function handleChange(nextValue: string) {
@@ -1560,8 +1560,9 @@ function CompleteRevenueDocumentation({
     payableUnits: acc.payableUnits + row.payableUnits,
     commission: acc.commission + row.commissionAmount,
   }), { soldUnits: 0, testUnits: 0, payableUnits: 0, commission: 0 });
-  const ivaAmount = round2(totals.commission * (parsedIva / 100));
-  const totalWithIva = round2(totals.commission + ivaAmount);
+  const completeBaseAmount = round2(totals.commission / (1 + (parsedIva / 100)));
+  const ivaAmount = round2(totals.commission - completeBaseAmount);
+  const totalWithIva = round2(totals.commission);
   const missingPriceRows = visibleRows.filter((row) => !row.catalogMatched || row.priceWithVat <= 0 || row.saleWithoutVatFixed <= 0 || row.purchaseWithoutVat <= 0);
   const filteredCatalogEntries = useMemo(() => {
     const q = normalizeCatalogProduct(priceSearch);
@@ -1627,6 +1628,39 @@ function CompleteRevenueDocumentation({
   function updateTestUnits(rowId: string, value: string) {
     const parsed = value.trim() === '' ? undefined : Math.max(0, Number(value) || 0);
     setTestUnitsByProduct((current) => ({ ...current, [rowId]: parsed }));
+  }
+
+  function updateCompleteProductPrice(
+    rowId: string,
+    field: 'priceWithVat' | 'saleWithoutVatFixed' | 'purchaseWithoutVat',
+    value: string,
+  ) {
+    const parsed = parseNumberValue(value);
+    const currentRow = calculatedRows.find((row) => row.id === rowId);
+
+    setEditableCatalog((current) => ({
+      ...current,
+      [rowId]: {
+        priceWithVat: field === 'priceWithVat' ? parsed : current[rowId]?.priceWithVat ?? currentRow?.priceWithVat ?? 0,
+        saleWithoutVat: field === 'saleWithoutVatFixed' ? parsed : current[rowId]?.saleWithoutVat ?? currentRow?.saleWithoutVatFixed ?? 0,
+        purchaseWithoutVat: field === 'purchaseWithoutVat' ? parsed : current[rowId]?.purchaseWithoutVat ?? currentRow?.purchaseWithoutVat ?? 0,
+      },
+    }));
+
+    setMachineInputs((current) => current.map((machine) => ({
+      ...machine,
+      importedRows: machine.importedRows.map((item) => {
+        if (normalizeCatalogProduct(item.productName) !== rowId) return item;
+
+        return {
+          ...item,
+          priceWithVat: field === 'priceWithVat' ? parsed : item.priceWithVat,
+          saleWithoutVatFixed: field === 'saleWithoutVatFixed' ? parsed : item.saleWithoutVatFixed,
+          purchaseWithoutVat: field === 'purchaseWithoutVat' ? parsed : item.purchaseWithoutVat,
+          catalogMatched: true,
+        };
+      }),
+    })));
   }
 
   function toggleHighlight(rowId: string) {
@@ -1754,7 +1788,7 @@ function CompleteRevenueDocumentation({
               <SummaryTile label="Unidades reales" value={String(totals.soldUnits)} tone="dark" />
               <SummaryTile label="Pruebas" value={String(totals.testUnits)} tone="dark" />
               <SummaryTile label="Unidades aplicables" value={String(totals.payableUnits)} tone="green" />
-              <SummaryTile label="Total" value={formatCurrency(totalWithIva)} tone="dark" />
+              <SummaryTile label="Total a pagar" value={formatCurrency(totalWithIva)} tone="dark" />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -1885,34 +1919,65 @@ function CompleteRevenueDocumentation({
                 {calculatedRows.map((row) => {
                   const isHidden = hiddenProducts.has(row.id);
                   return (
-                  <div key={row.id} className={`grid gap-2 rounded-2xl border p-3 sm:grid-cols-[1fr_7rem_7rem_auto_auto] sm:items-center ${isHidden ? 'border-zinc-200 bg-zinc-100 opacity-60' : 'border-zinc-200 bg-white'}`}>
-                    <div className="min-w-0">
-                      <p className="truncate font-black text-zinc-900">{row.productName}</p>
-                      <p className="text-xs font-semibold text-zinc-500">
-                        Real: {row.soldUnits} · Pruebas: {row.testUnits} · Aplicables: {row.payableUnits}
-                        {!row.catalogMatched && <span className="ml-2 font-black text-red-600">Sin precio</span>}
-                        {isHidden && <span className="ml-2 font-black text-zinc-700">Excluido</span>}
-                      </p>
+                    <div key={row.id} className={`space-y-3 rounded-2xl border p-3 ${isHidden ? 'border-zinc-200 bg-zinc-100 opacity-60' : 'border-zinc-200 bg-white'}`}>
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="break-words font-black text-zinc-900">{row.productName}</p>
+                          <p className="mt-1 text-xs font-semibold text-zinc-500">
+                            Real: {row.soldUnits} · Pruebas: {row.testUnits} · Aplicables: {row.payableUnits}
+                            {(!row.catalogMatched || row.priceWithVat <= 0 || row.saleWithoutVatFixed <= 0 || row.purchaseWithoutVat <= 0) && <span className="ml-2 font-black text-red-600">Precio incompleto</span>}
+                            {isHidden && <span className="ml-2 font-black text-zinc-700">Excluido</span>}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-emerald-50 px-3 py-2 text-right">
+                          <p className="text-[10px] font-black uppercase text-emerald-700">Comisión línea</p>
+                          <p className="font-black text-emerald-700">{formatCurrency(row.commissionAmount)}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[7rem_7rem_7rem_7rem_1fr] lg:items-end">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-black uppercase text-zinc-500">€ venta</Label>
+                          <PriceEditorInput
+                            value={row.priceWithVat || 0}
+                            onValueChange={(value) => updateCompleteProductPrice(row.id, 'priceWithVat', value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-black uppercase text-zinc-500">€ sin IVA</Label>
+                          <PriceEditorInput
+                            value={row.saleWithoutVatFixed || 0}
+                            onValueChange={(value) => updateCompleteProductPrice(row.id, 'saleWithoutVatFixed', value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-black uppercase text-zinc-500">€ compra</Label>
+                          <PriceEditorInput
+                            value={row.purchaseWithoutVat || 0}
+                            onValueChange={(value) => updateCompleteProductPrice(row.id, 'purchaseWithoutVat', value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-black uppercase text-zinc-500">Pruebas</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={testUnitsByProduct[row.id] ?? ''}
+                            onChange={(event) => updateTestUnits(row.id, event.target.value)}
+                            placeholder={String(row.testUnits)}
+                            className="h-10 rounded-xl font-black"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 lg:flex lg:justify-end">
+                          <Button type="button" variant={row.highlighted ? 'default' : 'outline'} onClick={() => toggleHighlight(row.id)} className="h-10 rounded-xl font-black">
+                            Destacar
+                          </Button>
+                          <Button type="button" variant={isHidden ? 'default' : 'outline'} onClick={() => toggleHiddenProduct(row.id)} className={`h-10 rounded-xl font-black ${isHidden ? 'bg-zinc-900 text-white hover:bg-zinc-800' : ''}`}>
+                            {isHidden ? 'Mostrar' : 'Excluir'}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-black uppercase text-zinc-500">Pruebas</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={testUnitsByProduct[row.id] ?? ''}
-                        onChange={(event) => updateTestUnits(row.id, event.target.value)}
-                        placeholder={String(row.testUnits)}
-                        className="h-10 rounded-xl font-black"
-                      />
-                    </div>
-                    <p className="font-black text-emerald-700">{formatCurrency(row.commissionAmount)}</p>
-                    <Button type="button" variant={row.highlighted ? 'default' : 'outline'} onClick={() => toggleHighlight(row.id)} className="h-10 rounded-xl font-black">
-                      Destacar
-                    </Button>
-                    <Button type="button" variant={isHidden ? 'default' : 'outline'} onClick={() => toggleHiddenProduct(row.id)} className={`h-10 rounded-xl font-black ${isHidden ? 'bg-zinc-900 text-white hover:bg-zinc-800' : ''}`}>
-                      {isHidden ? 'Mostrar' : 'Excluir'}
-                    </Button>
-                  </div>
                   );
                 })}
               </div>
@@ -1933,8 +1998,8 @@ function CompleteRevenueDocumentation({
             <SummaryLine label="Unidades reales" value={String(totals.soldUnits)} />
             <SummaryLine label="Pruebas" value={String(totals.testUnits)} />
             <SummaryLine label="Unidades aplicables" value={String(totals.payableUnits)} strong />
-            <SummaryLine label="Base comisión" value={formatCurrency(totals.commission)} />
-            <SummaryLine label={`IVA ${parsedIva}%`} value={formatCurrency(ivaAmount)} />
+            <SummaryLine label="Base imponible" value={formatCurrency(completeBaseAmount)} />
+            <SummaryLine label={`IVA incluido ${parsedIva}%`} value={formatCurrency(ivaAmount)} />
             <div className="rounded-2xl bg-zinc-950 p-4 text-white">
               <p className="text-xs font-black uppercase text-zinc-300">Total documento</p>
               <p className="mt-1 text-3xl font-black">{formatCurrency(totalWithIva)}</p>
@@ -2052,6 +2117,8 @@ function CompleteDocumentPreview({
   totalWithIva: number;
   commissionPercent: number;
 }) {
+  const baseAmount = round2(totals.commission / (1 + (ivaPercent / 100)));
+
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm print:rounded-none print:border-0 print:shadow-none">
       <div className="border-b border-zinc-100 p-4 print:hidden">
@@ -2120,15 +2187,15 @@ function CompleteDocumentPreview({
 
         <div className="mt-3 ml-auto w-56 border-2 border-zinc-950 text-sm print:w-40 print:text-[8px]">
           <div className="grid grid-cols-2 border-b-2 border-zinc-950">
-            <div className="border-r-2 border-zinc-950 px-2 py-1 font-black">Total:</div>
-            <div className="px-2 py-1 text-right">{formatCurrency(totals.commission)}</div>
+            <div className="border-r-2 border-zinc-950 px-2 py-1 font-black">Base imponible:</div>
+            <div className="px-2 py-1 text-right">{formatCurrency(baseAmount)}</div>
           </div>
           <div className="grid grid-cols-2 border-b-2 border-zinc-950">
-            <div className="border-r-2 border-zinc-950 px-2 py-1 font-black">IVA {ivaPercent}%:</div>
+            <div className="border-r-2 border-zinc-950 px-2 py-1 font-black">IVA incluido {ivaPercent}%:</div>
             <div className="px-2 py-1 text-right">{formatCurrency(ivaAmount)}</div>
           </div>
           <div className="grid grid-cols-2">
-            <div className="border-r-2 border-zinc-950 px-2 py-1 font-black">Total:</div>
+            <div className="border-r-2 border-zinc-950 px-2 py-1 font-black">Total a pagar:</div>
             <div className="px-2 py-1 text-right font-black">{formatCurrency(totalWithIva)}</div>
           </div>
         </div>
