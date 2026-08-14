@@ -1235,6 +1235,40 @@ function PresetProductCard({
   );
 }
 
+function PriceEditorInput({
+  value,
+  onValueChange,
+}: {
+  value: number;
+  onValueChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(Number.isFinite(value) && value > 0 ? String(value) : '');
+
+  useEffect(() => {
+    setDraft(Number.isFinite(value) && value > 0 ? String(value) : '');
+  }, [value]);
+
+  function handleChange(nextValue: string) {
+    setDraft(nextValue);
+    if (nextValue.trim() === '') return;
+
+    const parsed = parseNumberValue(nextValue);
+    if (Number.isFinite(parsed)) {
+      onValueChange(nextValue);
+    }
+  }
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      onChange={(event) => handleChange(event.target.value)}
+      className="h-10 rounded-xl font-black"
+    />
+  );
+}
+
 function CommissionDocument({
   clientName,
   clientFiscalData,
@@ -1968,32 +2002,23 @@ function CompleteRevenueDocumentation({
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] font-black uppercase text-zinc-500">€ venta</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <PriceEditorInput
                       value={price.priceWithVat}
-                      onChange={(event) => updateCatalogPrice(key, 'priceWithVat', event.target.value)}
-                      className="h-10 rounded-xl font-black"
+                      onValueChange={(value) => updateCatalogPrice(key, 'priceWithVat', value)}
                     />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] font-black uppercase text-zinc-500">€ sin IVA</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <PriceEditorInput
                       value={price.saleWithoutVat}
-                      onChange={(event) => updateCatalogPrice(key, 'saleWithoutVat', event.target.value)}
-                      className="h-10 rounded-xl font-black"
+                      onValueChange={(value) => updateCatalogPrice(key, 'saleWithoutVat', value)}
                     />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] font-black uppercase text-zinc-500">€ compra</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <PriceEditorInput
                       value={price.purchaseWithoutVat}
-                      onChange={(event) => updateCatalogPrice(key, 'purchaseWithoutVat', event.target.value)}
-                      className="h-10 rounded-xl font-black"
+                      onValueChange={(value) => updateCatalogPrice(key, 'purchaseWithoutVat', value)}
                     />
                   </div>
                 </div>
