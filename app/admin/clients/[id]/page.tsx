@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RefreshCw, Save, Key, TrendingUp, TrendingDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { toast } from 'sonner';
 import {
@@ -109,7 +110,11 @@ export default function AdminClientDetailPage() {
       setLoading(true);
       setError(null);
 
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessionError } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       
       if (sessionError || !sessionData.session) {
         router.push('/login');
@@ -119,11 +124,11 @@ export default function AdminClientDetailPage() {
       console.log('[LOAD-DATA] Cargando overview para cliente:', clientId);
 
       // Cargar overview del cliente
-      const overviewResponse = await fetch(`/api/admin/clients/${clientId}/overview`, {
+      const overviewResponse = await fetchWithTimeout(`/api/admin/clients/${clientId}/overview`, {
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`
         }
-      });
+      }, 30_000);
 
       console.log('[LOAD-DATA] Respuesta overview:', overviewResponse.status);
 
@@ -146,11 +151,11 @@ export default function AdminClientDetailPage() {
       console.log('[LOAD-DATA] Estados actualizados - Hide:', overviewData.client.commissionHidePercent, 'Payment:', overviewData.client.commissionPaymentPercent);
 
       // Cargar todas las máquinas disponibles
-      const machinesResponse = await fetch('/api/admin/machines', {
+      const machinesResponse = await fetchWithTimeout('/api/admin/machines', {
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`
         }
-      });
+      }, 30_000);
 
       if (!machinesResponse.ok) {
         throw new Error('Error cargando máquinas');
@@ -172,7 +177,11 @@ export default function AdminClientDetailPage() {
       setSaving(true);
       setError(null);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       
       if (!sessionData.session) {
         router.push('/login');
@@ -185,7 +194,7 @@ export default function AdminClientDetailPage() {
         commissionPaymentPercent 
       });
       
-      const settingsResponse = await fetch(`/api/admin/client-settings/${clientId}`, {
+      const settingsResponse = await fetchWithTimeout(`/api/admin/client-settings/${clientId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`,
@@ -195,7 +204,7 @@ export default function AdminClientDetailPage() {
           commissionHidePercent,
           commissionPaymentPercent
         })
-      });
+      }, 30_000);
 
       console.log('[SAVE-SETTINGS] Respuesta settings:', settingsResponse.status);
 
@@ -209,7 +218,7 @@ export default function AdminClientDetailPage() {
       console.log('[SAVE-SETTINGS] Settings guardados correctamente:', settingsResult);
 
       // Actualizar asignaciones de máquinas
-      const assignmentsResponse = await fetch('/api/admin/assignments', {
+      const assignmentsResponse = await fetchWithTimeout('/api/admin/assignments', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`,
@@ -219,7 +228,7 @@ export default function AdminClientDetailPage() {
           clientId,
           machineIds: Array.from(selectedMachineIds)
         })
-      });
+      }, 30_000);
 
       if (!assignmentsResponse.ok) {
         throw new Error('Error actualizando asignaciones');
@@ -247,21 +256,25 @@ export default function AdminClientDetailPage() {
       setResetting(true);
       setError(null);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       
       if (!sessionData.session) {
         router.push('/login');
         return;
       }
 
-      const response = await fetch(`/api/admin/users/${clientId}/reset-password`, {
+      const response = await fetchWithTimeout(`/api/admin/users/${clientId}/reset-password`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ newPassword })
-      });
+      }, 30_000);
 
       if (!response.ok) {
         const errorData = await response.json();

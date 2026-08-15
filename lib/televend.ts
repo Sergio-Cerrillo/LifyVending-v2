@@ -46,6 +46,8 @@ interface TelevendMachineRow {
   caption?: unknown;
   external_id?: unknown;
   location?: {
+    address?: unknown;
+    adress?: unknown;
     caption?: unknown;
     city?: unknown;
     region?: {
@@ -61,6 +63,11 @@ interface TelevendMachineRow {
   model?: {
     caption?: unknown;
   } | null;
+}
+
+interface TelevendMachinistMachineRow extends TelevendMachineRow {
+  stock?: unknown;
+  stock_data?: unknown;
 }
 
 interface TelevendColumnRow {
@@ -493,15 +500,30 @@ async function getFreshTelevendToken(): Promise<CachedTelevendToken> {
 
 async function televendFetch<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = await getFreshTelevendToken();
-  const response = await fetch(`${TELEVEND_PLANOGRAMS_BASE}${path}`, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token.accessToken}`,
-      ...(init.headers || {}),
-    },
-    cache: 'no-store',
-  });
+  const controller = new AbortController();
+  const timeoutMs = Number(process.env.TELEVEND_API_TIMEOUT_MS || 12000);
+  const timeout = setTimeout(() => controller.abort(), Math.max(3000, timeoutMs));
+  let response: Response;
+
+  try {
+    response = await fetch(`${TELEVEND_PLANOGRAMS_BASE}${path}`, {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token.accessToken}`,
+        ...(init.headers || {}),
+      },
+      signal: init.signal || controller.signal,
+      cache: 'no-store',
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new TelevendApiError(504, 'Televend ha tardado demasiado en responder');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (response.status === 401 && retry) {
     cachedToken = null;
@@ -518,15 +540,30 @@ async function televendFetch<T>(path: string, init: RequestInit = {}, retry = tr
 
 async function televendMachinistFetch<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = await getFreshTelevendToken();
-  const response = await fetch(`${TELEVEND_MACHINIST_BASE}${path}`, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token.accessToken}`,
-      ...(init.headers || {}),
-    },
-    cache: 'no-store',
-  });
+  const controller = new AbortController();
+  const timeoutMs = Number(process.env.TELEVEND_API_TIMEOUT_MS || 12000);
+  const timeout = setTimeout(() => controller.abort(), Math.max(3000, timeoutMs));
+  let response: Response;
+
+  try {
+    response = await fetch(`${TELEVEND_MACHINIST_BASE}${path}`, {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token.accessToken}`,
+        ...(init.headers || {}),
+      },
+      signal: init.signal || controller.signal,
+      cache: 'no-store',
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new TelevendApiError(504, 'Televend ha tardado demasiado en responder');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (response.status === 401 && retry) {
     cachedToken = null;
@@ -561,10 +598,54 @@ async function mapLimited<T, R>(
 }
 
 async function getTelevendMachines(): Promise<TelevendMachineRow[]> {
-  const payload = await televendFetch<TelevendListResponse<TelevendMachineRow>>(
-    `/tenants/${getTelevendTenantId()}/companies/${getTelevendCompanyId()}/machines?page=1&page_size=200`,
-  );
-  return Array.isArray(payload.content) ? payload.content : [];
+  const [payload, detailsById] = await Promise.all([
+    televendFetch<TelevendListResponse<TelevendMachineRow>>(
+      `/tenants/${getTelevendTenantId()}/companies/${getTelevendCompanyId()}/machines?page=1&page_size=200`,
+    ),
+    getTelevendMachinistMachinesMap().catch(() => new Map<number, TelevendMachinistMachineRow>()),
+  ]);
+  const machines = Array.isArray(payload.content) ? payload.content : [];
+
+  return machines.map((machine) => {
+    const detail = detailsById.get(Math.round(numberFromUnknown(machine.id)));
+    if (!detail) return machine;
+
+    return {
+      ...machine,
+      location: {
+        ...(machine.location || {}),
+        ...(detail.location || {}),
+        address: stringFromUnknown(detail.location?.address)
+          || stringFromUnknown(detail.location?.adress)
+          || machine.location?.address,
+      },
+      client: machine.client || detail.client,
+      brand: machine.brand || detail.brand,
+      model: machine.model || detail.model,
+    };
+  });
+}
+
+async function getTelevendMachinistMachinesMap() {
+  const machines = new Map<number, TelevendMachinistMachineRow>();
+  const pageSize = 200;
+  let page = 1;
+
+  while (page <= 20) {
+    const payload = await televendMachinistFetch<TelevendListResponse<TelevendMachinistMachineRow>>(
+      `/tenants/${getTelevendTenantId()}/companies/${getTelevendCompanyId()}/machines?enabled=true&role=VENDING_MACHINE&page=${page}&page_size=${pageSize}`,
+    );
+    const rows = Array.isArray(payload.content) ? payload.content : [];
+    for (const row of rows) {
+      const id = Math.round(numberFromUnknown(row.id));
+      if (id > 0) machines.set(id, row);
+    }
+
+    if (!payload.meta?.has_next_page || rows.length === 0) break;
+    page += 1;
+  }
+
+  return machines;
 }
 
 async function getTelevendMachineRevenueAggregate({
@@ -862,6 +943,10 @@ function computeUrgency(values: {
 }
 
 function machineLocation(machine: TelevendMachineRow) {
+  const address = stringFromUnknown(machine.location?.address)
+    || stringFromUnknown(machine.location?.adress);
+  if (address) return address;
+
   return [
     stringFromUnknown(machine.location?.caption),
     stringFromUnknown(machine.location?.city),

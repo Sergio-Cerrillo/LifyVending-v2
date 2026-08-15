@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,6 +35,7 @@ interface MachineRevenue {
   name: string;
   location: string | null;
   source: 'frekuent' | 'televend';
+  providerMachineId?: string | null;
   daily: { total: number; card?: number; cash?: number; updatedAt: string | null };
   monthly: { total: number; card?: number; cash?: number; updatedAt: string | null };
 }
@@ -395,14 +397,18 @@ export default function RevenueDocumentationPage() {
       if (showToast) setRefreshing(true);
       else setLoading(true);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       if (!sessionData.session) throw new Error('Sesión expirada');
 
-      const response = await fetch('/api/admin/revenue', {
+      const response = await fetchWithTimeout('/api/admin/revenue', {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
-      });
+      }, 35_000);
       const payload = await response.json() as RevenueData & { error?: string };
 
       if (!response.ok) throw new Error(payload.error || 'No se pudieron cargar recaudaciones');
@@ -550,10 +556,14 @@ export default function RevenueDocumentationPage() {
 
     try {
       setLoadingProductRows(true);
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       if (!sessionData.session) throw new Error('Sesión expirada');
 
-      const response = await fetch('/api/admin/frekuent-product-sales', {
+      const response = await fetchWithTimeout('/api/admin/frekuent-product-sales', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
@@ -561,11 +571,12 @@ export default function RevenueDocumentationPage() {
         },
         body: JSON.stringify({
           machineIds: [machineId],
+          providerMachineIds: selectedPresetMachine?.providerMachineId ? [selectedPresetMachine.providerMachineId] : [],
           machineNames: selectedPresetMachine?.name ? [selectedPresetMachine.name] : [],
           keywords: [config.keyword],
           matchModes: [config.matchMode],
         }),
-      });
+      }, 45_000);
       const payload = await response.json() as ProductSalesImportResponse;
       setLastProductSalesDebug({
         ...payload,

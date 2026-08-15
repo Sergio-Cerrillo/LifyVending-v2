@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/lib/supabase-helpers';
 import { LoadingScreen } from '@/components/ui/loading-screen';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 
 interface DashboardData {
   profile: {
@@ -85,7 +86,11 @@ export default function ClientDashboardPage() {
       setError(null);
 
       // Obtener sesión
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessionError } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
 
       if (sessionError || !sessionData.session) {
         router.push('/login');
@@ -93,11 +98,11 @@ export default function ClientDashboardPage() {
       }
 
       // Llamar al endpoint del dashboard
-      const response = await fetch('/api/client/dashboard', {
+      const response = await fetchWithTimeout('/api/client/dashboard', {
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`
         }
-      });
+      }, 35_000);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

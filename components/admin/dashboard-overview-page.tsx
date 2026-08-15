@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,11 +20,21 @@ import {
     AlertCircle,
     AlertTriangle,
     XCircle,
+    MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
+
+const MallorcaReplenishmentMap = dynamic(
+    () => import('@/components/admin/mallorca-replenishment-map').then((mod) => mod.MallorcaReplenishmentMap),
+    {
+        ssr: false,
+        loading: () => <Skeleton className="h-[420px] rounded-2xl animate-pulse sm:h-[520px]" />,
+    },
+);
 
 interface DashboardStats {
     lastUpdate: string | null;
@@ -78,6 +89,30 @@ interface ProviderMachineStatus {
 interface ProviderStatusState {
     loading: boolean;
     data: ProviderMachineStatus | null;
+    error: string | null;
+}
+
+interface MachineMapPoint {
+    id: string;
+    name: string;
+    location: string | null;
+    provider: ProviderKey;
+    latitude: number | null;
+    longitude: number | null;
+    hasCoordinates: boolean;
+    fillRate: number | null;
+    urgency: 'empty' | 'critical' | 'normal' | 'ok' | 'unknown';
+    totalToReplenish: number;
+    dailyTotal: number;
+    monthlyTotal: number;
+}
+
+interface MachineMapState {
+    loading: boolean;
+    points: MachineMapPoint[];
+    mapped: number;
+    pending: number;
+    pointsWithStock: number;
     error: string | null;
 }
 
@@ -208,16 +243,20 @@ function MachineStatusOverview() {
         }));
 
         try {
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            const { data: sessionData, error: sessionError } = await withTimeout(
+                supabase.auth.getSession(),
+                10_000,
+                'No se pudo validar la sesión',
+            );
             if (sessionError || !sessionData.session) {
                 throw new Error('Sesión no válida');
             }
 
-            const response = await fetch(`/api/admin/stock-status?provider=${provider}`, {
+            const response = await fetchWithTimeout(`/api/admin/stock-status?provider=${provider}`, {
                 headers: {
                     Authorization: `Bearer ${sessionData.session.access_token}`,
                 },
-            });
+            }, 35_000);
             const result = await response.json();
 
             if (!response.ok || !result.success) {
@@ -329,6 +368,141 @@ function LatestSalesCard({ sales }: { sales: LatestSale[] }) {
     );
 }
 
+function MachineMapCard() {
+    const [state, setState] = useState<MachineMapState>({
+        loading: true,
+        points: [],
+        mapped: 0,
+        pending: 0,
+        pointsWithStock: 0,
+        error: null,
+    });
+
+    async function loadMap() {
+        setState((current) => ({ ...current, loading: true, error: null }));
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 45000);
+
+        try {
+            const { data: sessionData, error: sessionError } = await withTimeout(
+                supabase.auth.getSession(),
+                10_000,
+                'No se pudo validar la sesión',
+            );
+            if (sessionError || !sessionData.session) {
+                throw new Error('Sesión no válida');
+            }
+
+            const response = await fetchWithTimeout('/api/admin/machine-map', {
+                headers: {
+                    Authorization: `Bearer ${sessionData.session.access_token}`,
+                },
+                signal: controller.signal,
+            }, 45_000);
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'No se pudo cargar el mapa');
+            }
+
+            const points = Array.isArray(result.points) ? result.points : [];
+            setState({
+                loading: false,
+                points,
+                mapped: result.mapped || 0,
+                pending: result.pending || 0,
+                pointsWithStock: result.pointsWithStock || 0,
+                error: null,
+            });
+        } catch (error) {
+            const message = error instanceof DOMException && error.name === 'AbortError'
+                ? 'El mapa está tardando demasiado. Vuelve a intentarlo en unos segundos.'
+                : error instanceof Error ? error.message : 'Error cargando mapa';
+            setState((current) => ({ ...current, loading: false, error: message }));
+        } finally {
+            window.clearTimeout(timeout);
+        }
+    }
+
+    useEffect(() => {
+        loadMap();
+    }, []);
+
+    const mappedPoints = state.points.filter(
+        (point) => point.hasCoordinates && point.latitude && point.longitude && point.urgency !== 'empty',
+    );
+    const attentionPoints = mappedPoints.filter((point) => ['critical', 'normal'].includes(point.urgency));
+
+    return (
+        <Card className="overflow-hidden border border-zinc-200 bg-white shadow-sm">
+            <CardHeader className="border-b border-zinc-100 bg-zinc-50/80 p-4 sm:p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                        <CardTitle className="flex items-center gap-2 text-2xl font-black text-zinc-900 sm:text-xl">
+                            <MapPin className="h-5 w-5 text-emerald-600" />
+                            Mapa de reposición
+                        </CardTitle>
+                        <p className="mt-1 text-sm font-semibold leading-snug text-zinc-500">
+                            Mallorca · {mappedPoints.length} visibles · {state.pointsWithStock} con stock · {attentionPoints.length} requieren atención
+                        </p>
+                    </div>
+                    <Button type="button" variant="outline" onClick={loadMap} disabled={state.loading} className="h-12 w-full rounded-xl bg-white font-black sm:h-10 sm:w-auto">
+                        <RefreshCw className={`mr-2 h-4 w-4 ${state.loading ? 'animate-spin' : ''}`} />
+                        Actualizar mapa
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="p-0">
+                {state.loading ? (
+                    <div className="space-y-4 p-5">
+                        <Skeleton className="h-[420px] rounded-2xl animate-pulse" />
+                        <div className="grid gap-3 sm:grid-cols-4">
+                            {[1, 2, 3, 4].map((item) => (
+                                <Skeleton key={item} className="h-14 rounded-xl animate-pulse" />
+                            ))}
+                        </div>
+                    </div>
+                ) : state.error ? (
+                    <div className="p-6">
+                        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                            <p className="font-black text-red-700">No se pudo cargar el mapa</p>
+                            <p className="mt-1 text-sm font-semibold text-red-700">{state.error}</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-4 p-4">
+                        {state.pointsWithStock === 0 && mappedPoints.length > 0 && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                                <p className="text-sm font-black text-amber-900">
+                                    El mapa tiene ubicaciones, pero todavía no ha podido enlazar el stock.
+                                </p>
+                                <p className="mt-1 text-xs font-semibold text-amber-800">
+                                    Actualiza stock desde la pantalla de Stock o vuelve a intentar actualizar el mapa para cachear datos live.
+                                </p>
+                            </div>
+                        )}
+                        <MallorcaReplenishmentMap points={mappedPoints} />
+
+                        <div className="flex gap-2 overflow-x-auto pb-1 text-xs font-black text-zinc-700 sm:grid sm:grid-cols-4 sm:overflow-visible sm:pb-0">
+                            {[
+                                ['Crítico', 'bg-red-600'],
+                                ['Normal', 'bg-yellow-500'],
+                                ['Bien', 'bg-emerald-600'],
+                                [`Pendientes ubicación: ${state.pending}`, 'bg-zinc-400'],
+                            ].map(([label, color]) => (
+                                <div key={label} className="flex min-w-max items-center gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2">
+                                    <span className={`h-3 w-3 rounded-full ${color}`} />
+                                    {label}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
 export function DashboardOverviewPage() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [latestSales, setLatestSales] = useState<LatestSale[]>([]);
@@ -342,7 +516,11 @@ export function DashboardOverviewPage() {
             if (showToast) setRefreshing(true);
 
             // Usar el mismo endpoint que "Recaudaciones totales"
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            const { data: sessionData, error: sessionError } = await withTimeout(
+                supabase.auth.getSession(),
+                10_000,
+                'No se pudo validar la sesión',
+            );
 
             if (sessionError || !sessionData.session) {
                 console.error('[DASHBOARD] Error de sesión:', sessionError);
@@ -357,8 +535,8 @@ export function DashboardOverviewPage() {
             };
 
             const [revenueResponse, latestSalesResponse] = await Promise.allSettled([
-                fetch('/api/admin/revenue', { headers }),
-                fetch('/api/admin/latest-sales?limit=10', { headers }),
+                fetchWithTimeout('/api/admin/revenue', { headers }, 35_000),
+                fetchWithTimeout('/api/admin/latest-sales?limit=10', { headers }, 18_000),
             ]);
 
             if (revenueResponse.status === 'rejected' || !revenueResponse.value.ok) {
@@ -460,6 +638,8 @@ export function DashboardOverviewPage() {
                     </Button>
                 </div>
             </div>
+
+            <MachineMapCard />
 
             {/* Skeleton mientras carga */}
             {loading && !error && (
@@ -680,7 +860,7 @@ export function DashboardOverviewPage() {
                                         </p>
                                     </div>
                                     <p className="text-xs text-zinc-500">
-                                        💡 Los datos se actualizan automáticamente cada hora
+                                        Los datos se actualizan automáticamente cada hora
                                     </p>
                                 </div>
                             </CardContent>

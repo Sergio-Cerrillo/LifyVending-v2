@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -507,16 +508,20 @@ export function StockLivePage() {
       if (!data) setLoading(true);
       setRefreshing(true);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       if (!sessionData.session) {
         throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
       }
 
-      const response = await fetch(`/api/stock?provider=${telemetryProvider}`, {
+      const response = await fetchWithTimeout(`/api/stock?provider=${telemetryProvider}`, {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
-      });
+      }, 40_000);
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -573,7 +578,11 @@ export function StockLivePage() {
   }
 
   async function getSessionAccessToken() {
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData } = await withTimeout(
+      supabase.auth.getSession(),
+      10_000,
+      'No se pudo validar la sesión',
+    );
     if (!sessionData.session) {
       throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
     }
@@ -587,11 +596,11 @@ export function StockLivePage() {
     try {
       setLoadingProductOptions(true);
       const accessToken = await getSessionAccessToken();
-      const response = await fetch('/api/stock/replenishment?resource=products', {
+      const response = await fetchWithTimeout('/api/stock/replenishment?resource=products', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      });
+      }, 35_000);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.error || 'No se pudieron cargar los productos.');
@@ -774,7 +783,7 @@ export function StockLivePage() {
     try {
       setSavingRails(true);
       const accessToken = await getSessionAccessToken();
-      const response = await fetch('/api/stock/replenishment', {
+      const response = await fetchWithTimeout('/api/stock/replenishment', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -785,7 +794,7 @@ export function StockLivePage() {
           machineId: railEditor.machine.machineId,
           rows,
         }),
-      });
+      }, 45_000);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.error || 'Frekuent no pudo guardar el planograma.');
@@ -853,7 +862,7 @@ export function StockLivePage() {
     try {
       setSavingQuantities(true);
       const accessToken = await getSessionAccessToken();
-      const response = await fetch('/api/stock/replenishment', {
+      const response = await fetchWithTimeout('/api/stock/replenishment', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -865,7 +874,7 @@ export function StockLivePage() {
           machineId: quantityEditor.machine.machineId,
           rows,
         }),
-      });
+      }, 45_000);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.error || 'Televend no pudo guardar las cantidades.');
@@ -907,12 +916,16 @@ export function StockLivePage() {
     try {
       setRunningReplenishmentAction(true);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       if (!sessionData.session) {
         throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
       }
 
-      const response = await fetch('/api/stock/replenishment', {
+      const response = await fetchWithTimeout('/api/stock/replenishment', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
@@ -923,7 +936,7 @@ export function StockLivePage() {
           action: 'full-refill',
           machineId: machine.machineId,
         }),
-      });
+      }, 45_000);
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {

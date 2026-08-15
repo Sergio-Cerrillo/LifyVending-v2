@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, ArrowLeft, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { LoadingInline } from '@/components/ui/loading-screen';
 
 import Link from 'next/link';
@@ -77,18 +78,22 @@ export default function AdminClientOverviewPage() {
       setLoading(true);
       setError(null);
 
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessionError } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       
       if (sessionError || !sessionData.session) {
         router.push('/login');
         return;
       }
 
-      const overviewResponse = await fetch(`/api/admin/clients/${clientId}/overview`, {
+      const overviewResponse = await fetchWithTimeout(`/api/admin/clients/${clientId}/overview`, {
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`
         }
-      });
+      }, 30_000);
 
       if (!overviewResponse.ok) {
         const errorData = await overviewResponse.json().catch(() => ({ error: 'Error desconocido' }));

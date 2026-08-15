@@ -27,6 +27,7 @@ import {
 import { Plus, Settings, RefreshCw, User, Building, Eye, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -84,18 +85,22 @@ export default function AdminClientsPage() {
       setLoading(true);
       setError(null);
 
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessionError } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
 
       if (sessionError || !sessionData.session) {
         router.push('/login');
         return;
       }
 
-      const response = await fetch('/api/admin/clients', {
+      const response = await fetchWithTimeout('/api/admin/clients', {
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`
         }
-      });
+      }, 30_000);
 
       if (!response.ok) {
         throw new Error('Error cargando clientes');
@@ -117,7 +122,11 @@ export default function AdminClientsPage() {
       setCreating(true);
       setError(null);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
 
       if (!sessionData.session) {
         router.push('/login');
@@ -147,14 +156,14 @@ export default function AdminClientsPage() {
       });
       console.log('[CREATE-CLIENT] Enviando payload:', payload);
 
-      const response = await fetch('/api/admin/users', {
+      const response = await fetchWithTimeout('/api/admin/users', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
-      });
+      }, 30_000);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -199,7 +208,11 @@ export default function AdminClientsPage() {
       setDeleting(true);
       setError(null);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
 
       if (!sessionData.session) {
         router.push('/login');
@@ -208,12 +221,12 @@ export default function AdminClientsPage() {
 
       console.log('[DELETE-CLIENT] Intentando eliminar cliente:', clientToDelete.id);
 
-      const response = await fetch(`/api/admin/users/${clientToDelete.id}`, {
+      const response = await fetchWithTimeout(`/api/admin/users/${clientToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${sessionData.session.access_token}`
         }
-      });
+      }, 30_000);
 
       console.log('[DELETE-CLIENT] Respuesta del servidor:', response.status);
 

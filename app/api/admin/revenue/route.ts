@@ -5,7 +5,26 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
+import { formatDateForFrekuent, getFrekuentRevenueMachines } from '@/lib/frekuent';
+import { generateFrekuentId } from '@/lib/machine-id-utils';
 import { ensureRevenueFreshness } from '@/lib/services/revenue-refresh-service';
+
+function madridCurrentMonthRange(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const offset = formatDateForFrekuent(new Date(Date.UTC(year, month - 1, 15, 12, 0, 0)), 'Europe/Madrid').slice(-6);
+
+  return {
+    startDate: `${year}-${String(month).padStart(2, '0')}-01T00:00:00${offset}`,
+    endDate: formatDateForFrekuent(now, 'Europe/Madrid'),
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -90,15 +109,40 @@ export async function GET(request: NextRequest) {
       return timestamp > 0 && timestamp === latestByProvider[provider];
     });
 
+    const frekuentProviderIdsByName = new Map<string, number>();
+    if (currentMachines.some((machine: any) => !machine.televend_machine_id)) {
+      const range = madridCurrentMonthRange();
+      const frekuentRevenueMachines = await getFrekuentRevenueMachines({
+        ...range,
+        datesLogic: 'current_month',
+        pageSize: 200,
+      }).catch((frekuentError) => {
+        console.error('[REVENUE API] No se pudieron resolver IDs Frekuent:', frekuentError);
+        return [];
+      });
+
+      for (const machine of frekuentRevenueMachines) {
+        frekuentProviderIdsByName.set(generateFrekuentId(machine.machineName), machine.machineId);
+      }
+    }
+
     // Formatear datos (solo daily y monthly, weekly eliminado)
     const formattedMachines = currentMachines.map((machine: any) => {
+      const source = machine.televend_machine_id ? 'televend' : 'frekuent';
+      const frekuentProviderId = source === 'frekuent'
+        ? Number(machine.orain_machine_id) || frekuentProviderIdsByName.get(generateFrekuentId(machine.name)) || null
+        : null;
+
       return {
         id: machine.id,
         name: machine.name,
         location: machine.location,
         status: machine.status,
         lastScraped: machine.last_scraped_at,
-        source: machine.televend_machine_id ? 'televend' : 'frekuent',
+        source,
+        providerMachineId: source === 'televend'
+          ? machine.televend_machine_id
+          : frekuentProviderId ? String(frekuentProviderId) : null,
         daily: {
           total: machine.daily_total || 0,
           card: machine.daily_card || 0,

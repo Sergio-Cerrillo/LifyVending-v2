@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -233,17 +234,21 @@ export default function InicioPage() {
       if (showLoader) setLoading(true);
       if (!showLoader) setRefreshing(true);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       if (!sessionData.session) {
         router.push('/login');
         throw new Error('Sesión expirada');
       }
 
-      const response = await fetch('/api/admin/home-rankings', {
+      const response = await fetchWithTimeout('/api/admin/home-rankings', {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
-      });
+      }, 30_000);
       const payload = await response.json();
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || 'No se pudieron cargar los rankings');

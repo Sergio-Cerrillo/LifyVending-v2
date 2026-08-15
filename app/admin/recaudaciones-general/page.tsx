@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,19 +73,23 @@ export default function AdminRevenueGeneralPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function authenticatedFetch(url: string, init?: RequestInit) {
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData } = await withTimeout(
+      supabase.auth.getSession(),
+      10_000,
+      'No se pudo validar la sesión',
+    );
     if (!sessionData.session) {
       router.push('/login');
       throw new Error('Sesión expirada');
     }
 
-    return fetch(url, {
+    return fetchWithTimeout(url, {
       ...init,
       headers: {
         ...init?.headers,
         Authorization: `Bearer ${sessionData.session.access_token}`,
       },
-    });
+    }, 35_000);
   }
 
   async function loadRevenueData(showLoader = true, showToast = false) {

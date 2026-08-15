@@ -348,7 +348,7 @@ async function saveFrekuentRevenue(
       location: revenue.location || 'Sin ubicación',
       status: 'active',
       frekuent_machine_id: normalizedId,
-      orain_machine_id: null,
+      orain_machine_id: numericId,
       last_scraped_at: scrapedAt,
       updated_at: scrapedAt,
     };

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase-helpers';
+import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -218,14 +219,18 @@ export function RoutePreparationPage() {
       if (showToast) setRefreshing(true);
       if (!showToast) setLoading(true);
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
       if (!sessionData.session) throw new Error('Sesión expirada');
 
-      const response = await fetch(`/api/stock?provider=${provider}`, {
+      const response = await fetchWithTimeout(`/api/stock?provider=${provider}`, {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
-      });
+      }, 40_000);
       const payload = await response.json() as StockLiveResponse & { error?: string };
       if (!response.ok || !payload.success) throw new Error(payload.error || 'No se pudo cargar stock');
 

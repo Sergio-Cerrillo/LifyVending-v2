@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User, UserRole } from '@/lib/types';
 import { supabase } from '@/lib/supabase-helpers';
+import { withTimeout } from '@/lib/client-timeouts';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -24,15 +25,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await withTimeout(
+          supabase.auth.getSession(),
+          10_000,
+          'No se pudo validar la sesión',
+        );
 
         if (session?.user) {
           // Obtener perfil
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role, display_name')
-            .eq('id', session.user.id)
-            .single();
+          const { data: profile, error: profileError } = await withTimeout(
+            supabase
+              .from('profiles')
+              .select('role, display_name')
+              .eq('id', session.user.id)
+              .single(),
+            10_000,
+            'No se pudo cargar el perfil',
+          );
 
           if (profile) {
             const user = {
@@ -61,11 +70,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role, display_name')
-            .eq('id', session.user.id)
-            .single();
+          const { data: profile } = await withTimeout(
+            supabase
+              .from('profiles')
+              .select('role, display_name')
+              .eq('id', session.user.id)
+              .single(),
+            10_000,
+            'No se pudo cargar el perfil',
+          );
 
           if (profile) {
             setCurrentUser({

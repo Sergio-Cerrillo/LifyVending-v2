@@ -668,7 +668,7 @@ export async function getFrekuentSalesByProduct({
           .filter(Boolean) as FrekuentLatestSale[];
 
         sales.push(...rows);
-        hasMore = totalValue != null
+        hasMore = totalValue != null && total > 0
           ? total > page * pageSize && rawRows.length > 0
           : rawRows.length === pageSize;
         page += 1;
