@@ -1,8 +1,7 @@
 'use client';
 
-import L from 'leaflet';
 import { Fragment, useState } from 'react';
-import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMapEvents } from 'react-leaflet';
+import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, Tooltip, useMapEvents } from 'react-leaflet';
 
 type ProviderKey = 'frekuent' | 'televend';
 type Urgency = 'empty' | 'critical' | 'normal' | 'ok' | 'unknown';
@@ -146,33 +145,6 @@ function fanPosition(lat: number, lng: number, index: number, total: number, zoo
     return [lat + latOffset, lng + lngOffset];
 }
 
-function clusterIcon(points: MachineMapPoint[], urgency: Urgency) {
-    const color = markerColor(urgency);
-    const attention = points.filter((point) => ['critical', 'normal'].includes(point.urgency)).length;
-    const size = Math.min(42, Math.max(30, 28 + Math.sqrt(points.length) * 1.55));
-    const label = points.length > 99 ? '99+' : String(points.length);
-    const attentionLabel = attention > 99 ? '99+' : String(attention);
-
-    return L.divIcon({
-        className: 'lify-map-cluster-marker',
-        html: `
-            <div class="lify-map-cluster-shell" style="width:${size}px;height:${size}px;">
-                <div class="lify-map-cluster-pulse" style="background:${color};"></div>
-                <div class="lify-map-cluster-core" style="background:${color};">
-                    <span>${label}</span>
-                </div>
-                ${
-                    attention > 0
-                        ? `<div class="lify-map-cluster-badge" style="color:${color};">${attentionLabel}</div>`
-                        : ''
-                }
-            </div>
-        `,
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2],
-    });
-}
-
 function MapInteractionLayer({
     points,
     initialZoom,
@@ -198,6 +170,7 @@ function MapInteractionLayer({
                     const color = markerColor(cluster.worstUrgency);
                     const attention = cluster.points.filter((point) => ['critical', 'normal'].includes(point.urgency)).length;
                     const isExpanded = expandedClusterId === cluster.id;
+                    const clusterRadius = Math.min(18, Math.max(10, 8 + Math.sqrt(cluster.points.length) * 1.25));
                     const fanPoints = cluster.points.map((point, index) => ({
                         point,
                         position: fanPosition(cluster.lat, cluster.lng, index, cluster.points.length, zoom),
@@ -275,10 +248,16 @@ function MapInteractionLayer({
                                     })}
                                 </>
                             )}
-                            <Marker
-                                position={[cluster.lat, cluster.lng]}
-                                icon={clusterIcon(cluster.points, cluster.worstUrgency)}
-                                zIndexOffset={isExpanded ? 500 : 0}
+                            <CircleMarker
+                                center={[cluster.lat, cluster.lng]}
+                                radius={clusterRadius}
+                                pathOptions={{
+                                    color: '#ffffff',
+                                    fillColor: color,
+                                    fillOpacity: 0.96,
+                                    opacity: 1,
+                                    weight: 3,
+                                }}
                                 eventHandlers={{
                                     click: () => setExpandedClusterId(isExpanded ? null : cluster.id),
                                     dblclick: () => {
@@ -331,7 +310,7 @@ function MapInteractionLayer({
                                         </div>
                                     </Popup>
                                 )}
-                            </Marker>
+                            </CircleMarker>
                         </Fragment>
                     );
                 }
