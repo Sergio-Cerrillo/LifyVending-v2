@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { formatDateForFrekuent, getFrekuentSalesByProduct } from '@/lib/frekuent';
+import { formatDateForFrekuent, getFrekuentRevenueMachines, getFrekuentSalesByProduct } from '@/lib/frekuent';
+import { generateFrekuentId } from '@/lib/machine-id-utils';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
 
 export const dynamic = 'force-dynamic';
@@ -49,11 +50,11 @@ function madridCurrentMonthRange(now = new Date()) {
   const year = Number(parts.find((part) => part.type === 'year')?.value);
   const month = Number(parts.find((part) => part.type === 'month')?.value);
   const offset = formatDateForFrekuent(new Date(Date.UTC(year, month - 1, 15, 12, 0, 0)), 'Europe/Madrid').slice(-6);
-  const startDate = new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00.000${offset}`).toISOString();
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01T00:00:00${offset}`;
 
   return {
     startDate,
-    endDate: now.toISOString(),
+    endDate: formatDateForFrekuent(now, 'Europe/Madrid'),
   };
 }
 
@@ -70,6 +71,13 @@ function normalize(value: string) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function machineNameMatches(left: string, right: string) {
+  const a = generateFrekuentId(left);
+  const b = generateFrekuentId(right);
+  if (!a || !b) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAdmin(request);
@@ -79,9 +87,15 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
     const machineIds = Array.isArray(body.machineIds) ? body.machineIds.map(String) : [];
+    const machineNames = Array.isArray(body.machineNames)
+      ? body.machineNames.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
     const keywords = Array.isArray(body.keywords)
       ? body.keywords.map((item: unknown) => String(item || '').trim()).filter(Boolean)
       : ['MONSTER', 'LANJARON'];
+    const matchModes = Array.isArray(body.matchModes)
+      ? body.matchModes.map((item: unknown) => String(item || '').trim())
+      : [];
 
     const { data, error } = await supabaseAdmin
       .from('machines')
@@ -90,30 +104,110 @@ export async function POST(request: NextRequest) {
 
     if (error) throw new Error(`No se pudieron cargar máquinas Frekuent: ${error.message}`);
 
-    const selectedMachines = ((data || []) as MachineRow[])
-      .filter((machine) => machineIds.length === 0 || machineIds.includes(machine.id));
+    const requestedMachineKeys = new Set([
+      ...machineIds.map((id) => generateFrekuentId(id)),
+      ...machineNames.map((name) => generateFrekuentId(name)),
+    ].filter(Boolean));
+    const requestedNumericIds = machineIds
+      .map(numericId)
+      .filter((id): id is number => Boolean(id));
 
-    const frekuentIds = selectedMachines
+    const selectedMachines = ((data || []) as MachineRow[])
+      .filter((machine) => {
+        if (machineIds.length === 0 && machineNames.length === 0) return true;
+        if (machineIds.includes(machine.id)) return true;
+
+        const machineKeys = [
+          machine.name || '',
+          machine.frekuent_machine_id || '',
+          machine.orain_machine_id || '',
+        ].map((value) => generateFrekuentId(value)).filter(Boolean);
+
+        return machineKeys.some((key) => (
+          requestedMachineKeys.has(key)
+          || Array.from(requestedMachineKeys).some((requested) => (
+            key === requested || key.includes(requested) || requested.includes(key)
+          ))
+        ));
+      });
+
+    const directFrekuentIds = selectedMachines
       .map((machine) => numericId(machine.orain_machine_id || machine.frekuent_machine_id))
       .filter((id): id is number => Boolean(id));
 
     const range = madridCurrentMonthRange();
-    const sales = await getFrekuentSalesByProduct({
-      machineIds: frekuentIds,
+    const frekuentIds = new Set<number>([...requestedNumericIds, ...directFrekuentIds]);
+
+    const revenueMachines = await getFrekuentRevenueMachines({
       ...range,
       datesLogic: 'current_month',
-    });
+      pageSize: 200,
+    }).catch(() => []);
+    const revenueByNormalizedName = new Map(
+      revenueMachines.map((machine) => [generateFrekuentId(machine.machineName), machine.machineId]),
+    );
 
-    const groups = keywords.map((keyword) => {
+    if (frekuentIds.size < selectedMachines.length) {
+      for (const machine of selectedMachines) {
+        const externalId = machine.frekuent_machine_id || machine.orain_machine_id || '';
+        const normalizedName = generateFrekuentId(machine.name || '');
+        const fuzzyMatch = revenueMachines.find((candidate) => (
+          machineNameMatches(candidate.machineName, machine.name || '')
+          || machineNameMatches(candidate.machineName, externalId)
+        ));
+        const matchedId = revenueByNormalizedName.get(externalId)
+          || revenueByNormalizedName.get(normalizedName)
+          || fuzzyMatch?.machineId;
+        if (matchedId) frekuentIds.add(matchedId);
+      }
+    }
+
+    for (const requestedName of machineNames) {
+      const fuzzyMatch = revenueMachines.find((candidate) => machineNameMatches(candidate.machineName, requestedName));
+      if (fuzzyMatch) frekuentIds.add(fuzzyMatch.machineId);
+    }
+
+    const rawActivityResponses: unknown[] = [];
+    const collectRawActivity = (entry: unknown) => {
+      if (rawActivityResponses.length < 8) rawActivityResponses.push(entry);
+    };
+
+    let sales = await getFrekuentSalesByProduct({
+      machineIds: Array.from(frekuentIds),
+      ...range,
+      datesLogic: 'current_month',
+      allowEmptyProduct: true,
+      completedOnly: true,
+      debugCollector: collectRawActivity,
+    });
+    let salesAttempt = 'current_month';
+
+    if (sales.length === 0 && frekuentIds.size > 0) {
+      sales = await getFrekuentSalesByProduct({
+        machineIds: Array.from(frekuentIds),
+        ...range,
+        datesLogic: 'custom',
+        allowEmptyProduct: true,
+        completedOnly: true,
+        debugCollector: collectRawActivity,
+      });
+      salesAttempt = 'custom';
+    }
+
+    const groups = keywords.map((keyword, index) => {
       const normalizedKeyword = normalize(keyword);
-      const matched = sales.filter((sale) => normalize(sale.productName).includes(normalizedKeyword));
+      const matchMode = matchModes[index] || 'product_name';
+      const matched = matchMode === 'completed'
+        ? sales
+        : sales.filter((sale) => normalize(sale.productName).includes(normalizedKeyword));
       const amount = matched.reduce((sum, sale) => sum + sale.amount, 0);
 
       return {
         keyword,
+        matchMode,
         units: matched.length,
         amount: Math.round(amount * 100) / 100,
-        products: Array.from(new Set(matched.map((sale) => sale.productName))).slice(0, 12),
+        products: Array.from(new Set(matched.map((sale) => sale.productName || '(sin nombre)'))).slice(0, 12),
       };
     });
 
@@ -121,6 +215,38 @@ export async function POST(request: NextRequest) {
       success: true,
       range,
       groups,
+      matchedMachineIds: Array.from(frekuentIds),
+      debug: {
+        selectedMachines: selectedMachines.map((machine) => ({
+          dbId: machine.id,
+          name: machine.name,
+          frekuentMachineId: machine.frekuent_machine_id,
+          orainMachineId: machine.orain_machine_id,
+          normalizedName: generateFrekuentId(machine.name || ''),
+        })),
+        requestedMachineIds: machineIds,
+        requestedMachineNames: machineNames,
+        requestedMatchModes: matchModes,
+        revenueMachineCandidates: revenueMachines.slice(0, 20).map((machine) => ({
+          id: machine.machineId,
+          name: machine.machineName,
+          normalizedName: generateFrekuentId(machine.machineName),
+          totalMoney: machine.totalMoney,
+          transactions: machine.numberTransactions,
+        })),
+        salesAttempt,
+        salesCount: sales.length,
+        sampleSales: sales.slice(0, 30).map((sale) => ({
+          productName: sale.productName,
+          machineId: sale.machineId,
+          datetime: sale.datetime,
+          amount: sale.amount,
+          paymentMethod: sale.paymentMethod,
+          typeTransformed: sale.typeTransformed,
+        })),
+        rawActivityResponses,
+        uniqueProductNames: Array.from(new Set(sales.map((sale) => sale.productName || '(sin nombre)'))).slice(0, 50),
+      },
     });
   } catch (error) {
     console.error('[ADMIN-FREKUENT-PRODUCT-SALES] Error:', error);

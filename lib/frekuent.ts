@@ -19,6 +19,7 @@ export interface FrekuentLatestSale {
   datetime: string;
   paymentMethod: string;
   amount: number;
+  typeTransformed?: string;
 }
 
 export interface FrekuentRevenueMachine {
@@ -137,6 +138,7 @@ interface FrekuentActivityTableRow {
   machine_number?: unknown;
   machine_name?: unknown;
   type_payment?: unknown;
+  type_transformed?: unknown;
   money_adjusted?: unknown;
 }
 
@@ -514,12 +516,18 @@ export async function getFrekuentRevenueMachines({
     .filter(Boolean) as FrekuentRevenueMachine[];
 }
 
-function normalizeFrekuentActivitySale(row: FrekuentActivityTableRow, machineId: number): FrekuentLatestSale | null {
+function normalizeFrekuentActivitySale(
+  row: FrekuentActivityTableRow,
+  machineId: number,
+  options: { allowEmptyProduct?: boolean; completedOnly?: boolean } = {},
+): FrekuentLatestSale | null {
   const id = String(row.main_id ?? row.id ?? '');
   const productName = typeof row.product_name === 'string' ? row.product_name.trim() : '';
   const datetime = typeof row.datetime === 'string' ? row.datetime : '';
+  const typeTransformed = typeof row.type_transformed === 'string' ? row.type_transformed.trim() : '';
 
-  if (!id || !productName || !datetime) return null;
+  if (options.completedOnly && typeTransformed.toLowerCase() !== 'completed') return null;
+  if (!id || (!productName && !options.allowEmptyProduct) || !datetime) return null;
 
   return {
     id,
@@ -535,6 +543,7 @@ function normalizeFrekuentActivitySale(row: FrekuentActivityTableRow, machineId:
       ? row.type_payment.trim()
       : 'Pago',
     amount: centsToEuros(row.money_adjusted),
+    typeTransformed,
   };
 }
 
@@ -590,12 +599,25 @@ export async function getFrekuentSalesByProduct({
   endDate,
   datesLogic = 'current_month',
   pageSize = 500,
+  allowEmptyProduct = false,
+  completedOnly = false,
+  debugCollector,
 }: {
   machineIds: number[];
   startDate: string;
   endDate: string;
   datesLogic?: 'today' | 'current_month' | 'custom';
   pageSize?: number;
+  allowEmptyProduct?: boolean;
+  completedOnly?: boolean;
+  debugCollector?: (entry: {
+    machineId: number;
+    page: number;
+    datesLogic: 'today' | 'current_month' | 'custom';
+    total: number;
+    rowCount: number;
+    sampleRows: FrekuentActivityTableRow[];
+  }) => void;
 }): Promise<FrekuentLatestSale[]> {
   const selectedIds = machineIds.filter((id) => Number.isInteger(id) && id > 0);
   if (selectedIds.length === 0) return [];
@@ -628,13 +650,27 @@ export async function getFrekuentSalesByProduct({
           true,
         );
 
-        const rows = (payload.data || [])
-          .map((row) => normalizeFrekuentActivitySale(row, machineId))
+        debugCollector?.({
+          machineId,
+          page,
+          datesLogic,
+          total: numberFromUnknown(payload.total ?? payload.recordsTotal),
+          rowCount: (payload.data || []).length,
+          sampleRows: (payload.data || []).slice(0, 5),
+        });
+
+        const rawRows = payload.data || [];
+        const totalValue = payload.total ?? payload.recordsTotal;
+        const total = numberFromUnknown(totalValue);
+
+        const rows = rawRows
+          .map((row) => normalizeFrekuentActivitySale(row, machineId, { allowEmptyProduct, completedOnly }))
           .filter(Boolean) as FrekuentLatestSale[];
 
         sales.push(...rows);
-        const total = numberFromUnknown(payload.total ?? payload.recordsTotal);
-        hasMore = total > page * pageSize && rows.length > 0;
+        hasMore = totalValue != null
+          ? total > page * pageSize && rawRows.length > 0
+          : rawRows.length === pageSize;
         page += 1;
       }
 

@@ -58,6 +58,31 @@ interface CustomCommissionRow {
 }
 
 type CustomPresetKey = 'monster' | 'coffee' | 'water';
+type ProductSalesMatchMode = 'product_name' | 'completed';
+
+interface ProductSalesImportResponse {
+  success?: boolean;
+  range?: { startDate: string; endDate: string };
+  groups?: { keyword: string; matchMode?: string; units: number; amount: number; products?: string[] }[];
+  matchedMachineIds?: number[];
+  debug?: {
+    selectedMachines?: unknown[];
+    revenueMachineCandidates?: unknown[];
+    salesAttempt?: string;
+    salesCount?: number;
+    sampleSales?: unknown[];
+    rawActivityResponses?: unknown[];
+    uniqueProductNames?: string[];
+  };
+  error?: string;
+}
+
+interface ProductSalesDebugSnapshot extends ProductSalesImportResponse {
+  preset: string;
+  keyword: string;
+  requestedMachineId: string;
+  requestedAt: string;
+}
 
 const company = {
   name: 'LIFY VENDING, S.L.',
@@ -363,6 +388,7 @@ export default function RevenueDocumentationPage() {
     water: '0.50',
   });
   const [bottleSalePrice, setBottleSalePrice] = useState('1.20');
+  const [lastProductSalesDebug, setLastProductSalesDebug] = useState<ProductSalesDebugSnapshot | null>(null);
 
   async function loadRevenue(showToast = false) {
     try {
@@ -505,11 +531,12 @@ export default function RevenueDocumentationPage() {
 
   async function addPresetCustomRow(preset: CustomPresetKey) {
     const config = {
-      monster: { label: 'Comisión Monster', keyword: 'MONSTER' },
-      coffee: { label: 'Comisión Cafetera', keyword: 'CAFE' },
-      water: { label: 'Botellas de agua', keyword: 'LANJARON' },
+      monster: { label: 'Comisión Monster', keyword: 'MONSTER', matchMode: 'product_name' as ProductSalesMatchMode },
+      coffee: { label: 'Comisión Cafetera', keyword: 'CAFE', matchMode: 'completed' as ProductSalesMatchMode },
+      water: { label: 'Botellas de agua', keyword: 'LANJARON', matchMode: 'product_name' as ProductSalesMatchMode },
     }[preset];
     const machineId = presetMachineIds[preset];
+    const selectedPresetMachine = machines.find((machine) => machine.id === machineId);
     const unitCommission = parseNumberValue(presetUnitCommissions[preset]);
 
     if (!machineId) {
@@ -534,10 +561,19 @@ export default function RevenueDocumentationPage() {
         },
         body: JSON.stringify({
           machineIds: [machineId],
+          machineNames: selectedPresetMachine?.name ? [selectedPresetMachine.name] : [],
           keywords: [config.keyword],
+          matchModes: [config.matchMode],
         }),
       });
-      const payload = await response.json() as { groups?: { keyword: string; units: number; amount: number }[]; error?: string };
+      const payload = await response.json() as ProductSalesImportResponse;
+      setLastProductSalesDebug({
+        ...payload,
+        preset: config.label,
+        keyword: config.keyword,
+        requestedMachineId: machineId,
+        requestedAt: new Date().toISOString(),
+      });
       if (!response.ok) throw new Error(payload.error || 'No se pudieron importar ventas por producto');
 
       const group = payload.groups?.[0];
@@ -548,9 +584,29 @@ export default function RevenueDocumentationPage() {
         commission: formatCurrency(unitCommission),
         amount: String(round2(units * unitCommission)),
       });
-      toast.success('Fila importada', { description: `${units} ventas encontradas para ${config.keyword}.` });
+      const salesCount = payload.debug?.salesCount ?? 0;
+      if (units === 0 && salesCount > 0) {
+        toast.warning('Sin coincidencias exactas', {
+          description: config.matchMode === 'completed'
+            ? `Se leyeron ${salesCount} ventas completadas, pero el resultado fue 0. Revisa el diagnóstico.`
+            : `Se leyeron ${salesCount} ventas, pero ninguna contiene ${config.keyword}. Revisa el diagnóstico.`,
+        });
+      } else {
+        toast.success('Fila importada', {
+          description: `${units} coincidencias para ${config.keyword}. Ventas leídas: ${salesCount}.`,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudieron importar ventas';
+      setLastProductSalesDebug((current) => ({
+        ...(current || {
+          preset: config.label,
+          keyword: config.keyword,
+          requestedMachineId: machineId,
+          requestedAt: new Date().toISOString(),
+        }),
+        error: message,
+      }));
       toast.error('Error importando productos', { description: message });
     } finally {
       setLoadingProductRows(false);
@@ -950,6 +1006,39 @@ export default function RevenueDocumentationPage() {
                         Aplicar beneficio
                       </Button>
                     </div>
+
+                    {lastProductSalesDebug && (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-left">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-black uppercase text-amber-700">Diagnóstico última búsqueda</p>
+                            <p className="mt-1 text-sm font-bold text-zinc-900">
+                              {lastProductSalesDebug.preset} · palabra buscada: {lastProductSalesDebug.keyword}
+                            </p>
+                          </div>
+                          <Badge className="rounded-full bg-white text-zinc-800">
+                            {lastProductSalesDebug.debug?.salesCount ?? 0} ventas leídas
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs font-bold text-zinc-700 sm:grid-cols-3">
+                          <div className="rounded-xl bg-white p-2">
+                            <span className="block text-[10px] uppercase text-zinc-500">IDs emparejados</span>
+                            {(lastProductSalesDebug.matchedMachineIds || []).join(', ') || 'Ninguno'}
+                          </div>
+                          <div className="rounded-xl bg-white p-2">
+                            <span className="block text-[10px] uppercase text-zinc-500">Modo de fecha</span>
+                            {lastProductSalesDebug.debug?.salesAttempt || 'Sin datos'}
+                          </div>
+                          <div className="rounded-xl bg-white p-2">
+                            <span className="block text-[10px] uppercase text-zinc-500">Coincidencias</span>
+                            {(lastProductSalesDebug.groups || []).map((group) => `${group.keyword}: ${group.units}`).join(' · ') || '0'}
+                          </div>
+                        </div>
+                        <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-2xl bg-zinc-950 p-3 text-[11px] leading-relaxed text-zinc-100">
+                          {JSON.stringify(lastProductSalesDebug, null, 2)}
+                        </pre>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -2025,14 +2114,28 @@ function CompleteRevenueDocumentation({
       </aside>
 
       <Dialog open={priceEditorOpen} onOpenChange={setPriceEditorOpen}>
-        <DialogContent className="max-h-[86dvh] max-w-5xl overflow-hidden rounded-2xl p-0">
-          <DialogHeader className="border-b border-zinc-100 p-5">
+        <DialogContent className="!flex h-[92dvh] max-h-[92dvh] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-6xl lg:left-auto lg:right-4 lg:top-4 lg:h-[calc(100dvh-2rem)] lg:max-h-none lg:w-[56rem] lg:translate-x-0 lg:translate-y-0">
+          <DialogHeader className="shrink-0 border-b border-zinc-100 p-5 pr-12">
             <DialogTitle className="text-2xl font-black text-zinc-900">Editor de precios</DialogTitle>
             <DialogDescription>
               Edita el catálogo interno usado para calcular la recaudación completa.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 overflow-y-auto p-5">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="shrink-0 border-b border-zinc-100 bg-white p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <Input
+                  value={priceSearch}
+                  onChange={(event) => setPriceSearch(event.target.value)}
+                  placeholder="Buscar producto..."
+                  className="h-12 rounded-xl font-semibold"
+                />
+                <Button type="button" onClick={applyCatalogToImportedRows} className="h-12 rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700">
+                  Aplicar precios
+                </Button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-5">
             {missingPriceRows.length > 0 && (
               <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
                 <p className="font-black text-red-800">Productos sin precio detectados</p>
@@ -2045,18 +2148,6 @@ function CompleteRevenueDocumentation({
                 </div>
               </div>
             )}
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <Input
-                value={priceSearch}
-                onChange={(event) => setPriceSearch(event.target.value)}
-                placeholder="Buscar producto..."
-                className="h-12 rounded-xl font-semibold"
-              />
-              <Button type="button" onClick={applyCatalogToImportedRows} className="h-12 rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700">
-                Aplicar precios
-              </Button>
-            </div>
 
             <div className="space-y-2">
               {filteredCatalogEntries.map(([key, price]) => (
@@ -2088,6 +2179,7 @@ function CompleteRevenueDocumentation({
                   </div>
                 </div>
               ))}
+            </div>
             </div>
           </div>
         </DialogContent>
