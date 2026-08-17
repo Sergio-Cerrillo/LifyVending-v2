@@ -123,10 +123,15 @@ export default function LoginPage() {
       } else if (profile.role === 'operador') {
         toast.success('Bienvenido, operador');
         router.push('/admin/inicio'); // Operadores van a página de inicio
+      } else if (profile.role === 'reponedor') {
+        toast.success('Bienvenido, reponedor');
+        router.push('/admin/gestion-rutas');
       } else {
         if (process.env.NODE_ENV === 'development') {
           console.log('[LOGIN] Rol no válido:', profile.role);
         }
+        const msg = 'Rol no autorizado';
+        setErrorMessage(msg);
         toast.error(msg, {
           description: 'Contacta al administrador para resolver este problema',
           duration: 4000

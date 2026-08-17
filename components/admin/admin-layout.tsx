@@ -19,6 +19,7 @@ import {
   FileText,
   BarChart3,
   Home,
+  Route,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -52,10 +53,16 @@ const navItems: NavItem[] = [
     roles: ['admin'],
   },
   {
-    title: 'Gestión de Clientes',
+    title: 'Gestión de Usuarios',
     href: '/admin/clients-management',
     icon: <Users className="h-5 w-5" />,
     roles: ['admin'],
+  },
+  {
+    title: 'Gestión de Rutas',
+    href: '/admin/gestion-rutas',
+    icon: <Route className="h-5 w-5" />,
+    roles: ['admin', 'reponedor'],
   },
   {
     title: 'Stock',

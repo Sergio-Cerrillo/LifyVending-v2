@@ -1,5 +1,5 @@
 /**
- * API: Eliminar cliente
+ * API: Eliminar usuario
  * DELETE /api/admin/users/[id]
  */
 
@@ -45,7 +45,7 @@ export async function DELETE(
     const userId = resolvedParams.id;
     console.log('[DELETE-API] Admin verificado, procediendo con userId:', userId);
 
-    // Verificar que el usuario a eliminar existe y es un cliente
+    // Verificar que el usuario a eliminar existe
     const { data: targetProfile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('role, email')
@@ -84,7 +84,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: 'Cliente eliminado correctamente'
+      message: 'Usuario eliminado correctamente'
     });
 
   } catch (error: any) {

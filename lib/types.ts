@@ -1,6 +1,6 @@
 // ==================== TIPOS BASE ====================
 
-export type UserRole = 'admin' | 'gestor' | 'operador';
+export type UserRole = 'admin' | 'client' | 'gestor' | 'operador' | 'reponedor';
 
 export interface User {
   id: string;
@@ -266,4 +266,3 @@ export interface DashboardData {
   };
   scrapedAt: Date;
 }
-

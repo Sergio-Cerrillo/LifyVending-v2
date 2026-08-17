@@ -47,7 +47,7 @@ export type MachineRevenueSnapshot = Database['public']['Tables']['machine_reven
 export type ClientMachineAssignment = Database['public']['Tables']['client_machine_assignments']['Row'];
 export type ScrapeRun = Database['public']['Tables']['scrape_runs']['Row'];
 
-export type UserRole = 'admin' | 'client';
+export type UserRole = 'admin' | 'client' | 'operador' | 'reponedor';
 export type RevenuePeriod = 'daily' | 'weekly' | 'monthly';
 export type ScrapeStatus = 'pending' | 'running' | 'completed' | 'error';
 
