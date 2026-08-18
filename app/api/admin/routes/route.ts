@@ -40,6 +40,15 @@ function getProvider(machine: any) {
   return machine?.televend_machine_id ? 'televend' : 'frekuent';
 }
 
+function getExternalMachineId(machine: any) {
+  const provider = getProvider(machine);
+  const rawId = provider === 'televend'
+    ? machine?.televend_machine_id
+    : machine?.frekuent_machine_id || machine?.orain_machine_id;
+  const id = Number(rawId);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 function getFillRate(stock?: any) {
   const capacity = Number(stock?.total_capacity || 0);
   const available = Number(stock?.total_available || 0);
@@ -63,6 +72,7 @@ function normalizeMachine(machine: any, stock?: any) {
     name: machine.name || stock?.machine_name || 'Máquina',
     location: machine.location || stock?.machine_location || null,
     provider: getProvider(machine),
+    externalMachineId: getExternalMachineId(machine),
     fillRate,
     urgency: getUrgency(fillRate, stock),
     totalToReplenish: Number(stock?.total_to_replenish || 0),
@@ -82,7 +92,7 @@ async function loadStockByMachine(machineIds?: string[]) {
   const { data, error } = await query;
   if (error) throw new Error(`No se pudo cargar stock: ${error.message}`);
 
-  return (data || []).reduce((map, row: any) => {
+  return (data || []).reduce((map: Map<string, any>, row: any) => {
     map.set(row.machine_id, row);
     return map;
   }, new Map<string, any>());
@@ -251,14 +261,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const name = String(body.name || '').trim();
     const scheduledDate = String(body.scheduledDate || '').trim();
+    const name = String(body.name || '').trim() || `Ruta (${scheduledDate})`;
     const replenisherId = String(body.replenisherId || '').trim();
     const machineIds = Array.isArray(body.machineIds) ? body.machineIds.map(String).filter(Boolean) : [];
     const notes = body.notes ? String(body.notes).trim() : null;
 
-    if (!name || !scheduledDate || !replenisherId || machineIds.length === 0) {
-      return NextResponse.json({ error: 'Nombre, fecha, reponedor y máquinas son obligatorios' }, { status: 400 });
+    if (!scheduledDate || !replenisherId || machineIds.length === 0) {
+      return NextResponse.json({ error: 'Fecha, reponedor y máquinas son obligatorios' }, { status: 400 });
     }
 
     const { data: replenisher, error: replenisherError } = await supabaseAdmin
@@ -287,7 +297,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`No se pudo crear la ruta: ${routeError.message}`);
     }
 
-    const rows = machineIds.map((machineId, index) => ({
+    const rows = machineIds.map((machineId: string, index: number) => ({
       route_id: route.id,
       machine_id: machineId,
       position: index + 1,

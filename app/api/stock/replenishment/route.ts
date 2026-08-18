@@ -41,7 +41,7 @@ async function requireStockUser(request: NextRequest) {
     return { error: 'Error obteniendo perfil', status: 500 as const };
   }
 
-  if (!['admin', 'operador'].includes(profile.role)) {
+  if (!['admin', 'operador', 'reponedor'].includes(profile.role)) {
     return { error: 'Permisos insuficientes', status: 403 as const };
   }
 

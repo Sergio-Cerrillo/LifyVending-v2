@@ -68,7 +68,7 @@ const navItems: NavItem[] = [
     title: 'Stock',
     href: '/admin/stock',
     icon: <PackageSearch className="h-5 w-5" />,
-    roles: ['admin', 'operador'],
+    roles: ['admin', 'operador', 'reponedor'],
   },
   {
     title: 'Preparación Reparto',

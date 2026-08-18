@@ -105,6 +105,7 @@ interface StockLiveResponse {
 
 type TabKey = 'all' | 'empty' | 'critical' | 'normal' | 'ok';
 type TelemetryProvider = 'frekuent' | 'televend';
+type TelemetryFilter = 'all' | TelemetryProvider;
 type ReplenishmentAction = 'full-refill';
 
 interface PendingReplenishmentAction {
@@ -175,10 +176,34 @@ function mobileTabClassName(tab: TabKey) {
   return activeClassNames[tab];
 }
 
-const telemetryProviders: Array<{ key: TelemetryProvider; label: string; description: string }> = [
+const telemetryProviders: Array<{ key: TelemetryFilter; label: string; description: string }> = [
+  { key: 'all', label: 'Todas', description: 'Vista conjunta' },
   { key: 'frekuent', label: 'Frekuent', description: 'Telemetría activa' },
   { key: 'televend', label: 'Televend', description: 'Telemetría activa' },
 ];
+
+function getInitialStockRouteTarget(): {
+  provider: TelemetryProvider | undefined;
+  machineId: number | null;
+  open: string | null;
+} {
+  if (typeof window === 'undefined') {
+    return { provider: undefined as TelemetryProvider | undefined, machineId: null as number | null, open: null as string | null };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const providerParam = params.get('provider');
+  const provider: TelemetryProvider | undefined = providerParam === 'televend' || providerParam === 'frekuent'
+    ? providerParam as TelemetryProvider
+    : undefined;
+  const machineId = Number(params.get('machineId'));
+
+  return {
+    provider,
+    machineId: Number.isInteger(machineId) && machineId > 0 ? machineId : null,
+    open: params.get('open'),
+  };
+}
 
 function getErrorMessage(status: number, fallback: string) {
   if (status === 401) return 'La sesión con el proveedor ha caducado o tu sesión de usuario no es válida.';
@@ -209,6 +234,15 @@ function formatPrice(value: number | null | undefined) {
 
 function machineSubtitle(machine: StockMachine) {
   return [machine.location, machine.clientName, machine.machineNumber].filter(Boolean).join(' · ');
+}
+
+function providerLabel(provider: TelemetryFilter | TelemetryProvider | undefined) {
+  if (provider === 'all') return 'Todas';
+  return provider === 'televend' ? 'Televend' : 'Frekuent';
+}
+
+function machineProvider(machine: StockMachine, fallback: TelemetryFilter): TelemetryProvider {
+  return machine.source || (fallback === 'televend' ? 'televend' : 'frekuent');
 }
 
 function urgencyMeta(urgency: StockMachine['urgency']) {
@@ -425,7 +459,9 @@ function createRailEditRows(machine: StockMachine): RailEditRow[] {
 }
 
 export function StockLivePage() {
-  const [telemetryProvider, setTelemetryProvider] = useState<TelemetryProvider>('frekuent');
+  const [routeOpenTarget] = useState(getInitialStockRouteTarget);
+  const [routeOpenHandled, setRouteOpenHandled] = useState(false);
+  const [telemetryProvider, setTelemetryProvider] = useState<TelemetryFilter>(routeOpenTarget.provider || 'all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<StockLiveResponse | null>(null);
@@ -517,6 +553,42 @@ export function StockLivePage() {
         throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
       }
 
+      if (telemetryProvider === 'all') {
+        const [frekuentResponse, televendResponse] = await Promise.all([
+          fetchWithTimeout('/api/stock?provider=frekuent', {
+            headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          }, 40_000),
+          fetchWithTimeout('/api/stock?provider=televend', {
+            headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          }, 40_000),
+        ]);
+
+        const [frekuentPayload, televendPayload] = await Promise.all([
+          frekuentResponse.json().catch(() => ({})),
+          televendResponse.json().catch(() => ({})),
+        ]);
+
+        if (!frekuentResponse.ok) {
+          throw new Error(getErrorMessage(frekuentResponse.status, frekuentPayload.error));
+        }
+        if (!televendResponse.ok) {
+          throw new Error(getErrorMessage(televendResponse.status, televendPayload.error));
+        }
+
+        const stockMachines = [
+          ...(frekuentPayload.stockMachines || []).map((machine: StockMachine) => ({ ...machine, source: 'frekuent' as TelemetryProvider })),
+          ...(televendPayload.stockMachines || []).map((machine: StockMachine) => ({ ...machine, source: 'televend' as TelemetryProvider })),
+        ];
+
+        setData({
+          success: true,
+          requestedAt: new Date().toISOString(),
+          selectedMachineIds: [],
+          stockMachines,
+        });
+        return true;
+      }
+
       const response = await fetchWithTimeout(`/api/stock?provider=${telemetryProvider}`, {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
@@ -528,10 +600,16 @@ export function StockLivePage() {
         throw new Error(getErrorMessage(response.status, payload.error));
       }
 
-      setData(payload);
+      setData({
+        ...payload,
+        stockMachines: (payload.stockMachines || []).map((machine: StockMachine) => ({
+          ...machine,
+          source: telemetryProvider,
+        })),
+      });
       return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : `Error desconocido consultando ${telemetryProvider === 'televend' ? 'Televend' : 'Frekuent'}`;
+      const message = err instanceof Error ? err.message : 'Error desconocido consultando stock';
       setError(message);
       toast.error('Error consultando Stock', { description: message });
       return false;
@@ -550,7 +628,7 @@ export function StockLivePage() {
 
   function changeTelemetryProvider(value: string) {
     if (!value) return;
-    const nextProvider = value as TelemetryProvider;
+    const nextProvider = value as TelemetryFilter;
     if (nextProvider === telemetryProvider) return;
     setLoading(true);
     setData(null);
@@ -650,6 +728,47 @@ export function StockLivePage() {
 
     setQuantityEditor({ machine, rows });
   }
+
+  useEffect(() => {
+    if (
+      routeOpenHandled
+      || loading
+      || routeOpenTarget.open !== 'rails'
+      || !routeOpenTarget.machineId
+    ) {
+      return;
+    }
+
+    if (routeOpenTarget.provider && telemetryProvider !== 'all' && routeOpenTarget.provider !== telemetryProvider) {
+      return;
+    }
+
+    if (!data) return;
+
+    const machine = machines.find((item) => item.machineId === routeOpenTarget.machineId);
+    setRouteOpenHandled(true);
+
+    if (!machine) {
+      toast.error('No se pudo abrir el editor', {
+        description: 'La máquina no aparece en la respuesta de stock actual.',
+      });
+      return;
+    }
+
+    setExpandedMachineIds((current) => {
+      const next = new Set(current);
+      next.add(machine.machineId);
+      return next;
+    });
+
+    if ((machine.source || telemetryProvider) === 'televend') {
+      openQuantityEditor(machine);
+      return;
+    }
+
+    openRailEditor(machine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, loading, routeOpenHandled, routeOpenTarget, telemetryProvider]);
 
   function updateQuantityRow(key: string, quantity: string) {
     setQuantityEditor((current) => {
@@ -907,7 +1026,8 @@ export function StockLivePage() {
     if (!pendingReplenishmentAction) return;
 
     const { action, machine } = pendingReplenishmentAction;
-    const providerLabel = telemetryProvider === 'televend' ? 'Televend' : 'Frekuent';
+    const actionProvider = machine.source || (telemetryProvider === 'televend' ? 'televend' : 'frekuent');
+    const providerLabel = actionProvider === 'televend' ? 'Televend' : 'Frekuent';
 
     const toastId = toast.loading(`Enviando reposición a ${providerLabel}...`, {
       description: `${machine.label} · marcando llenado completo`,
@@ -932,7 +1052,7 @@ export function StockLivePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: telemetryProvider,
+          provider: actionProvider,
           action: 'full-refill',
           machineId: machine.machineId,
         }),
@@ -989,16 +1109,18 @@ export function StockLivePage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="break-words text-xl font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">
-                    Stock {telemetryProvider === 'frekuent' ? 'Frekuent' : 'Televend'}
+                    Stock {providerLabel(telemetryProvider)}
                   </h1>
                   <Badge
                     className={
                       telemetryProvider === 'frekuent'
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-red-200 bg-red-50 text-red-700'
+                        : telemetryProvider === 'televend'
+                          ? 'border-red-200 bg-red-50 text-red-700'
+                          : 'border-zinc-200 bg-zinc-50 text-zinc-700'
                     }
                   >
-                    Conectado
+                    {telemetryProvider === 'all' ? 'Vista conjunta' : 'Conectado'}
                   </Badge>
                 </div>
                 <p className="break-words text-sm font-semibold text-zinc-700">
@@ -1021,7 +1143,7 @@ export function StockLivePage() {
                 type="single"
                 value={telemetryProvider}
                 onValueChange={changeTelemetryProvider}
-                className="grid w-full grid-cols-2 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm"
+                className="grid w-full grid-cols-3 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm"
               >
                 {telemetryProviders.map((provider) => (
                   <ToggleGroupItem
@@ -1037,25 +1159,18 @@ export function StockLivePage() {
               </ToggleGroup>
             </div>
 
-            {telemetryProvider === 'frekuent' ? (
-              <Button
-                onClick={loadStock}
-                disabled={refreshing}
-                className="h-12 w-full max-w-full rounded-xl bg-emerald-600 px-4 text-base font-bold text-white hover:bg-emerald-700"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
-                <span className="truncate">Actualizar stock</span>
-              </Button>
-            ) : (
-              <Button
-                onClick={loadStock}
-                disabled={refreshing}
-                className="h-12 w-full max-w-full rounded-xl bg-red-600 px-4 text-base font-bold text-white hover:bg-red-700"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
-                <span className="truncate">Actualizar stock</span>
-              </Button>
-            )}
+            <Button
+              onClick={loadStock}
+              disabled={refreshing}
+              className={`h-12 w-full max-w-full rounded-xl px-4 text-base font-bold text-white ${
+                telemetryProvider === 'televend'
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+              <span className="truncate">Actualizar stock</span>
+            </Button>
           </div>
         </div>
       </div>
@@ -1251,7 +1366,7 @@ export function StockLivePage() {
                                 {machine.label}
 	                              </h3>
 	                              <p className="mt-1 break-words text-sm font-semibold leading-snug text-zinc-600">
-	                                {subtitle || `ID ${telemetryProvider === 'televend' ? 'Televend' : 'Frekuent'}: ${machine.machineId}`}
+	                                {subtitle || `ID ${providerLabel(machineProvider(machine, telemetryProvider))}: ${machine.machineId}`}
 	                              </p>
                               <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-zinc-500">
                                 <span className="break-all">ID {machine.machineId}</span>
@@ -1319,7 +1434,7 @@ export function StockLivePage() {
 	                            <DropdownMenuItem
 	                              className="min-h-12 cursor-pointer rounded-lg px-3 py-3 text-sm font-bold"
 	                              onSelect={() => {
-	                                if (telemetryProvider === 'televend') {
+	                                if (machineProvider(machine, telemetryProvider) === 'televend') {
 	                                  openQuantityEditor(machine);
 	                                  return;
 	                                }
@@ -1327,7 +1442,7 @@ export function StockLivePage() {
 	                              }}
 	                            >
 	                              <SlidersHorizontal className="h-4 w-4 text-zinc-700" />
-	                              <span className="min-w-0 flex-1">{telemetryProvider === 'televend' ? 'Editar columnas' : 'Editar raíles'}</span>
+	                              <span className="min-w-0 flex-1">{machineProvider(machine, telemetryProvider) === 'televend' ? 'Editar columnas' : 'Editar raíles'}</span>
 	                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -1394,7 +1509,7 @@ export function StockLivePage() {
                                               {product.productName}
                                             </p>
                                             <p className="mt-1 break-words text-sm font-semibold text-zinc-500">
-	                                              {telemetryProvider === 'televend' ? 'Col.' : 'Raíl'} {product.line || '-'}{product.mdbCode ? ` · MDB ${product.mdbCode}` : ''} · mínimo {product.min}
+	                                              {machineProvider(machine, telemetryProvider) === 'televend' ? 'Col.' : 'Raíl'} {product.line || '-'}{product.mdbCode ? ` · MDB ${product.mdbCode}` : ''} · mínimo {product.min}
                                             </p>
                                           </div>
                                           <Badge className={`w-fit shrink-0 ${status.className}`}>{status.label}</Badge>
@@ -1901,7 +2016,7 @@ export function StockLivePage() {
                   Máquina: <span className="font-black text-zinc-900">{pendingReplenishmentAction?.machine.label}</span>
                 </p>
                 <p>
-                  Esta acción marcará la máquina como rellenada en {telemetryProvider === 'televend' ? 'Televend' : 'Frekuent'}.
+                  Esta acción marcará la máquina como rellenada en {pendingReplenishmentAction ? providerLabel(machineProvider(pendingReplenishmentAction.machine, telemetryProvider)) : providerLabel(telemetryProvider)}.
                   Úsala solo después de haber repuesto físicamente la máquina.
                 </p>
               </div>
