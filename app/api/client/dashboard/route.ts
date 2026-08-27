@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
 
     // Calcular la fecha de última actualización más reciente de las máquinas del cliente
     const allUpdateDates = machines
-      .flatMap((m: any) => [m.daily_updated_at, m.monthly_updated_at, m.last_scraped])
+      .flatMap((m: any) => [m.daily_updated_at, m.weekly_updated_at, m.monthly_updated_at, m.last_scraped_at])
       .filter(Boolean)
       .map((date: string) => new Date(date).getTime());
     

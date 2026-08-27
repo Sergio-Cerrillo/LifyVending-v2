@@ -21,8 +21,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase-helpers';
-import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
+import { fetchWithTimeout } from '@/lib/client-timeouts';
+import { getFreshAccessToken } from '@/lib/auth-session';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -544,22 +544,15 @@ export function StockLivePage() {
       if (!data) setLoading(true);
       setRefreshing(true);
 
-      const { data: sessionData } = await withTimeout(
-        supabase.auth.getSession(),
-        10_000,
-        'No se pudo validar la sesión',
-      );
-      if (!sessionData.session) {
-        throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
-      }
+      const accessToken = await getFreshAccessToken();
 
       if (telemetryProvider === 'all') {
         const [frekuentResponse, televendResponse] = await Promise.all([
           fetchWithTimeout('/api/stock?provider=frekuent', {
-            headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+            headers: { Authorization: `Bearer ${accessToken}` },
           }, 40_000),
           fetchWithTimeout('/api/stock?provider=televend', {
-            headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+            headers: { Authorization: `Bearer ${accessToken}` },
           }, 40_000),
         ]);
 
@@ -591,7 +584,7 @@ export function StockLivePage() {
 
       const response = await fetchWithTimeout(`/api/stock?provider=${telemetryProvider}`, {
         headers: {
-          Authorization: `Bearer ${sessionData.session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       }, 40_000);
 
@@ -656,16 +649,7 @@ export function StockLivePage() {
   }
 
   async function getSessionAccessToken() {
-    const { data: sessionData } = await withTimeout(
-      supabase.auth.getSession(),
-      10_000,
-      'No se pudo validar la sesión',
-    );
-    if (!sessionData.session) {
-      throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
-    }
-
-    return sessionData.session.access_token;
+    return getFreshAccessToken();
   }
 
   async function loadProductOptions() {
@@ -1036,19 +1020,12 @@ export function StockLivePage() {
     try {
       setRunningReplenishmentAction(true);
 
-      const { data: sessionData } = await withTimeout(
-        supabase.auth.getSession(),
-        10_000,
-        'No se pudo validar la sesión',
-      );
-      if (!sessionData.session) {
-        throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
-      }
+      const accessToken = await getFreshAccessToken();
 
       const response = await fetchWithTimeout('/api/stock/replenishment', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${sessionData.session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

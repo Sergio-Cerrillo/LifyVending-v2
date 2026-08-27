@@ -13,7 +13,7 @@ import { generateFrekuentId, generateTelevendId } from '@/lib/machine-id-utils';
 
 const FRESHNESS_MINUTES = Number(process.env.REVENUE_REFRESH_FRESHNESS_MINUTES || 30);
 
-type RevenuePeriodKind = 'daily' | 'monthly';
+type RevenuePeriodKind = 'daily' | 'weekly' | 'monthly';
 
 interface SavedMachineRevenue {
   machineDbId: string;
@@ -156,6 +156,22 @@ function currentMadridMonthRange(now = new Date()) {
   };
 }
 
+function currentMadridWeekRange(now = new Date()) {
+  const { year, month, day } = madridParts(now);
+  const madridNoon = new Date(madridLocalToUtcIso({ year, month, day, hour: 12 }));
+
+  // Intl no da un número de día de semana. Usamos UTC sobre una fecha construida a mediodía
+  // para evitar saltos raros de zona horaria; lunes es inicio operativo.
+  const utcDay = madridNoon.getUTCDay();
+  const daysFromMonday = utcDay === 0 ? 6 : utcDay - 1;
+  const monday = new Date(madridNoon.getTime() - daysFromMonday * 24 * 60 * 60 * 1000);
+
+  return {
+    startDate: formatDateForFrekuent(monday, 'Europe/Madrid'),
+    endDate: formatDateForFrekuent(now, 'Europe/Madrid'),
+  };
+}
+
 function madridParts(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Madrid',
@@ -214,6 +230,20 @@ function currentTelevendMadridMonthRange(now = new Date()) {
   const { year, month } = madridParts(now);
   return {
     fromTimestamp: madridLocalToUtcIso({ year, month, day: 1, hour: 0 }),
+    toTimestamp: now.toISOString(),
+  };
+}
+
+function currentTelevendMadridWeekRange(now = new Date()) {
+  const { year, month, day } = madridParts(now);
+  const madridNoon = new Date(madridLocalToUtcIso({ year, month, day, hour: 12 }));
+  const utcDay = madridNoon.getUTCDay();
+  const daysFromMonday = utcDay === 0 ? 6 : utcDay - 1;
+  const monday = new Date(madridNoon.getTime() - daysFromMonday * 24 * 60 * 60 * 1000);
+  const mondayParts = madridParts(monday);
+
+  return {
+    fromTimestamp: madridLocalToUtcIso({ ...mondayParts, hour: 0 }),
     toTimestamp: now.toISOString(),
   };
 }
@@ -288,9 +318,33 @@ async function loadExistingFrekuentMachines() {
     if (machine.frekuent_machine_id) byExternalId.set(String(machine.frekuent_machine_id), machine.id);
     if (machine.orain_machine_id) byExternalId.set(String(machine.orain_machine_id), machine.id);
     if (machine.name) byNormalizedName.set(generateFrekuentId(machine.name), machine.id);
+
+    const serialMatch = String(machine.frekuent_machine_id || machine.name || '').match(/id[_:\s-]*(\d{4,})$/i);
+    if (serialMatch?.[1]) byExternalId.set(`serial:${serialMatch[1]}`, machine.id);
   }
 
   return { byExternalId, byNormalizedName };
+}
+
+function frekuentExternalCandidates(revenue: FrekuentRevenueMachine) {
+  const machineId = String(revenue.machineId);
+  const normalizedId = generateFrekuentId(revenue.machineName);
+  const candidates = [machineId, normalizedId];
+
+  if (revenue.machineNumber) candidates.push(generateFrekuentId(revenue.machineNumber));
+  if (revenue.serialNumber) {
+    candidates.push(String(revenue.serialNumber));
+    candidates.push(`serial:${revenue.serialNumber}`);
+  }
+
+  const sourceForNumber = `${revenue.machineName} ${revenue.machineNumber || ''}`;
+  const machineNumberMatch = sourceForNumber.match(/(?:^|\s)(\d{4})(?:\D*$|\s)/);
+  if (machineNumberMatch?.[1] && revenue.serialNumber) {
+    candidates.push(generateFrekuentId(`STP ${machineNumberMatch[1]}ID: ${revenue.serialNumber}`));
+    candidates.push(generateFrekuentId(`${machineNumberMatch[1]}ID: ${revenue.serialNumber}`));
+  }
+
+  return Array.from(new Set(candidates.filter(Boolean)));
 }
 
 async function loadExistingTelevendMachines() {
@@ -326,13 +380,14 @@ async function saveFrekuentRevenue(
 	  const rows = revenues.map((revenue) => {
 	    const numericId = String(revenue.machineId);
 	    const normalizedId = generateFrekuentId(revenue.machineName);
-	    const machineDbId = existing.byExternalId.get(numericId)
-	      || existing.byExternalId.get(normalizedId)
+      const externalCandidates = frekuentExternalCandidates(revenue);
+	    const machineDbId = externalCandidates.map((candidate) => existing.byExternalId.get(candidate)).find(Boolean)
 	      || existing.byNormalizedName.get(normalizedId)
 	      || crypto.randomUUID();
 
-	    existing.byExternalId.set(numericId, machineDbId);
-	    existing.byExternalId.set(normalizedId, machineDbId);
+      for (const candidate of externalCandidates) {
+        existing.byExternalId.set(candidate, machineDbId);
+      }
 	    existing.byNormalizedName.set(normalizedId, machineDbId);
 
     saved.push({
@@ -358,6 +413,11 @@ async function saveFrekuentRevenue(
       row.daily_card = revenue.totalCard;
       row.daily_cash = revenue.totalCash;
       row.daily_updated_at = scrapedAt;
+    } else if (period === 'weekly') {
+      row.weekly_total = revenue.totalMoney;
+      row.weekly_card = revenue.totalCard;
+      row.weekly_cash = revenue.totalCash;
+      row.weekly_updated_at = scrapedAt;
     } else {
       row.monthly_total = revenue.totalMoney;
       row.monthly_card = revenue.totalCard;
@@ -425,6 +485,11 @@ async function saveTelevendRevenue(
       row.daily_card = revenue.totalCard;
       row.daily_cash = revenue.totalCash;
       row.daily_updated_at = scrapedAt;
+    } else if (period === 'weekly') {
+      row.weekly_total = revenue.totalRevenue;
+      row.weekly_card = revenue.totalCard;
+      row.weekly_cash = revenue.totalCash;
+      row.weekly_updated_at = scrapedAt;
     } else {
       row.monthly_total = revenue.totalRevenue;
       row.monthly_card = revenue.totalCard;
@@ -457,8 +522,8 @@ async function mapFrekuentRevenueToExistingMachines(
     .map((revenue) => {
       const numericId = String(revenue.machineId);
       const normalizedId = generateFrekuentId(revenue.machineName);
-      const machineDbId = existing.byExternalId.get(numericId)
-        || existing.byExternalId.get(normalizedId)
+      const externalCandidates = frekuentExternalCandidates(revenue);
+      const machineDbId = externalCandidates.map((candidate) => existing.byExternalId.get(candidate)).find(Boolean)
         || existing.byNormalizedName.get(normalizedId);
 
       if (!machineDbId) return null;
@@ -561,14 +626,17 @@ async function insertHistoricalVisibleAmount(payload: {
 export async function refreshFrekuentRevenueNow() {
   const scrapedAt = new Date().toISOString();
   const todayRange = getMadridTodayRange();
+  const weekRange = currentMadridWeekRange();
   const monthRange = currentMadridMonthRange();
 
-  const [daily, monthly] = await Promise.all([
+  const [daily, weekly, monthly] = await Promise.all([
     getFrekuentRevenueMachines({ ...todayRange, datesLogic: 'today' }),
+    getFrekuentRevenueMachines({ ...weekRange, datesLogic: 'custom' }),
     getFrekuentRevenueMachines({ ...monthRange, datesLogic: 'current_month' }),
   ]);
 
   const dailySaved = await saveFrekuentRevenue(daily, 'daily', scrapedAt);
+  const weeklySaved = await saveFrekuentRevenue(weekly, 'weekly', scrapedAt);
   const monthlySaved = await saveFrekuentRevenue(monthly, 'monthly', scrapedAt);
 
   return {
@@ -577,6 +645,10 @@ export async function refreshFrekuentRevenueNow() {
     daily: {
       machines: dailySaved.length,
       total: round2(daily.reduce((sum, item) => sum + item.totalMoney, 0)),
+    },
+    weekly: {
+      machines: weeklySaved.length,
+      total: round2(weekly.reduce((sum, item) => sum + item.totalMoney, 0)),
     },
     monthly: {
       machines: monthlySaved.length,
@@ -623,14 +695,17 @@ export async function refreshFrekuentRevenueIfStale() {
 export async function refreshTelevendRevenueNow() {
   const scrapedAt = new Date().toISOString();
   const todayRange = getTelevendMadridTodayRange();
+  const weekRange = currentTelevendMadridWeekRange();
   const monthRange = currentTelevendMadridMonthRange();
 
-  const [daily, monthly] = await Promise.all([
+  const [daily, weekly, monthly] = await Promise.all([
     getTelevendRevenueMachines(todayRange),
+    getTelevendRevenueMachines(weekRange),
     getTelevendRevenueMachines(monthRange),
   ]);
 
   const dailySaved = await saveTelevendRevenue(daily, 'daily', scrapedAt);
+  const weeklySaved = await saveTelevendRevenue(weekly, 'weekly', scrapedAt);
   const monthlySaved = await saveTelevendRevenue(monthly, 'monthly', scrapedAt);
 
   return {
@@ -641,6 +716,12 @@ export async function refreshTelevendRevenueNow() {
       total: round2(daily.reduce((sum, item) => sum + item.totalRevenue, 0)),
       sales: daily.reduce((sum, item) => sum + item.totalSales, 0),
       quantity: daily.reduce((sum, item) => sum + item.totalQuantity, 0),
+    },
+    weekly: {
+      machines: weeklySaved.length,
+      total: round2(weekly.reduce((sum, item) => sum + item.totalRevenue, 0)),
+      sales: weekly.reduce((sum, item) => sum + item.totalSales, 0),
+      quantity: weekly.reduce((sum, item) => sum + item.totalQuantity, 0),
     },
     monthly: {
       machines: monthlySaved.length,

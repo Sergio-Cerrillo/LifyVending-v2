@@ -43,6 +43,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  async function getInitialSession() {
+    try {
+      return await withTimeout(
+        supabase.auth.getSession(),
+        10_000,
+        'No se pudo validar la sesión',
+      );
+    } catch (error) {
+      if (!(error instanceof RequestTimeoutError)) throw error;
+      console.warn('La primera validación de sesión tardó demasiado; reintentando.');
+      return withTimeout(
+        supabase.auth.getSession(),
+        15_000,
+        'No se pudo validar la sesión',
+      );
+    }
+  }
+
   async function loadProfile(sessionUser: any) {
     try {
       const { data: profile, error: profileError } = await withTimeout(
@@ -66,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.warn('No se encontró un rol válido para el usuario');
-      setCurrentUser(null);
+      setCurrentUser((previousUser) => previousUser);
     } catch (error) {
       if (error instanceof RequestTimeoutError) {
         console.warn('La carga del perfil tardó demasiado; usando metadatos de sesión si están disponibles.');
@@ -75,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const fallbackUser = buildUserFromSession(sessionUser);
-      setCurrentUser(fallbackUser);
+      setCurrentUser((previousUser) => fallbackUser || previousUser);
     }
   }
 
@@ -83,14 +101,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const { data: { session } } = await withTimeout(
-          supabase.auth.getSession(),
-          10_000,
-          'No se pudo validar la sesión',
-        );
+        const { data: { session } } = await getInitialSession();
 
         if (session?.user) {
           await loadProfile(session.user);
+        } else {
+          setCurrentUser(null);
         }
       } catch (error) {
         if (error instanceof RequestTimeoutError) {
@@ -108,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Escuchar cambios en la autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session?.user) {
           await loadProfile(session.user);
         } else if (event === 'SIGNED_OUT') {
           setCurrentUser(null);
