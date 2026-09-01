@@ -80,6 +80,10 @@ function normalizeMachine(machine: any, stock?: any) {
   };
 }
 
+function uniqueMachineIds(machineIds: unknown[]) {
+  return Array.from(new Set(machineIds.map(String).map((id) => id.trim()).filter(Boolean)));
+}
+
 async function loadStockByMachine(machineIds?: string[]) {
   let query = supabaseAdmin
     .from('machine_stock_current')
@@ -264,7 +268,7 @@ export async function POST(request: NextRequest) {
     const scheduledDate = String(body.scheduledDate || '').trim();
     const name = String(body.name || '').trim() || `Ruta (${scheduledDate})`;
     const replenisherId = String(body.replenisherId || '').trim();
-    const machineIds = Array.isArray(body.machineIds) ? body.machineIds.map(String).filter(Boolean) : [];
+    const machineIds = Array.isArray(body.machineIds) ? uniqueMachineIds(body.machineIds) : [];
     const notes = body.notes ? String(body.notes).trim() : null;
 
     if (!scheduledDate || !replenisherId || machineIds.length === 0) {
@@ -340,6 +344,125 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    if (body.action === 'update-route') {
+      if (auth.profile.role !== 'admin') {
+        return NextResponse.json({ error: 'Solo admin puede editar rutas' }, { status: 403 });
+      }
+
+      const routeId = String(body.routeId || '').trim();
+      const scheduledDate = String(body.scheduledDate || '').trim();
+      const name = String(body.name || '').trim() || `Ruta (${scheduledDate})`;
+      const replenisherId = String(body.replenisherId || '').trim();
+      const machineIds = Array.isArray(body.machineIds) ? uniqueMachineIds(body.machineIds) : [];
+
+      if (!routeId || !scheduledDate || !replenisherId || machineIds.length === 0) {
+        return NextResponse.json({ error: 'Fecha, reponedor y máquinas son obligatorios' }, { status: 400 });
+      }
+
+      const { data: route, error: routeError } = await supabaseAdmin
+        .from('replenishment_routes' as any)
+        .select('id')
+        .eq('id', routeId)
+        .single();
+
+      if (routeError || !route) {
+        return NextResponse.json({ error: 'Ruta no encontrada' }, { status: 404 });
+      }
+
+      const { data: replenisher, error: replenisherError } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role')
+        .eq('id', replenisherId)
+        .single();
+
+      if (replenisherError || replenisher?.role !== 'reponedor') {
+        return NextResponse.json({ error: 'El usuario asignado debe ser reponedor' }, { status: 400 });
+      }
+
+      const { error: updateRouteError } = await supabaseAdmin
+        .from('replenishment_routes' as any)
+        .update({
+          name,
+          scheduled_date: scheduledDate,
+          replenisher_id: replenisherId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', routeId);
+
+      if (updateRouteError) {
+        throw new Error(`No se pudo editar la ruta: ${updateRouteError.message}`);
+      }
+
+      const { data: existingRows, error: existingError } = await supabaseAdmin
+        .from('replenishment_route_machines' as any)
+        .select('id, machine_id, status')
+        .eq('route_id', routeId);
+
+      if (existingError) {
+        throw new Error(`No se pudieron leer las máquinas de la ruta: ${existingError.message}`);
+      }
+
+      const existingByMachine = new Map((existingRows || []).map((row: any) => [row.machine_id, row]));
+      const nextMachineSet = new Set(machineIds);
+      const removedIds = (existingRows || [])
+        .filter((row: any) => !nextMachineSet.has(row.machine_id))
+        .map((row: any) => row.id);
+
+      if (removedIds.length > 0) {
+        const { error: deleteError } = await supabaseAdmin
+          .from('replenishment_route_machines' as any)
+          .delete()
+          .in('id', removedIds);
+
+        if (deleteError) {
+          throw new Error(`No se pudieron quitar máquinas: ${deleteError.message}`);
+        }
+      }
+
+      const inserts = machineIds
+        .filter((machineId) => !existingByMachine.has(machineId))
+        .map((machineId, index) => ({
+          route_id: routeId,
+          machine_id: machineId,
+          position: index + 1,
+          status: 'pending',
+        }));
+
+      if (inserts.length > 0) {
+        const { error: insertError } = await supabaseAdmin
+          .from('replenishment_route_machines' as any)
+          .insert(inserts);
+
+        if (insertError) {
+          throw new Error(`No se pudieron añadir máquinas: ${insertError.message}`);
+        }
+      }
+
+      await Promise.all(machineIds.map((machineId, index) => {
+        const existing = existingByMachine.get(machineId);
+        if (!existing) return Promise.resolve();
+        return supabaseAdmin
+          .from('replenishment_route_machines' as any)
+          .update({ position: index + 1 })
+          .eq('id', existing.id);
+      }));
+
+      await Promise.all([
+        updateRouteStatus(routeId),
+        supabaseAdmin
+          .from('replenishment_route_events' as any)
+          .insert({
+            route_id: routeId,
+            user_id: auth.user.id,
+            event_type: 'route_updated',
+            metadata: { machineCount: machineIds.length, removedCount: removedIds.length, addedCount: inserts.length },
+          }),
+      ]);
+
+      return NextResponse.json({ success: true });
+    }
+
     const routeMachineId = String(body.routeMachineId || '').trim();
     const status = body.status === 'done' ? 'done' : 'pending';
 

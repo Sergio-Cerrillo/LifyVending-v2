@@ -107,8 +107,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error obteniendo máquinas asignadas' }, { status: 500 });
     }
 
-    const machines = (assignments || []).map(a => (a as any).machines).filter(Boolean);
-    console.log(`✅ Máquinas asignadas: ${machines.length}`, machines.map(m => m.name));
+    const assignedMachineRows = (assignments || []).map(a => (a as any).machines).filter(Boolean);
+    console.log(`✅ Máquinas asignadas: ${assignedMachineRows.length}`, assignedMachineRows.map(m => m.name));
+
+    const visibleMachines = assignedMachineRows.map((machine: any) => ({
+      id: machine.id,
+      name: machine.name || 'Máquina',
+      location: machine.location || null,
+    }));
 
     // Obtener histórico mensual manual creado por admin
     const { data: historicalRows, error: historicalError } = await supabaseAdmin
@@ -124,7 +130,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Calcular la fecha de última actualización más reciente de las máquinas del cliente
-    const allUpdateDates = machines
+    const allUpdateDates = assignedMachineRows
       .flatMap((m: any) => [m.daily_updated_at, m.weekly_updated_at, m.monthly_updated_at, m.last_scraped_at])
       .filter(Boolean)
       .map((date: string) => new Date(date).getTime());
@@ -145,7 +151,7 @@ export async function GET(request: NextRequest) {
       commission: {
         paymentPercent: settings?.commission_payment_percent || 0
       },
-      machines,
+      machines: visibleMachines,
       historical: (historicalRows || []).map((row: any) => ({
         id: row.id,
         machineId: row.machine_id,

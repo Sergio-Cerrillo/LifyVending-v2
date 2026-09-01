@@ -33,8 +33,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/lib/supabase-helpers';
-import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
+import { fetchWithTimeout } from '@/lib/client-timeouts';
+import { getFreshAccessToken } from '@/lib/auth-session';
 import { cn } from '@/lib/utils';
 
 type Urgency = 'empty' | 'critical' | 'normal' | 'ok' | 'unknown';
@@ -71,6 +71,7 @@ interface ReplenishmentRoute {
   scheduledDate: string;
   status: 'planned' | 'in_progress' | 'completed';
   notes: string | null;
+  replenisherId: string;
   replenisher: Replenisher | null;
   machines: RouteMachine[];
   totalMachines: number;
@@ -156,6 +157,7 @@ export default function RouteManagementPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'reponedor'>('reponedor');
   const [routes, setRoutes] = useState<ReplenishmentRoute[]>([]);
   const [replenishers, setReplenishers] = useState<Replenisher[]>([]);
@@ -169,14 +171,16 @@ export default function RouteManagementPage() {
     replenisherId: '',
     machineIds: [] as string[],
   });
+  const [routeDraft, setRouteDraft] = useState({
+    routeId: '',
+    name: '',
+    scheduledDate: '',
+    replenisherId: '',
+    machineIds: [] as string[],
+  });
 
   async function getToken() {
-    const { data } = await withTimeout(
-      supabase.auth.getSession(),
-      10_000,
-      'No se pudo validar la sesión',
-    );
-    return data.session?.access_token || null;
+    return getFreshAccessToken();
   }
 
   async function loadRoutes() {
@@ -257,6 +261,30 @@ export default function RouteManagementPage() {
     });
   }
 
+  function toggleDraftMachine(machineId: string) {
+    setRouteDraft((current) => {
+      const exists = current.machineIds.includes(machineId);
+      return {
+        ...current,
+        machineIds: exists
+          ? current.machineIds.filter((id) => id !== machineId)
+          : [...current.machineIds, machineId],
+      };
+    });
+  }
+
+  function openEditRoute(route: ReplenishmentRoute) {
+    setRouteDraft({
+      routeId: route.id,
+      name: route.name,
+      scheduledDate: route.scheduledDate,
+      replenisherId: route.replenisherId || route.replenisher?.id || '',
+      machineIds: Array.from(new Set(route.machines.map((machine) => machine.machineId))),
+    });
+    setSearch('');
+    setEditDialogOpen(true);
+  }
+
   async function createRoute() {
     try {
       setSaving(true);
@@ -292,6 +320,43 @@ export default function RouteManagementPage() {
       await loadRoutes();
     } catch (error: any) {
       toast.error('No se pudo crear la ruta', { description: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateRoute() {
+    try {
+      setSaving(true);
+      const token = await getToken();
+      if (!token) throw new Error('Sesión no disponible');
+
+      const response = await fetchWithTimeout('/api/admin/routes', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'update-route',
+          routeId: routeDraft.routeId,
+          name: routeDraft.name.trim() || `Ruta (${formatDate(routeDraft.scheduledDate)})`,
+          scheduledDate: routeDraft.scheduledDate,
+          replenisherId: routeDraft.replenisherId,
+          machineIds: Array.from(new Set(routeDraft.machineIds)),
+        }),
+      }, 30_000);
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo editar la ruta');
+
+      toast.success('Ruta actualizada', {
+        description: 'Las máquinas y el reponedor ya están sincronizados',
+      });
+      setEditDialogOpen(false);
+      await loadRoutes();
+    } catch (error: any) {
+      toast.error('No se pudo editar la ruta', { description: error.message });
     } finally {
       setSaving(false);
     }
@@ -374,9 +439,9 @@ export default function RouteManagementPage() {
 
       toast.success('Llenado completo enviado', {
         id: `route-refill-${routeMachine.id}`,
-        description: 'La máquina se ha actualizado en el proveedor. Marca Hecha cuando termines la visita.',
+        description: 'La máquina se ha actualizado en el proveedor y queda marcada como hecha.',
       });
-      await loadRoutes();
+      await updateMachineStatus(routeMachine.id, 'done');
     } catch (error: any) {
       toast.error('No se pudo enviar el llenado', {
         id: `route-refill-${routeMachine.id}`,
@@ -607,6 +672,167 @@ export default function RouteManagementPage() {
         </div>
       </div>
 
+      {userRole === 'admin' && (
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Editar ruta</DialogTitle>
+              <DialogDescription>
+                Añade o quita máquinas sin perder el estado de las que ya estaban en la ruta.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-2 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Fecha</Label>
+                <Input
+                  type="date"
+                  value={routeDraft.scheduledDate}
+                  onChange={(event) => setRouteDraft({ ...routeDraft, scheduledDate: event.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reponedor asignado</Label>
+                <Select
+                  value={routeDraft.replenisherId}
+                  onValueChange={(value) => setRouteDraft({ ...routeDraft, replenisherId: value })}
+                >
+                  <SelectTrigger className="h-auto rounded-2xl border-zinc-200 bg-white px-4 py-3 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50/40">
+                    <SelectValue placeholder="Elegir reponedor">
+                      {(() => {
+                        const selected = replenishers.find((replenisher) => replenisher.id === routeDraft.replenisherId);
+                        if (!selected) return null;
+                        return (
+                          <span className="flex min-w-0 items-center gap-3 text-left">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                              <UserRound className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-black text-zinc-950">
+                                {selected.display_name || selected.email}
+                              </span>
+                              <span className="block truncate text-xs font-bold text-zinc-500">{selected.email}</span>
+                            </span>
+                          </span>
+                        );
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    {replenishers.map((replenisher) => (
+                      <SelectItem key={replenisher.id} value={replenisher.id}>
+                        <span className="flex min-w-0 items-center gap-3 py-1">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                            <UserRound className="h-4 w-4" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate font-black">{replenisher.display_name || replenisher.email}</span>
+                            <span className="block truncate text-xs text-zinc-500">{replenisher.email}</span>
+                          </span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 md:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase text-zinc-500">Título</p>
+                    <p className="truncate text-lg font-black text-zinc-950">
+                      {routeDraft.name.trim() || `Ruta (${formatDate(routeDraft.scheduledDate)})`}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0 rounded-xl font-black"
+                    onClick={() => setEditingRouteName((value) => !value)}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Editar nombre
+                  </Button>
+                </div>
+                {editingRouteName && (
+                  <Input
+                    value={routeDraft.name}
+                    onChange={(event) => setRouteDraft({ ...routeDraft, name: event.target.value })}
+                    placeholder={`Ruta (${formatDate(routeDraft.scheduledDate)})`}
+                    className="mt-3 rounded-xl bg-white"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-black text-zinc-950">Máquinas de la ruta: {routeDraft.machineIds.length}</p>
+                  <p className="text-xs font-semibold text-zinc-500">Toca una máquina para añadirla o quitarla. No se permiten duplicadas en la misma ruta.</p>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                  <Input
+                    className="pl-9"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Buscar máquina"
+                  />
+                </div>
+              </div>
+
+              <div className="grid max-h-[420px] gap-2 overflow-y-auto pr-1 md:grid-cols-2">
+                {filteredMachines.map((machine) => {
+                  const selected = routeDraft.machineIds.includes(machine.id);
+                  return (
+                    <button
+                      key={machine.id}
+                      type="button"
+                      onClick={() => toggleDraftMachine(machine.id)}
+                      className={cn(
+                        'relative overflow-hidden rounded-2xl border p-3 text-left transition',
+                        urgencySurfaceClass(machine.urgency),
+                        selected ? 'ring-2 ring-emerald-400' : 'hover:scale-[1.01]',
+                      )}
+                    >
+                      <span className={cn('absolute inset-y-0 left-0 w-1.5', urgencyAccentClass(machine.urgency))} />
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 pl-2">
+                          <p className={cn('truncate text-sm font-black', urgencyTextClass(machine.urgency))}>{machine.name}</p>
+                          <p className={cn('truncate text-xs font-semibold', urgencyMutedTextClass(machine.urgency))}>{machine.location || machine.provider}</p>
+                        </div>
+                        <Badge className={cn('shrink-0', urgencyClass(machine.urgency))}>
+                          {selected ? 'En ruta' : urgencyLabel(machine.urgency)}
+                        </Badge>
+                      </div>
+                      <div className={cn('mt-2 flex items-center gap-2 pl-2 text-xs font-bold', urgencyMutedTextClass(machine.urgency))}>
+                        <span>{machine.fillRate === null ? 'Sin stock' : `${machine.fillRate}%`}</span>
+                        <span>·</span>
+                        <span>{machine.totalToReplenish} uds.</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={updateRoute}
+                disabled={saving || !routeDraft.scheduledDate || !routeDraft.replenisherId || routeDraft.machineIds.length === 0}
+                className="bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Guardar cambios
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((item) => (
@@ -636,7 +862,7 @@ export default function RouteManagementPage() {
                 Rutas
               </Button>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
+                <div className="min-w-0">
                   <CardTitle className="text-2xl font-black tracking-tight text-zinc-950">{selectedRoute.name}</CardTitle>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-zinc-600 sm:text-sm">
                     <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1">
@@ -651,16 +877,29 @@ export default function RouteManagementPage() {
                     )}
                   </div>
                 </div>
-                <div className="w-full rounded-2xl bg-zinc-100 p-1 sm:w-48">
-                  <div className="flex items-center justify-between px-2 py-1 text-xs font-black text-zinc-600">
-                    <span>Progreso</span>
-                    <span>{selectedRoute.doneMachines}/{selectedRoute.totalMachines}</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white">
-                    <div
-                      className="h-full rounded-full bg-emerald-500 transition-all"
-                      style={{ width: `${selectedRoute.totalMachines ? Math.round((selectedRoute.doneMachines / selectedRoute.totalMachines) * 100) : 0}%` }}
-                    />
+                <div className="flex w-full flex-col gap-2 sm:w-56">
+                  {userRole === 'admin' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 rounded-2xl bg-white font-black"
+                      onClick={() => openEditRoute(selectedRoute)}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar ruta
+                    </Button>
+                  )}
+                  <div className="rounded-2xl bg-zinc-100 p-1">
+                    <div className="flex items-center justify-between px-2 py-1 text-xs font-black text-zinc-600">
+                      <span>Progreso</span>
+                      <span>{selectedRoute.doneMachines}/{selectedRoute.totalMachines}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${selectedRoute.totalMachines ? Math.round((selectedRoute.doneMachines / selectedRoute.totalMachines) * 100) : 0}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

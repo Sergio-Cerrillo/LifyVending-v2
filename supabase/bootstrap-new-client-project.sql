@@ -393,6 +393,10 @@ returns table (
   scraped_at timestamptz
 ) as $$
 begin
+  if p_client_id <> auth.uid() and coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Access denied';
+  end if;
+
   return query
   select
     m.id as machine_id,
@@ -561,19 +565,8 @@ create policy "Users can update own profile" on public.profiles
   with check (id = auth.uid());
 
 drop policy if exists "Users can view own settings" on public.client_settings;
-create policy "Users can view own settings" on public.client_settings
-  for select to authenticated
-  using (client_id = auth.uid());
 
 drop policy if exists "Users can view assigned machines" on public.machines;
-create policy "Users can view assigned machines" on public.machines
-  for select to authenticated
-  using (
-    exists (
-      select 1 from public.client_machine_assignments
-      where client_id = auth.uid() and machine_id = machines.id
-    )
-  );
 
 drop policy if exists "Users can view own assignments" on public.client_machine_assignments;
 create policy "Users can view own assignments" on public.client_machine_assignments
@@ -581,15 +574,6 @@ create policy "Users can view own assignments" on public.client_machine_assignme
   using (client_id = auth.uid());
 
 drop policy if exists "Users can view revenue of assigned machines" on public.machine_revenue_snapshots;
-create policy "Users can view revenue of assigned machines" on public.machine_revenue_snapshots
-  for select to authenticated
-  using (
-    exists (
-      select 1 from public.client_machine_assignments cma
-      where cma.client_id = auth.uid()
-        and cma.machine_id = machine_revenue_snapshots.machine_id
-    )
-  );
 
 drop policy if exists "Users can view own scrape runs" on public.scrape_runs;
 create policy "Users can view own scrape runs" on public.scrape_runs
