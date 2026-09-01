@@ -6,6 +6,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
 
+async function deleteWhere(table: string, column: string, value: string) {
+  const { error } = await supabaseAdmin
+    .from(table as any)
+    .delete()
+    .eq(column, value);
+
+  if (error) {
+    throw new Error(`Error limpiando ${table}: ${error.message}`);
+  }
+}
+
+async function nullWhere(table: string, column: string, value: string, payload: Record<string, null>) {
+  const { error } = await supabaseAdmin
+    .from(table as any)
+    .update(payload as any)
+    .eq(column, value);
+
+  if (error) {
+    throw new Error(`Error actualizando ${table}: ${error.message}`);
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -45,6 +67,12 @@ export async function DELETE(
     const userId = resolvedParams.id;
     console.log('[DELETE-API] Admin verificado, procediendo con userId:', userId);
 
+    if (userId === user.id) {
+      return NextResponse.json({
+        error: 'No puedes eliminar tu propio usuario desde esta pantalla'
+      }, { status: 403 });
+    }
+
     // Verificar que el usuario a eliminar existe
     const { data: targetProfile, error: profileError } = await supabaseAdmin
       .from('profiles')
@@ -71,6 +99,21 @@ export async function DELETE(
       }, { status: 403 });
     }
 
+    if (targetProfile.role === 'client') {
+      console.log('[DELETE-API] Limpiando dependencias de cliente...');
+      await deleteWhere('client_machine_assignments', 'client_id', userId);
+      await deleteWhere('client_settings', 'client_id', userId);
+      await deleteWhere('client_revenue_history_adjustments', 'client_id', userId);
+      await deleteWhere('commission_snapshots', 'client_id', userId);
+    }
+
+    if (targetProfile.role === 'reponedor') {
+      console.log('[DELETE-API] Limpiando dependencias de reponedor...');
+      await nullWhere('replenishment_route_machines', 'completed_by', userId, { completed_by: null });
+      await nullWhere('replenishment_route_events', 'user_id', userId, { user_id: null });
+      await deleteWhere('replenishment_routes', 'replenisher_id', userId);
+    }
+
     // Eliminar usuario de Auth (esto activará el CASCADE en la BD)
     console.log('[DELETE-API] Eliminando usuario de Auth...');
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
@@ -79,6 +122,11 @@ export async function DELETE(
       console.error('[DELETE-API] Error eliminando usuario de Auth:', deleteError);
       throw new Error(`Error eliminando usuario: ${deleteError.message}`);
     }
+
+    await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('id', userId);
 
     console.log('[DELETE-API] Usuario eliminado exitosamente:', targetProfile.email);
 

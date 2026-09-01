@@ -547,7 +547,17 @@ export default function AdminClientsPage() {
                 </p>
                 <ul className="list-disc list-inside mt-2 space-y-1">
                   <li>Perfil del usuario</li>
-                  <li>Configuración y asignaciones asociadas</li>
+                  {clientToDelete?.role === 'client' ? (
+                    <>
+                      <li>Configuración de comisiones</li>
+                      <li>Asignaciones de máquinas e histórico asociado</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>Rutas asignadas al reponedor</li>
+                      <li>Máquinas y eventos asociados a esas rutas</li>
+                    </>
+                  )}
                 </ul>
               </div>
             </AlertDialogDescription>
