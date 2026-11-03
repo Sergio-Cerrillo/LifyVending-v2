@@ -1,0 +1,412 @@
+/* Photographic scenes retain the public site's typography and scroll choreography. */
+.public-site .environment-experience,
+.public-site .environment-experience[data-environment] {
+  background: #091c1d;
+  color: var(--paper);
+}
+.public-site .environment-heading h2 > span {
+  color: var(--brand);
+}
+.public-site .environment-heading > div > .public-eyebrow {
+  color: #a0bfba;
+}
+.public-site .environment-choices button {
+  color: #d4e5df;
+  border-color: #c5e2da40;
+}
+.public-site .environment-choices button:hover {
+  border-color: var(--brand);
+}
+.public-site .environment-choices button[aria-pressed="true"] {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #082a25;
+}
+.public-site .environment-layout {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 410px;
+  height: clamp(410px, 37vw, 640px);
+  isolation: isolate;
+}
+.public-site .environment-room {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border: 1px solid #a6d9cc30;
+  border-radius: 10px;
+  background: #061314;
+}
+.public-site .environment-photo {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: auto;
+  height: 100%;
+  aspect-ratio: 1672 / 941;
+  max-width: 100%;
+  mask-image: linear-gradient(90deg, transparent, #000 28%);
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+.public-site .environment-photo.is-active {
+  opacity: 1;
+}
+.public-site .environment-photo img {
+  object-fit: contain;
+  object-position: right center;
+}
+.public-site .environment-room .room-light {
+  z-index: 1;
+  background: linear-gradient(90deg, #061314 8%, #061314f5 24%, #0613149c 40%, #06131400 62%);
+}
+.public-site .environment-room .room-corner-label {
+  z-index: 3;
+  color: #abd8ce;
+  left: 30px;
+  top: 24px;
+  font-size: 8px;
+}
+.public-site .environment-room .room-product-label {
+  z-index: 3;
+  background: #09231ee8;
+  border: 1px solid #5aaf9c70;
+  color: #e0f1e8;
+  bottom: 22px;
+  right: 24px;
+}
+.public-site .environment-frame {
+  position: absolute;
+  z-index: 2;
+  left: 30px;
+  bottom: 25px;
+  width: 60px;
+  height: 2px;
+  background: var(--brand);
+  transform-origin: left;
+}
+.public-site .environment-copy {
+  z-index: 2;
+  position: relative;
+  width: 42%;
+  padding: 65px 0 65px 30px;
+}
+.public-site .environment-panel > .public-eyebrow {
+  color: #9bd9cc;
+  font-size: 8px;
+}
+.public-site .environment-panel h3 {
+  font-size: clamp(32px, 3.8vw, 60px);
+}
+.public-site .environment-panel p {
+  color: #c5d6cf;
+  max-width: 330px;
+}
+.public-site .environment-panel .public-text-link {
+  color: #e5f7ec;
+  border-color: #80b5a9;
+}
+.public-site .environment-panel .public-text-link svg {
+  color: var(--brand);
+}
+.public-site .environment-bottom {
+  border-color: #b1ddcf30;
+  color: #a4c5ba;
+}
+.public-site .environment-experience .experience-chapter-progress span {
+  background: #3f6058;
+}
+.public-site .environment-experience .experience-chapter-progress .is-active {
+  background: var(--brand);
+}
+/* A photographic opening with the same desktop extent as the home hero. */
+.public-site.technical-page {
+  padding-top: 94px;
+}
+.public-site .technical-hero {
+  --progress: 0;
+  margin-top: 0;
+  min-height: calc(clamp(780px, 100svh, 1150px) - 94px);
+  display: flex;
+  align-items: center;
+  padding: 80px var(--gutter) 100px;
+  background: #061719;
+  color: var(--paper);
+  isolation: isolate;
+}
+.public-site .technical-hero-media {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  overflow: hidden;
+}
+.public-site .technical-hero-media img {
+  object-fit: contain;
+  object-position: right center;
+}
+.public-site .technical-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, #031315f5, #031315d9 25%, #03131566 51%, #03131500 73%);
+  pointer-events: none;
+}
+.public-site .technical-hero::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: auto 0 0;
+  height: clamp(160px, 20vw, 260px);
+  background: linear-gradient(180deg, transparent, var(--surface-raised));
+  pointer-events: none;
+}
+.public-site .technical-hero-content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 57%;
+}
+.public-site .technical-hero-content > .public-eyebrow {
+  color: #a7d3c9;
+}
+.public-site .technical-hero h1 {
+  font-size: clamp(52px, 6.5vw, 108px);
+  margin-block: 30px;
+}
+.public-site .technical-hero h1 > span {
+  color: var(--brand);
+}
+.public-site .technical-hero .subhero-bottom {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
+}
+.public-site .technical-hero .subhero-bottom p {
+  max-width: 390px;
+  color: #d4e1db;
+}
+.public-site .technical-hero .public-button {
+  background: var(--brand);
+  color: #082a25;
+}
+.public-site .technical-hero .public-button:hover {
+  background: #83efd7;
+}
+.public-site .technical-hero-explore {
+  position: absolute;
+  z-index: 2;
+  bottom: 27px;
+  left: var(--gutter);
+  right: var(--gutter);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  border-top: 1px solid #9ed3c34d;
+  padding-top: 18px;
+  color: #d1e6dd;
+  font-size: 11px;
+}
+.public-site .technical-hero-explore svg {
+  color: var(--brand);
+}
+.public-site .technical-exploded {
+  background: var(--surface-raised);
+}
+.public-site .exploded-stage {
+  background: radial-gradient(ellipse at 50% 48%, #173a33, #0a1b18 78%);
+}
+.public-site .exploded-hotspot {
+  background: #bcf3df;
+  border-color: #78bba5;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .public-site .environment-experience.is-scroll-driven .environment-photo img {
+    transform: scale(calc(1 + var(--scene-progress) * 0.045));
+    transform-origin: 72% 50%;
+  }
+  .public-site .environment-frame {
+    transform: scaleX(calc(1 + var(--scene-progress) * 2));
+  }
+  .public-site .environment-panel {
+    animation: lify-experience-enter 0.65s ease both;
+  }
+  .public-site .technical-hero-media img {
+    transform: translateY(calc(var(--progress) * 25px)) scale(calc(1.02 + var(--progress) * 0.07));
+    transform-origin: 68% 50%;
+  }
+}
+@media (min-height: 700px) and (prefers-reduced-motion: no-preference) {
+  .public-site .environment-experience.is-scroll-driven .environment-layout {
+    height: 49svh;
+    min-height: 0;
+    flex-shrink: 0;
+  }
+  .public-site .environment-experience.is-scroll-driven .environment-room {
+    max-width: none;
+    max-height: none;
+  }
+}
+@media (min-width: 768px) and (max-width: 1100px) {
+  .public-site .environment-copy {
+    width: 47%;
+  }
+  .public-site .environment-panel h3 {
+    font-size: 35px;
+  }
+  .public-site .environment-panel p {
+    font-size: 12px;
+    max-width: 290px;
+  }
+  .public-site .technical-hero-content {
+    max-width: 65%;
+  }
+}
+@media (max-width: 767px) {
+  .public-site .environment-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    min-height: 0;
+    gap: 24px;
+  }
+  .public-site .environment-room {
+    position: relative;
+    inset: auto;
+    aspect-ratio: 16 / 11;
+    height: auto;
+    flex-shrink: 0;
+  }
+  .public-site .environment-photo {
+    inset: 0;
+    width: 100%;
+    aspect-ratio: auto;
+    mask-image: none;
+  }
+  .public-site .environment-photo img {
+    object-fit: cover;
+    object-position: 72% 50%;
+  }
+  .public-site .environment-room .room-light {
+    background: linear-gradient(180deg, #03171973, transparent 30%, transparent 75%, #03171980);
+  }
+  .public-site .environment-room .room-corner-label {
+    left: 12px;
+    top: 12px;
+    font-size: 6px;
+  }
+  .public-site .environment-room .room-product-label {
+    bottom: 10px;
+    right: 10px;
+  }
+  .public-site .environment-frame {
+    bottom: 15px;
+    left: 13px;
+    width: 20px;
+  }
+  .public-site .environment-copy {
+    width: 100%;
+    padding: 0;
+  }
+  .public-site .environment-panel h3 {
+    font-size: 29px;
+  }
+  .public-site .environment-panel p {
+    font-size: 12px;
+    max-width: none;
+  }
+  .public-site.technical-page {
+    padding-top: 76px;
+  }
+  .public-site .technical-hero {
+    padding: 0;
+    min-height: calc(100svh - 76px);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .public-site .technical-hero-media {
+    position: relative;
+    inset: auto;
+    z-index: 0;
+    order: 2;
+    width: 100%;
+    aspect-ratio: 1292 / 941;
+    flex: 0 0 auto;
+    margin-top: auto;
+  }
+  .public-site .technical-hero-media img {
+    object-fit: contain;
+    object-position: center;
+    transform: none;
+  }
+  .public-site .technical-hero::after {
+    display: none;
+  }
+  .public-site .technical-hero-media::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, #061719, transparent 14%, transparent 88%, #061719);
+    pointer-events: none;
+  }
+  .public-site .technical-hero-content {
+    position: relative;
+    z-index: 2;
+    order: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    padding: 28px var(--gutter) 14px;
+  }
+  .public-site .technical-hero-content > .public-eyebrow {
+    font-size: 8px;
+  }
+  .public-site .technical-hero h1 {
+    font-size: clamp(40px, 11.5vw, 72px);
+    line-height: 1.02;
+    letter-spacing: -0.065em;
+    margin-block: 18px;
+    overflow-wrap: break-word;
+  }
+  .public-site .technical-hero h1 > span {
+    display: block;
+    max-width: 8.5ch;
+  }
+  .public-site .technical-hero .subhero-bottom p {
+    font-size: 12px;
+  }
+  .public-site .technical-hero .subhero-bottom {
+    gap: 18px;
+  }
+  .public-site .technical-hero .public-button {
+    min-height: 48px;
+    max-width: 100%;
+    font-size: 12px;
+    padding: 12px 20px;
+  }
+  .public-site .technical-hero-explore {
+    position: relative;
+    inset: auto;
+    order: 3;
+    font-size: 10px;
+    margin: 0 var(--gutter);
+    padding: 18px 0 22px;
+    min-height: 58px;
+    flex: 0 0 auto;
+  }
+}
+@media (max-width: 767px) and (min-height: 700px) and (prefers-reduced-motion: no-preference) {
+  .public-site .environment-experience.is-scroll-driven .environment-layout {
+    height: auto;
+    gap: 18px;
+  }
+  .public-site .environment-experience.is-scroll-driven .environment-room {
+    height: clamp(180px, 26svh, 270px);
+    max-width: none;
+  }
+}

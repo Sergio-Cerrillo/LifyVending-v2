@@ -1,168 +1,127 @@
-"use client"
+import Image from "next/image"
+import Link from "next/link"
+import { ArrowUpRight, Plus, Coffee, Droplet, Cookie, Package } from "lucide-react"
+import { ScrollReveal } from "@/components/public-scroll-effects"
 
-import { Coffee, Droplet, Cookie, Package } from "lucide-react"
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-
-const categorias = [
+const categories = [
   {
     id: "snacks",
-    nombre: "Snacks",
+    name: "Snacks",
     icon: Cookie,
-    color: "from-amber-500 to-orange-500",
-    descripcion: "Amplia variedad de aperitivos salados y dulces",
-    items: [
-      "Patatas fritas",
-      "Frutos secos",
-      "Chocolatinas",
-      "Galletas",
-      "Snacks saludables",
-      "Chicles y caramelos"
-    ]
+    image: "/images/catalog/snacks.webp",
+    alt: "Selección de frutos secos",
+    description: "Dulces, salados y opciones para cuidarse. Pequeños bocados para grandes pausas.",
+    items: ["Patatas fritas", "Frutos secos", "Chocolatinas", "Galletas", "Snacks saludables", "Chicles y caramelos"],
   },
   {
     id: "bebidas-frias",
-    nombre: "Bebidas Frías",
+    name: "Bebidas frías",
     icon: Droplet,
-    color: "from-blue-500 to-cyan-500",
-    descripcion: "Refrescantes opciones para todos los gustos",
-    items: [
-      "Agua mineral",
-      "Refrescos",
-      "Zumos naturales",
-      "Bebidas energéticas",
-      "Tés fríos",
-      "Bebidas isotónicas"
-    ]
+    image: "/images/catalog/cold-drinks.webp",
+    alt: "Surtido de refrescos",
+    description: "Agua, refrescos y bebidas isotónicas. Para el día a día y las pausas entre entrenamientos.",
+    items: ["Agua mineral", "Refrescos", "Zumos naturales", "Bebidas energéticas", "Tés fríos", "Bebidas isotónicas"],
   },
   {
     id: "bebidas-calientes",
-    nombre: "Bebidas Calientes",
+    name: "Bebidas calientes",
     icon: Coffee,
-    color: "from-amber-700 to-brown-600",
-    descripcion: "Café y bebidas calientes de calidad premium",
-    items: [
-      "Café espresso",
-      "Café con leche",
-      "Cappuccino",
-      "Chocolate caliente",
-      "Infusiones",
-      "Café americano"
-    ]
+    image: "/images/catalog/coffee.webp",
+    alt: "Café cappuccino",
+    description: "El ritual que nunca falla. Café y bebidas calientes para acompañar cada momento.",
+    items: ["Café espresso", "Café con leche", "Cappuccino", "Chocolate caliente", "Infusiones", "Café americano"],
   },
   {
     id: "varios",
-    nombre: "Varios",
+    name: "Y mucho más",
     icon: Package,
-    color: "from-purple-500 to-pink-500",
-    descripcion: "Productos esenciales para tu día a día",
+    image: "/classic-sandwich.png",
+    alt: "Sandwich fresco como ejemplo de un surtido personalizado",
+    description: "Cada lugar tiene sus necesidades. Hablemos de una selección hecha para el tuyo.",
     items: [
       "Productos de higiene",
       "Accesorios tecnológicos",
-      "Productos farmacéuticos",
       "Artículos de papelería",
       "Snacks para mascotas",
-      "Productos ecológicos"
-    ]
-  }
+      "Productos ecológicos",
+      "Otras opciones bajo consulta",
+    ],
+  },
 ]
 
 export function ProductosGrid() {
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
-
   return (
-    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-background transition-colors duration-300">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-5xl font-black mb-4">
-            Nuestro <span className="text-primary">Catálogo</span>
-          </h2>
-          <p className="text-xl text-muted-foreground">
-            Amplia variedad de productos para todos los gustos
-          </p>
-        </div>
-
-        {/* Categories Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-          {categorias.map((cat) => {
-            const IconComponent = cat.icon
-            const isActive = activeCategory === cat.id
-
+    <>
+      <section id="productos" className="catalog-products public-section">
+        <ScrollReveal>
+          <div className="catalog-intro">
+            <span className="public-eyebrow">LA SELECCIÓN LIFY</span>
+            <p>
+              Lo que te gusta.
+              <br />
+              <span>Y lo que te queda por descubrir.</span>
+            </p>
+          </div>
+        </ScrollReveal>
+        <div className="catalog-categories">
+          {categories.map((category, i) => {
+            const Icon = category.icon
             return (
-              <div
-                key={cat.id}
-                className={cn(
-                  "glass glass-hover rounded-2xl p-8 cursor-pointer transition-all duration-300",
-                  isActive && "ring-2 ring-primary shadow-lg shadow-primary/20"
-                )}
-                onClick={() => setActiveCategory(isActive ? null : cat.id)}
-              >
-                {/* Icon */}
-                <div className={cn(
-                  "w-16 h-16 rounded-2xl flex items-center justify-center mb-6 bg-gradient-to-br transition-all duration-300",
-                  cat.color,
-                  isActive ? "scale-110" : "scale-100"
-                )}>
-                  <IconComponent className="w-8 h-8 text-white" />
-                </div>
-
-                {/* Title */}
-                <h3 className="text-2xl font-bold mb-3">{cat.nombre}</h3>
-
-                {/* Description */}
-                <p className="text-sm text-muted-foreground mb-6">
-                  {cat.descripcion}
-                </p>
-
-                {/* Items List */}
-                <div className={cn(
-                  "space-y-2 overflow-hidden transition-all duration-300",
-                  isActive ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-                )}>
-                  <div className="border-t border-border pt-4">
-                    <ul className="space-y-2">
-                      {cat.items.map((item, index) => (
-                        <li
-                          key={index}
-                          className="text-sm flex items-center gap-2 text-muted-foreground"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
+              <ScrollReveal key={category.id}>
+                <details className="catalog-category" open={i === 0} id={category.id}>
+                  <summary>
+                    <span className="category-index">0{i + 1}</span>
+                    <Icon className="category-icon" strokeWidth={1.4} />
+                    <h2>{category.name}</h2>
+                    <Plus className="category-plus" strokeWidth={1.2} />
+                    <span className="sr-only">Ver productos</span>
+                  </summary>
+                  <div className="category-content">
+                    <div className="category-image">
+                      <Image
+                        src={category.image}
+                        alt={category.alt}
+                        width={600}
+                        height={400}
+                        sizes="(max-width: 767px) 90vw, 40vw"
+                      />
+                    </div>
+                    <div className="category-description">
+                      <p>{category.description}</p>
+                      <ul>
+                        {category.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                      <Link href="/#contacto" className="public-text-link">
+                        Lo quiero en mi espacio <ArrowUpRight size={18} />
+                      </Link>
+                    </div>
                   </div>
-                </div>
-
-                {/* Expand indicator */}
-                <div className="mt-4 text-center">
-                  <span className="text-xs text-primary font-semibold">
-                    {isActive ? "Ver menos" : "Ver productos"}
-                  </span>
-                </div>
-              </div>
+                </details>
+              </ScrollReveal>
             )
           })}
         </div>
-
-        {/* Call to Action */}
-        <div className="mt-20 text-center glass rounded-3xl p-12">
-          <h3 className="text-3xl font-black mb-4">
-            ¿Buscas algo específico?
-          </h3>
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Podemos personalizar nuestro catálogo según las necesidades de tu negocio. Contáctanos para más información.
+      </section>
+      <section className="catalog-custom public-section">
+        <ScrollReveal>
+          <span className="public-eyebrow">TU ESPACIO, TU SELECCIÓN</span>
+          <h2>
+            ¿Algo más
+            <br />
+            <span>en mente?</span>
+          </h2>
+          <p>
+            Personalizamos el surtido según las necesidades de tu negocio.
+            <br />
+            Cuéntanos qué buscas y encontramos la combinación.
           </p>
-          <Button
-            size="lg"
-            className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-white font-bold px-8 py-6 text-lg shadow-lg shadow-primary/30 hover:scale-105 transition-all"
-          >
-            Contactar Ahora
-          </Button>
-        </div>
-      </div>
-    </section>
+          <Link href="/#contacto" className="public-button">
+            Hablemos de tu selección <ArrowUpRight size={20} />
+          </Link>
+        </ScrollReveal>
+      </section>
+    </>
   )
 }

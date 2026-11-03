@@ -1,0 +1,353 @@
+/* A single isolated product and one shared lighting timeline. Only the home hero changes. */
+.public-site .public-hero--cinema {
+  background: #000000;
+  color: var(--paper);
+  min-height: 780px;
+}
+.public-site .public-hero--cinema .hero-coordinate {
+  color: var(--muted);
+}
+.public-site .public-hero--cinema .hero-copy {
+  width: 52%;
+}
+.public-site .public-hero--cinema .hero-copy h1 > span {
+  color: var(--paper);
+  animation: none;
+}
+.public-site .public-hero--cinema .hero-copy h1 > .hero-green {
+  color: var(--brand);
+}
+.public-site .public-hero--cinema .hero-period {
+  color: inherit;
+}
+.public-site .public-hero--cinema .hero-copy p {
+  color: var(--muted);
+}
+.public-site .public-hero--cinema .hero-copy > .public-button {
+  background: var(--brand);
+  color: #062c25;
+}
+.public-site .public-hero--cinema .hero-copy > .public-button:hover {
+  background: #91f4d9;
+}
+.public-site .public-hero--cinema .hero-bottom {
+  border-color: #b3d6cb33;
+  color: var(--muted);
+}
+.public-site .public-hero--cinema .scroll-cue-icon {
+  border-color: #b3d6cb40;
+}
+.public-site .hero-world--cinema {
+  width: 47%;
+  right: var(--gutter);
+  top: 108px;
+  bottom: 90px;
+  animation: none;
+}
+.public-site .hero-world--cinema .hero-machine {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  transform: none;
+}
+.public-site .vending-startup {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  container-type: size;
+}
+.public-site .startup-camera {
+  position: absolute;
+  width: min(100cqw, 80.0285cqh);
+  height: min(124.9554cqw, 100cqh);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.public-site .vending-startup img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  display: block;
+}
+.public-site .startup-lit {
+  opacity: 0;
+}
+.public-site .startup-edge {
+  opacity: 0;
+  /* Both contours come from the same master, not from a separately generated halo. */
+  mask-image:
+    linear-gradient(90deg, transparent 66%, #000 67.5%, #000 69.5%, transparent 71%),
+    linear-gradient(180deg, transparent 86%, #000 89%, #000 93%, transparent 95%);
+  clip-path: inset(100% 0 0);
+}
+.public-site .startup-clock {
+  position: absolute;
+  pointer-events: none;
+}
+.public-site .vending-startup[data-startup="complete"] .startup-lit {
+  opacity: 1;
+}
+.public-site .vending-startup[data-startup="complete"] .startup-edge {
+  display: none;
+}
+/* Dark navigation is limited to the unscrolled home opening. Dialog colours stay intact. */
+.public-site.public-home .public-nav:not(.is-scrolled) {
+  background: #000000f2;
+  color: var(--paper);
+}
+.public-site.public-home .public-nav:not(.is-scrolled) .brand-caption {
+  border-color: #a7d6c74d;
+}
+.public-site.public-home .public-nav:not(.is-scrolled) .public-nav-actions > .public-button {
+  background: var(--brand);
+  color: var(--ink);
+}
+.public-site.public-home .public-nav:not(.is-scrolled) .public-desktop-links a::after {
+  background: var(--brand);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .public-site.motion-ready .hero-world--cinema .hero-machine {
+    transform: translateY(calc(var(--progress, 0) * 28px));
+    will-change: auto;
+  }
+  .public-site .public-hero--cinema[data-startup="pending"] .hero-copy h1 > span {
+    opacity: 0;
+  }
+  .public-site .public-hero--cinema[data-startup="pending"] .hero-copy h1 > .hero-green {
+    opacity: 0;
+  }
+  .public-site .vending-startup[data-startup="running"] .startup-lit {
+    animation: lify-startup-interior 2.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .public-site .vending-startup[data-startup="running"] .startup-edge {
+    animation: lify-startup-edge 2.2s ease-in-out both;
+  }
+  .public-site .vending-startup[data-startup="running"] .startup-clock {
+    animation: lify-startup-clock 2.2s linear both;
+  }
+  .public-site .public-hero--cinema[data-startup="running"] .hero-copy h1 > span {
+    animation: lify-headline-power 2.2s ease both;
+  }
+  .public-site .public-hero--cinema[data-startup="running"] .hero-copy h1 > span:nth-child(2) {
+    animation-name: lify-headline-power-second;
+  }
+  .public-site .public-hero--cinema[data-startup="running"] .hero-copy h1 > .hero-green {
+    animation-name: lify-headline-power-brand;
+  }
+  .public-site .public-hero--cinema[data-startup-hidden="true"] .vending-startup *,
+  .public-site .public-hero--cinema[data-startup-hidden="true"] .hero-copy h1 > span {
+    animation-play-state: paused;
+  }
+}
+@keyframes lify-startup-interior {
+  0%,
+  36% {
+    opacity: 0;
+  }
+  64% {
+    opacity: 0.65;
+  }
+  82%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-startup-edge {
+  0%,
+  14% {
+    opacity: 0;
+    clip-path: inset(100% 0 0);
+  }
+  36%,
+  64% {
+    opacity: 1;
+    clip-path: inset(0 0 0);
+  }
+  82%,
+  100% {
+    opacity: 0;
+    clip-path: inset(0 0 0);
+  }
+}
+@keyframes lify-headline-power {
+  0%,
+  14% {
+    opacity: 0;
+  }
+  44%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-headline-power-second {
+  0%,
+  25% {
+    opacity: 0;
+  }
+  64%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-headline-power-brand {
+  0%,
+  36% {
+    opacity: 0;
+  }
+  82%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-startup-clock {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (min-width: 768px) and (max-width: 1100px) {
+  .public-site .public-hero--cinema .hero-copy {
+    width: 48%;
+  }
+  .public-site .public-hero--cinema .hero-copy p {
+    font-size: 13px;
+    max-width: 285px;
+  }
+  .public-site .hero-world--cinema {
+    width: 47%;
+    right: 0;
+  }
+}
+@media (max-width: 767px) {
+  .public-site .public-hero--cinema {
+    min-height: 100svh;
+    padding: 110px var(--gutter) 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .public-site .public-hero--cinema .hero-coordinate {
+    position: static;
+    margin-bottom: 22px;
+    font-size: clamp(7px, 1.9vw, 9px);
+  }
+  .public-site .public-hero--cinema .hero-copy {
+    width: 100%;
+    padding: 0;
+  }
+  .public-site .public-hero--cinema .hero-copy h1 {
+    font-size: clamp(56px, 14.5vw, 88px);
+  }
+  .public-site .public-hero--cinema .hero-copy p {
+    margin: 14px 0 18px;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .public-site .hero-world--cinema {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: clamp(300px, 43svh, 480px);
+    flex: 0 0 auto;
+    margin-top: 10px;
+  }
+  .public-site .public-hero--cinema .hero-bottom {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    padding-top: 18px;
+    margin-top: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .public-site .vending-startup .startup-lit {
+    opacity: 1;
+  }
+  .public-site .vending-startup .startup-edge {
+    display: none;
+  }
+}
+
+/* The opening has no visible content for its first 300ms. Every part shares the
+   machine clock; the page stays live and any navigation input completes it. */
+@media (prefers-reduced-motion: no-preference) {
+  .public-site.public-home[data-intro="pending"]
+    :is(
+      .public-nav,
+      .hero-coordinate,
+      .hero-copy > p,
+      .hero-copy > .public-button,
+      .hero-bottom,
+      .hero-copy h1 > span,
+      .startup-lit
+    ) {
+    opacity: 0;
+    animation: lify-intro-fallback 0s 4s forwards;
+  }
+  .public-site.public-home[data-intro="running"] .public-nav {
+    animation: lify-intro-navigation 2.2s ease both;
+  }
+  .public-site.public-home[data-intro="running"] .hero-coordinate {
+    animation: lify-intro-coordinate 2.2s ease both;
+  }
+  .public-site.public-home[data-intro="running"] :is(.hero-copy > p, .hero-copy > .public-button) {
+    animation: lify-intro-copy 2.2s ease both;
+  }
+  .public-site.public-home[data-intro="running"] .hero-bottom {
+    animation: lify-intro-footer 2.2s ease both;
+  }
+  .public-site.public-home[data-intro-hidden="true"] .public-nav,
+  .public-site.public-home[data-intro-hidden="true"] .public-hero * {
+    animation-play-state: paused;
+  }
+}
+@keyframes lify-intro-navigation {
+  0%,
+  55% {
+    opacity: 0;
+  }
+  95%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-intro-coordinate {
+  0%,
+  40% {
+    opacity: 0;
+  }
+  70%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-intro-copy {
+  0%,
+  50% {
+    opacity: 0;
+  }
+  90%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-intro-footer {
+  0%,
+  72% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes lify-intro-fallback {
+  to {
+    opacity: 1;
+  }
+}

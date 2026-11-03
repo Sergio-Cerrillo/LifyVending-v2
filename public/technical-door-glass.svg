@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 1536">
+  <defs>
+    <mask id="glass" maskUnits="userSpaceOnUse" x="0" y="0" width="2048" height="1536" style="mask-type:luminance">
+      <rect width="2048" height="1536" fill="white"/>
+      <path d="M777 533 985 503Q991 501 992 508L995 985Q996 993 989 993L775 990Q769 990 769 984V542Q769 535 777 533Z" fill="#181818"/>
+    </mask>
+  </defs>
+  <rect width="2048" height="1536" fill="white" mask="url(#glass)"/>
+</svg>

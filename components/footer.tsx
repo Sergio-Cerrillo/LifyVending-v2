@@ -1,66 +1,91 @@
-"use client"
-
 import Image from "next/image"
+import companyLogo from "@/public/logo.png"
 import Link from "next/link"
-import { Instagram, Mail, MapPin, Phone } from "lucide-react"
+import { ArrowUpRight, ArrowUp, MapPin } from "lucide-react"
+
+const mapAddress = encodeURIComponent("Calle Mozart 10A, Mallorca, Islas Baleares, España")
+const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${mapAddress}`
 
 export function Footer() {
   return (
-    <footer className="relative border-t border-border px-4 py-10 sm:px-6 lg:px-8">
-      <div className="relative z-10 mx-auto max-w-7xl">
-        <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div className="flex items-center gap-4">
-            <Image src="/logo.png" alt="Lify Vending Logo" width={64} height={64} className="h-16 w-16 object-contain" />
-            <div>
-              <p className="text-2xl font-black tracking-[-0.04em] text-foreground">Lify Vending</p>
-              <p className="text-sm font-semibold text-muted-foreground">Tu negocio sin inversión</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <a href="mailto:info@lifyvending.com" className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-white px-4 text-sm font-black text-foreground shadow-sm transition hover:border-primary hover:text-primary">
-              <Mail className="h-4 w-4" />
-              Email
-            </a>
-            <a href="tel:+34692129851" className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-white px-4 text-sm font-black text-foreground shadow-sm transition hover:border-primary hover:text-primary">
-              <Phone className="h-4 w-4" />
-              Llamar
-            </a>
-            <a href="https://www.instagram.com/lify.vending" target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-white px-4 text-sm font-black text-foreground shadow-sm transition hover:border-primary hover:text-primary">
-              <Instagram className="h-4 w-4" />
-              Instagram
-            </a>
-          </div>
+    <footer className="public-footer">
+      <div className="footer-top">
+        <Link href="/" className="public-brand" aria-label="Lify Vending, inicio">
+          <span className="brand-original">
+            <Image src={companyLogo} alt="" sizes="124px" />
+          </span>
+          <span className="brand-caption">
+            BUENAS PAUSAS.
+            <br />
+            MEJORES DÍAS.
+          </span>
+        </Link>
+        <div className="footer-links">
+          <Link href="/sobre-nosotros">Nosotros</Link>
+          <Link href="/catalogo">Catálogo</Link>
+          <Link href="/servicio-tecnico">Servicio técnico</Link>
+          <a href="https://www.instagram.com/lify.vending" target="_blank" rel="noopener noreferrer">
+            Instagram
+            <ArrowUpRight size={14} />
+          </a>
+          <Link href="/login">
+            Área privada
+            <ArrowUpRight size={14} />
+          </Link>
         </div>
-
-        <div className="mt-8 flex flex-col gap-4 border-t border-border pt-6 text-sm font-semibold text-muted-foreground md:flex-row md:items-center md:justify-between">
-          <p>© 2026 Lify Vending. Todos los derechos reservados.</p>
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="inline-flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-primary" />
-              Calle Mozart, Local 10A · Islas Baleares
+        <a href="#" className="back-to-top" aria-label="Volver al principio">
+          <ArrowUp size={20} />
+        </a>
+      </div>
+      <div className="footer-location">
+        <div className="footer-location-copy">
+          <span className="public-eyebrow">ENCUÉNTRANOS / ISLAS BALEARES</span>
+          <h2>
+            Desde Mallorca.
+            <br />
+            <span>Muy cerca de ti.</span>
+          </h2>
+          <address>
+            <MapPin size={19} strokeWidth={1.5} aria-hidden="true" />
+            <span>
+              Calle Mozart, Local 10A
+              <br />
+              Islas Baleares, España
             </span>
-            <Link href="/login" className="font-black text-foreground transition hover:text-primary">Área privada</Link>
-          </div>
+          </address>
+          <a href={directionsUrl} className="public-text-link" target="_blank" rel="noopener noreferrer">
+            Cómo llegar <ArrowUpRight size={19} />
+          </a>
         </div>
-
-        <div className="mt-6 flex justify-center md:justify-end">
-          <div className="glass rounded-full px-4 py-2 text-xs font-medium">
-            <p className="text-center text-sm text-muted-foreground">Desarrollado por:</p>
-            <Link
-              href="https://scwebstudio.tech"
-              className="group block transition-opacity hover:opacity-80"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <img
-                src="/logo-full-b.png"
-                alt="SCWebStudio"
-                className="h-16 w-auto transition-transform group-hover:scale-105"
-              />
-            </Link>
-          </div>
+        <div className="footer-map">
+          <iframe
+            title="Ubicación de Lify Vending: Calle Mozart, Local 10A, Islas Baleares"
+            src={`https://maps.google.com/maps?q=${mapAddress}&z=16&output=embed`}
+            width="600"
+            height="320"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            allowFullScreen
+          />
         </div>
+      </div>
+      <a href="https://scwebstudio.tech" target="_blank" rel="noopener noreferrer" className="studio-credit">
+        <div className="studio-signature">
+          <span className="public-eyebrow">DISEÑO Y DESARROLLO DE ESTA WEB</span>
+          <Image src="/logo-full-w.png" alt="SCWebStudio" width={330} height={93} />
+        </div>
+        <span className="studio-visit">
+          Conoce el estudio{" "}
+          <span>
+            <ArrowUpRight size={23} />
+          </span>
+        </span>
+      </a>
+      <div className="footer-bottom">
+        <p>© {new Date().getFullYear()} Lify Vending</p>
+        <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
+          Calle Mozart, Local 10A · Islas Baleares
+        </a>
       </div>
     </footer>
   )

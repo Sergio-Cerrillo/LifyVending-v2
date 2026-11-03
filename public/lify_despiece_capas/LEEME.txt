@@ -1,0 +1,15 @@
+LIFY VENDING — CAPAS DE DESPIECE (PROTOTIPO VISUAL)
+
+7 PNG de 2048 x 1536 px con canal alfa RGBA. Las capas conservan un lienzo común y coordenadas fijas.
+
+ORDEN DE CAPAS (de fondo a primer plano):
+01-carcasa.png
+06-electronica.png
+05-frio.png
+03-bandejas.png
+04-pago.png
+02-puerta.png
+
+00-montada.png es la composición de estas seis capas.
+
+IMPORTANTE: Las imágenes de origen fueron generadas por separado. Las piezas se han normalizado, escalado y colocado visualmente, pero NO son una extracción exacta de una misma máquina 3D: pueden existir discrepancias de perspectiva, tamaño, oclusión y montaje. Este paquete es apto para prototipar el efecto scroll, NO para garantizar un ensamblaje fotorealista perfecto. El vidrio de la puerta es una imagen con reflejos y no un material ópticamente transparente. Para encaje exacto se necesita un modelo 3D o una única escena fuente con capas reales.
