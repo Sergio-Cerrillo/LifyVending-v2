@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import companyLogo from '@/public/logo.png';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
@@ -98,17 +99,16 @@ function Sidebar({ className }: { className?: string }) {
       <div className="space-y-4 py-6">
         <div className="px-4 py-2">
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="-mt-10 w-full">
+            <div className="w-40 max-w-full">
               <Image
-                src="/logo.png"
+                src={companyLogo}
                 alt="Lify Vending Logo"
-                width={240}
-                height={240}
-                className="w-full h-auto"
+                sizes="160px"
+                className="w-full h-auto object-contain"
                 priority
               />
             </div>
-            <p className="-mt-20 text-xs font-semibold text-emerald-700">Panel de Administración</p>
+            <p className="mt-3 text-xs font-semibold text-emerald-700">Panel de Administración</p>
           </div>
           <div className="space-y-1">
             {filteredNavItems.map((item) => {

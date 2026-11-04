@@ -55,7 +55,7 @@ const sizes = [
           }),
       )
       await p.waitForFunction(() => document.querySelector(".public-hero").dataset.startup === "complete")
-      assert.equal(await p.locator("h1").innerText(), "Tu pausa.\nNuestra\nenergía.")
+      assert.equal((await p.locator("h1").innerText()).replace(/\s+/g, " ").trim(), "Tu pausa. Nuestra energía.")
       assert.equal(
         await p
           .locator(
@@ -75,6 +75,9 @@ const sizes = [
           overflow: document.documentElement.scrollWidth - innerWidth,
           title: r.getBoundingClientRect().toJSON(),
           copy: box(".hero-copy"),
+          paragraph: box(".hero-copy > p"),
+          action: box(".hero-copy > .public-button"),
+          alignment: getComputedStyle(title).textAlign,
           image,
           footer: box(".hero-bottom"),
           hero: box(".public-hero"),
@@ -93,8 +96,13 @@ const sizes = [
       assert.ok(
         layout.machine.left >= 0 && layout.machine.right <= width && layout.machine.bottom <= layout.footer.top + 2,
       )
-      if (width < 768) assert.ok(layout.copy.bottom <= layout.machine.top)
-      else
+      if (width < 768) {
+        assert.equal(layout.alignment, "center")
+        assert.ok(layout.title.bottom <= layout.machine.top + 2)
+        assert.ok(layout.machine.bottom <= layout.paragraph.top + 2)
+        assert.ok(Math.abs((layout.machine.left + layout.machine.right) / 2 - width / 2) < 2)
+        assert.ok(Math.abs(layout.action.x + layout.action.width / 2 - width / 2) < 2)
+      } else
         assert.ok(
           layout.copy.right <= layout.machine.left + 1,
           `Copy overlaps machine ${width}: ${JSON.stringify(layout)}`,

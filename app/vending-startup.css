@@ -227,42 +227,69 @@
 @media (max-width: 767px) {
   .public-site .public-hero--cinema {
     min-height: 100svh;
-    padding: 110px var(--gutter) 26px;
+    padding: 104px var(--gutter) 24px;
     display: flex;
     flex-direction: column;
     align-items: stretch;
   }
   .public-site .public-hero--cinema .hero-coordinate {
     position: static;
-    margin-bottom: 22px;
+    order: 0;
+    justify-content: center;
+    text-align: center;
+    margin-bottom: 18px;
     font-size: clamp(7px, 1.9vw, 9px);
   }
   .public-site .public-hero--cinema .hero-copy {
-    width: 100%;
-    padding: 0;
+    /* Keep one semantic heading while placing the machine before the supporting copy. */
+    display: contents;
   }
   .public-site .public-hero--cinema .hero-copy h1 {
-    font-size: clamp(56px, 14.5vw, 88px);
+    order: 1;
+    width: 100%;
+    font-size: clamp(48px, 13vw, 74px);
+    line-height: 1.04;
+    text-align: center;
+  }
+  .public-site .public-hero--cinema .hero-copy h1 > span:nth-child(2),
+  .public-site .public-hero--cinema .hero-copy h1 > .hero-green {
+    display: inline;
+    font-size: 0.72em;
+    padding: 0;
   }
   .public-site .public-hero--cinema .hero-copy p {
-    margin: 14px 0 18px;
+    order: 3;
+    align-self: center;
+    max-width: 330px;
+    margin: 12px 0 16px;
+    text-align: center;
     font-size: 12px;
     line-height: 1.7;
   }
   .public-site .hero-world--cinema {
     position: relative;
     inset: auto;
-    width: 100%;
-    height: clamp(300px, 43svh, 480px);
+    order: 2;
+    width: calc(100% + var(--gutter) * 2);
+    height: clamp(300px, 45svh, 500px);
     flex: 0 0 auto;
-    margin-top: 10px;
+    margin: 6px calc(var(--gutter) * -1) 0;
+  }
+  .public-site .hero-world--cinema .startup-camera {
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  .public-site .public-hero--cinema .hero-copy > .public-button {
+    order: 4;
+    align-self: center;
+    margin-bottom: 18px;
   }
   .public-site .public-hero--cinema .hero-bottom {
     position: relative;
     inset: auto;
     width: 100%;
+    order: 5;
     padding-top: 18px;
-    margin-top: 12px;
+    margin-top: auto;
   }
 }
 @media (prefers-reduced-motion: reduce) {

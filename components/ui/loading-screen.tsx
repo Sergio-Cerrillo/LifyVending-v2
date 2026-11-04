@@ -6,6 +6,7 @@
  */
 
 import Image from 'next/image';
+import companyLogo from '@/public/logo.png';
 
 interface LoadingScreenProps {
   message?: string;
@@ -18,9 +19,10 @@ export function LoadingScreen({ message = 'Cargando...' }: LoadingScreenProps) {
         {/* Logo con animación de pulse */}
         <div className="relative w-32 h-32 animate-pulse">
           <Image
-            src="/logo.png"
+            src={companyLogo}
             alt="Lify Vending"
             fill
+            sizes="128px"
             className="object-contain"
             priority
           />
@@ -50,9 +52,10 @@ export function LoadingInline({ message }: LoadingScreenProps) {
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-250px)] space-y-6">
       <div className="relative w-40 h-40 animate-pulse">
         <Image
-          src="/logo.png"
+          src={companyLogo}
           alt="Lify Vending"
           fill
+          sizes="160px"
           className="object-contain"
         />
       </div>

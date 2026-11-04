@@ -17,7 +17,7 @@ export function HeroSection() {
       <div className="hero-copy">
         <h1 id="hero-title">
           <span>Tu pausa.</span>
-          <span>Nuestra</span>
+          <span>Nuestra</span>{" "}
           <span className="hero-green">
             energía<span className="hero-period">.</span>
           </span>

@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
+import companyLogo from '@/public/logo.png'
 import { Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -27,10 +28,10 @@ function LoadingCard({ title = 'Cargando...', description = 'Por favor espera un
         <div className="flex items-center gap-4 mb-6 pb-6 border-b border-zinc-100">
           <div className="relative w-16 h-16 shrink-0">
             <Image 
-              src="/logo.png" 
+              src={companyLogo}
               alt="Logo" 
-              width={64}
-              height={64}
+              fill
+              sizes="64px"
               className="object-contain"
               priority
             />
