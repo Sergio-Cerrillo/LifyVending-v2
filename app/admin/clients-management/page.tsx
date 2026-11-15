@@ -24,7 +24,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Settings, User, Building, Eye, Trash2, Route } from 'lucide-react';
+import { Plus, Settings, User, Building, Eye, Trash2, Route, History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase-helpers';
 import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
@@ -501,6 +501,12 @@ export default function AdminClientsPage() {
                           <Button variant="ghost" size="sm" className="border border-zinc-200 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 transition-colors">
                             <Eye className="w-4 h-4 mr-2" />
                             Ver
+                          </Button>
+                        </Link>
+                        <Link href={`/admin/clients/${client.id}#historical`}>
+                          <Button variant="outline" size="sm">
+                            <History className="w-4 h-4 mr-2" />
+                            Históricos
                           </Button>
                         </Link>
                         <Link href={`/admin/clients/${client.id}`}>

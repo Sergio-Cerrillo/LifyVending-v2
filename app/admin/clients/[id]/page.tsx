@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase-helpers';
 import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { LoadingInline } from '@/components/ui/loading-screen';
 import { toast } from 'sonner';
+import { ClientRevenueHistory } from '@/components/admin/client-revenue-history';
 import {
   Dialog,
   DialogContent,
@@ -429,6 +430,8 @@ export default function AdminClientDetailPage() {
           </Link>
         </CardContent>
       </Card>
+
+      <ClientRevenueHistory clientId={clientId} />
 
       {/* Configuración de porcentajes */}
       <Card>

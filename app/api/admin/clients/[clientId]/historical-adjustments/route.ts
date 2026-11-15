@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
+import { normalizeManualHistory, manualHistoryAmounts } from '@/lib/revenue/manual-history';
 
 async function requireAdmin(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -27,35 +28,12 @@ async function requireAdmin(request: NextRequest) {
   return { user };
 }
 
-function normalizePeriodPayload(body: any) {
-  const machineId = String(body?.machineId || '').trim();
-  const year = Number(body?.year);
-  const month = Number(body?.month);
-  const amountTotal = Number(body?.amountTotal);
-
-  if (!machineId) {
-    throw new Error('Máquina requerida');
-  }
-
-  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
-    throw new Error('Año inválido');
-  }
-
-  if (!Number.isInteger(month) || month < 1 || month > 12) {
-    throw new Error('Mes inválido');
-  }
-
-  if (!Number.isFinite(amountTotal) || amountTotal < 0) {
-    throw new Error('Importe inválido');
-  }
-
-  return {
-    machineId,
-    year,
-    month,
-    amountTotal: Math.round(amountTotal * 100) / 100,
-    notes: body?.notes ? String(body.notes).trim() : null,
-  };
+async function getManualAmounts(clientId: string, payload: ReturnType<typeof normalizeManualHistory>) {
+  const { data, error } = await supabaseAdmin.from('client_settings')
+    .select('commission_hide_percent, commission_payment_percent')
+    .eq('client_id', clientId).single();
+  if (error || !data) throw new Error('No se pudieron leer los porcentajes guardados del cliente.');
+  return manualHistoryAmounts(payload, Number(data.commission_hide_percent ?? 0), Number(data.commission_payment_percent ?? 0));
 }
 
 export async function GET(
@@ -78,11 +56,15 @@ export async function GET(
     return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
   }
 
-  const { data: settings } = await supabaseAdmin
+  const { data: settings, error: settingsError } = await supabaseAdmin
     .from('client_settings')
     .select('commission_hide_percent, commission_payment_percent')
     .eq('client_id', clientId)
     .maybeSingle();
+
+  if (settingsError || !settings) {
+    return NextResponse.json({ error: 'No se pudieron cargar los porcentajes guardados del cliente.' }, { status: 500 });
+  }
 
   const { data: rows, error: rowsError } = await supabaseAdmin
     .from('client_revenue_history_adjustments' as any)
@@ -135,10 +117,10 @@ export async function POST(
 
   const { clientId } = await params;
 
-  let payload: ReturnType<typeof normalizePeriodPayload>;
+  let payload: ReturnType<typeof normalizeManualHistory>;
   try {
     const body = await request.json();
-    payload = normalizePeriodPayload(body);
+    payload = normalizeManualHistory(body);
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Payload inválido' }, { status: 400 });
   }
@@ -154,6 +136,13 @@ export async function POST(
     return NextResponse.json({ error: 'La máquina no está asignada al cliente' }, { status: 400 });
   }
 
+  let amounts: ReturnType<typeof manualHistoryAmounts>;
+  try {
+    amounts = await getManualAmounts(clientId, payload);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from('client_revenue_history_adjustments' as any)
     .insert({
@@ -161,7 +150,10 @@ export async function POST(
       machine_id: payload.machineId,
       year: payload.year,
       month: payload.month,
-      amount_total: payload.amountTotal,
+      ...amounts,
+      generated_by: 'manual',
+      status: 'published',
+      published_at: new Date().toISOString(),
       notes: payload.notes,
       created_by_user_id: auth.user.id,
       updated_by_user_id: auth.user.id,
@@ -171,8 +163,8 @@ export async function POST(
 
   if (insertError || !inserted) {
     return NextResponse.json(
-      { error: `No se pudo crear registro: ${insertError?.message}` },
-      { status: 500 }
+      { error: insertError?.code === '23505' ? 'Ya existe un histórico para esta máquina y mes. Puedes editar la entrada manual existente.' : `No se pudo crear registro: ${insertError?.message}` },
+      { status: insertError?.code === '23505' ? 409 : 500 }
     );
   }
 
@@ -188,14 +180,14 @@ export async function PATCH(
 
   const { clientId } = await params;
 
-  let payload: ReturnType<typeof normalizePeriodPayload> & { id: string };
+  let payload: ReturnType<typeof normalizeManualHistory> & { id: string };
   try {
     const body = await request.json();
     if (!body?.id) throw new Error('ID requerido');
 
     payload = {
       id: String(body.id),
-      ...normalizePeriodPayload(body),
+      ...normalizeManualHistory(body),
     };
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Payload inválido' }, { status: 400 });
@@ -212,25 +204,36 @@ export async function PATCH(
     return NextResponse.json({ error: 'La máquina no está asignada al cliente' }, { status: 400 });
   }
 
+  let amounts: ReturnType<typeof manualHistoryAmounts>;
+  try {
+    amounts = await getManualAmounts(clientId, payload);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('client_revenue_history_adjustments' as any)
     .update({
       machine_id: payload.machineId,
       year: payload.year,
       month: payload.month,
-      amount_total: payload.amountTotal,
+      ...amounts,
+      generated_by: 'manual',
+      status: 'published',
+      published_at: new Date().toISOString(),
       notes: payload.notes,
       updated_by_user_id: auth.user.id,
     })
     .eq('id', payload.id)
     .eq('client_id', clientId)
+    .or('generated_by.is.null,generated_by.neq.system')
     .select('*')
     .single();
 
   if (updateError || !updated) {
     return NextResponse.json(
-      { error: `No se pudo actualizar registro: ${updateError?.message}` },
-      { status: 500 }
+      { error: updateError?.code === '23505' ? 'Ya existe un histórico para esta máquina y mes.' : 'No se pudo editar la entrada. Comprueba que existe y que es manual.' },
+      { status: updateError?.code === '23505' || updateError?.code === 'PGRST116' ? 409 : 500 }
     );
   }
 
@@ -255,17 +258,23 @@ export async function DELETE(
     return NextResponse.json({ error: error.message || 'Payload inválido' }, { status: 400 });
   }
 
-  const { error: deleteError } = await supabaseAdmin
+  const { data: deleted, error: deleteError } = await supabaseAdmin
     .from('client_revenue_history_adjustments' as any)
     .delete()
     .eq('id', entryId)
-    .eq('client_id', clientId);
+    .eq('client_id', clientId)
+    .or('generated_by.is.null,generated_by.neq.system')
+    .select('id');
 
   if (deleteError) {
     return NextResponse.json(
       { error: `No se pudo eliminar registro: ${deleteError.message}` },
       { status: 500 }
     );
+  }
+
+  if (!deleted?.length) {
+    return NextResponse.json({ error: 'La entrada no existe o pertenece a un cierre automático.' }, { status: 409 });
   }
 
   return NextResponse.json({ success: true });
