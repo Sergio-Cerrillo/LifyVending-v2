@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { supabase } from '@/lib/supabase-helpers';
 import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 import { toast } from 'sonner';
+import { HistoricalRevenueCard, HistoricalRevenueMonthSummary } from '@/components/revenue/historical-revenue-card';
 
 interface Entry {
   id: string;
@@ -26,10 +27,11 @@ interface Entry {
 interface HistoryData {
   entries: Entry[];
   machineOptions: Array<{ id: string; name: string; location: string | null }>;
-  client: { commission_hide_percent: number };
+  client: { commission_hide_percent: number; commission_payment_percent: number };
 }
 const emptyForm = { machineId: '', period: '', amount: '', amountType: 'gross', notes: '' };
 const currency = (amount: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount);
+const monthLabel = (year: number, month: number) => new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
 
 export function ClientRevenueHistory({ clientId }: { clientId: string }) {
   const [data, setData] = useState<HistoryData | null>(null);
@@ -69,6 +71,15 @@ export function ClientRevenueHistory({ clientId }: { clientId: string }) {
   const maxPeriod = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`;
   const amount = Number(form.amount.replace(',', '.'));
   const preview = form.amountType === 'gross' ? Math.round(amount * (1 - Number(data?.client.commission_hide_percent || 0) / 100) * 100) / 100 : amount;
+
+  const paymentPercent = Number(data?.client.commission_payment_percent || 0);
+  const commissionFor = (visible: number) => Math.round(visible * paymentPercent) / 100;
+  const selectedMachine = data?.machineOptions.find(machine => machine.id === form.machineId);
+  const entriesByMonth = (data?.entries || []).reduce((groups, entry) => {
+    const key = `${entry.year}-${String(entry.month).padStart(2, '0')}`;
+    (groups[key] ||= []).push(entry);
+    return groups;
+  }, {} as Record<string, Entry[]>);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -144,7 +155,7 @@ export function ClientRevenueHistory({ clientId }: { clientId: string }) {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="history-amount">Importe (€)</Label>
+                  <Label htmlFor="history-amount">{form.amountType === 'gross' ? 'Recaudación bruta (€)' : 'Recaudación visible para el cliente (€)'}</Label>
                   <Input id="history-amount" inputMode="decimal" required placeholder="0,00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
                 </div>
                 <div className="space-y-2 sm:col-span-2">
@@ -153,7 +164,28 @@ export function ClientRevenueHistory({ clientId }: { clientId: string }) {
                 </div>
               </fieldset>
               <p className="text-sm text-muted-foreground">{form.amountType === 'gross' ? `Se aplicará el ${data.client.commission_hide_percent}% oculto guardado en la configuración.` : 'El importe ya está ajustado. Se mostrará tal cual, sin volver a descontar el porcentaje oculto.'} Guarda antes cualquier cambio de porcentajes o asignaciones.</p>
-              {form.amount.trim() && Number.isFinite(preview) && amount >= 0 && <p className="text-sm font-semibold">El cliente verá: {currency(preview)}</p>}
+              {form.amount.trim() && Number.isFinite(preview) && amount >= 0 && (
+                <div className="space-y-3" aria-live="polite">
+                  <div className="rounded-lg bg-muted/30 p-3 text-sm space-y-1">
+                    {form.amountType === 'gross' && <>
+                      <p>Recaudación bruta: <strong>{currency(amount)}</strong></p>
+                      <p>Descuento oculto ({data.client.commission_hide_percent}%): <strong>{currency(amount - preview)}</strong></p>
+                    </>}
+                    <p>Recaudación visible: <strong>{currency(preview)}</strong></p>
+                    <p>Comisión de pago ({paymentPercent}%): <strong>{currency(commissionFor(preview))}</strong></p>
+                  </div>
+                  <p className="text-sm font-semibold">Así lo verá el cliente{form.period ? ` · ${monthLabel(...form.period.split('-').map(Number) as [number, number])}` : ''}</p>
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    <HistoricalRevenueCard
+                      machineName={selectedMachine?.name || 'Selecciona una máquina'}
+                      machineLocation={selectedMachine?.location || null}
+                      amountTotal={preview}
+                      commissionAmount={commissionFor(preview)}
+                      notes={form.notes}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" disabled={busy}>{busy ? 'Guardando…' : editingId ? 'Guardar entrada' : 'Añadir histórico'}</Button>
                 {editingId && <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancelar edición</Button>}
@@ -161,18 +193,40 @@ export function ClientRevenueHistory({ clientId }: { clientId: string }) {
             </form>
           )}
           {data.entries.length === 0 ? <p className="text-sm text-muted-foreground">Todavía no hay meses guardados. Puedes añadir el primero arriba.</p> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <caption className="sr-only">Histórico mensual manual y automático del cliente</caption>
-                <thead><tr className="border-b"><th className="p-3">Mes</th><th className="p-3">Máquina</th><th className="p-3">Visible para el cliente</th><th className="p-3">Origen</th><th className="p-3">Acciones</th></tr></thead>
-                <tbody>{data.entries.map(entry => <tr key={entry.id} className="border-b">
-                  <td className="p-3 whitespace-nowrap">{new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(new Date(entry.year, entry.month - 1, 1))}</td>
-                  <td className="p-3">{entry.machines?.name || 'Máquina'}{entry.notes && <p className="text-xs text-muted-foreground">{entry.notes}</p>}</td>
-                  <td className="p-3 whitespace-nowrap font-medium">{currency(Number(entry.amount_total))}</td>
-                  <td className="p-3"><Badge variant="outline">{entry.generated_by === 'system' ? 'Automático' : 'Manual'}</Badge></td>
-                  <td className="p-3">{entry.generated_by !== 'system' && <div className="flex gap-2"><Button size="sm" variant="outline" disabled={busy} onClick={() => edit(entry)}>Editar</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => setDeleting(entry)}>Eliminar</Button></div>}</td>
-                </tr>)}</tbody>
-              </table>
+            <div className="space-y-6">
+              {Object.keys(entriesByMonth).sort((a, b) => b.localeCompare(a)).map(key => {
+                const entries = entriesByMonth[key];
+                const total = Math.round(entries.reduce((sum, entry) => sum + Number(entry.amount_total), 0) * 100) / 100;
+                return (
+                  <section key={key} className="space-y-4" aria-label={monthLabel(entries[0].year, entries[0].month)}>
+                    <HistoricalRevenueMonthSummary
+                      label={monthLabel(entries[0].year, entries[0].month)}
+                      amountTotal={total}
+                      commissionAmount={commissionFor(total)}
+                    />
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      {entries.map(entry => (
+                        <div key={entry.id} className="space-y-2">
+                          <HistoricalRevenueCard
+                            machineName={entry.machines?.name || 'Máquina'}
+                            machineLocation={entry.machines?.location || null}
+                            amountTotal={Number(entry.amount_total)}
+                            commissionAmount={commissionFor(Number(entry.amount_total))}
+                            notes={entry.notes}
+                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline">{entry.generated_by === 'system' ? 'Automático' : 'Manual'}</Badge>
+                            {entry.generated_by !== 'system' && <>
+                              <Button size="sm" variant="outline" disabled={busy} onClick={() => edit(entry)}>Editar</Button>
+                              <Button size="sm" variant="outline" disabled={busy} onClick={() => setDeleting(entry)}>Eliminar</Button>
+                            </>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           )}
         </>}

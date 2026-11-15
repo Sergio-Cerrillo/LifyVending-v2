@@ -22,6 +22,7 @@ import { RefreshCw, TrendingUp, DollarSign, Calendar, MapPin, Clock, LogOut, Inf
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/lib/supabase-helpers';
+import { HistoricalRevenueCard, HistoricalRevenueMonthSummary } from '@/components/revenue/historical-revenue-card';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { fetchWithTimeout, withTimeout } from '@/lib/client-timeouts';
 
@@ -165,7 +166,7 @@ export default function ClientDashboardPage() {
   const historicalMonthKeys = Object.keys(historicalByMonth).sort((a, b) => b.localeCompare(a));
 
   const paymentPercent = Number(data?.commission?.paymentPercent ?? 0);
-  const paymentRate = paymentPercent > 1 ? paymentPercent / 100 : paymentPercent;
+  const paymentRate = paymentPercent / 100;
 
   if (loading) {
     return <LoadingScreen message="Cargando dashboard..." />;
@@ -398,52 +399,22 @@ export default function ClientDashboardPage() {
 
                 return (
                   <TabsContent key={monthKey} value={monthKey} className="space-y-4">
-                    <Card className="border-zinc-200">
-                      <CardHeader>
-                        <CardTitle className="capitalize">
-                          Total {formatMonthLabel(year, month)}
-                        </CardTitle>
-                        <CardDescription>
-                          Suma de recaudaciones del mes
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex flex-wrap items-baseline gap-3">
-                          <p className="text-3xl font-bold">{formatCurrency(monthTotal)}</p>
-                          <p className="text-sm text-zinc-600">
-                            Comisión {formatCurrency(monthCommission)}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <HistoricalRevenueMonthSummary
+                      label={formatMonthLabel(year, month)}
+                      amountTotal={monthTotal}
+                      commissionAmount={monthCommission}
+                    />
 
                     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                       {monthEntries.map((entry) => (
-                        <Card key={entry.id} className="border-zinc-200">
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-base">
-                              {entry.machineName}
-                            </CardTitle>
-                            <CardDescription>
-                              {entry.machineLocation || 'Sin ubicación'}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="space-y-2">
-                            <div className="space-y-1">
-                              <p className="text-2xl font-bold">
-                                {formatCurrency(entry.amountTotal)}
-                              </p>
-                              <p className="text-sm text-zinc-600">
-                                Comisión {formatCurrency(Number(entry.amountTotal || 0) * paymentRate)}
-                              </p>
-                            </div>
-                            {entry.notes && (
-                              <p className="text-xs text-muted-foreground">
-                                {entry.notes}
-                              </p>
-                            )}
-                          </CardContent>
-                        </Card>
+                        <HistoricalRevenueCard
+                          key={entry.id}
+                          machineName={entry.machineName}
+                          machineLocation={entry.machineLocation}
+                          amountTotal={Number(entry.amountTotal || 0)}
+                          commissionAmount={Math.round(Number(entry.amountTotal || 0) * paymentRate * 100) / 100}
+                          notes={entry.notes}
+                        />
                       ))}
                     </div>
                   </TabsContent>
