@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
 import { normalizeManualHistory, manualHistoryAmounts } from '@/lib/revenue/manual-history';
+import { withHistorySchemaCompatibility } from '@/lib/revenue/history-schema';
 
 async function requireAdmin(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -103,7 +104,10 @@ export async function GET(
       commission_hide_percent: settings?.commission_hide_percent ?? 0,
       commission_payment_percent: settings?.commission_payment_percent ?? 0,
     },
-    entries: rows || [],
+    entries: (rows || []).map((row: any) => ({
+      ...row,
+      generated_by: row.generated_by || (row.created_by_user_id ? 'manual' : 'system'),
+    })),
     machineOptions,
   });
 }
@@ -143,9 +147,8 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const { data: inserted, error: insertError } = await supabaseAdmin
-    .from('client_revenue_history_adjustments' as any)
-    .insert({
+  const { data: inserted, error: insertError } = await withHistorySchemaCompatibility(
+    {
       client_id: clientId,
       machine_id: payload.machineId,
       year: payload.year,
@@ -157,9 +160,11 @@ export async function POST(
       notes: payload.notes,
       created_by_user_id: auth.user.id,
       updated_by_user_id: auth.user.id,
-    })
-    .select('*')
-    .single();
+    },
+    (row) => supabaseAdmin
+      .from('client_revenue_history_adjustments' as any)
+      .insert(row).select('*').single(),
+  );
 
   if (insertError || !inserted) {
     return NextResponse.json(
@@ -211,9 +216,8 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const { data: updated, error: updateError } = await supabaseAdmin
-    .from('client_revenue_history_adjustments' as any)
-    .update({
+  const { data: updated, error: updateError } = await withHistorySchemaCompatibility(
+    {
       machine_id: payload.machineId,
       year: payload.year,
       month: payload.month,
@@ -223,12 +227,16 @@ export async function PATCH(
       published_at: new Date().toISOString(),
       notes: payload.notes,
       updated_by_user_id: auth.user.id,
-    })
-    .eq('id', payload.id)
-    .eq('client_id', clientId)
-    .or('generated_by.is.null,generated_by.neq.system')
-    .select('*')
-    .single();
+    },
+    (row, legacy) => {
+      const query = supabaseAdmin.from('client_revenue_history_adjustments' as any)
+        .update(row).eq('id', payload.id).eq('client_id', clientId);
+      const manualQuery = legacy
+        ? query.not('created_by_user_id', 'is', null)
+        : query.or('generated_by.is.null,generated_by.neq.system');
+      return manualQuery.select('*').single();
+    },
+  );
 
   if (updateError || !updated) {
     return NextResponse.json(
@@ -258,13 +266,17 @@ export async function DELETE(
     return NextResponse.json({ error: error.message || 'Payload inválido' }, { status: 400 });
   }
 
-  const { data: deleted, error: deleteError } = await supabaseAdmin
-    .from('client_revenue_history_adjustments' as any)
-    .delete()
-    .eq('id', entryId)
-    .eq('client_id', clientId)
-    .or('generated_by.is.null,generated_by.neq.system')
-    .select('id');
+  const { data: deleted, error: deleteError } = await withHistorySchemaCompatibility<Array<{ id: string }>>(
+    {},
+    (_row, legacy) => {
+      const query = supabaseAdmin.from('client_revenue_history_adjustments' as any)
+        .delete().eq('id', entryId).eq('client_id', clientId);
+      const manualQuery = legacy
+        ? query.not('created_by_user_id', 'is', null)
+        : query.or('generated_by.is.null,generated_by.neq.system');
+      return manualQuery.select('id');
+    },
+  );
 
   if (deleteError) {
     return NextResponse.json(
