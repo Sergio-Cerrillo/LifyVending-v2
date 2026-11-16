@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { formatDateForFrekuent, getFrekuentRevenueMachines, getFrekuentSalesByProduct } from '@/lib/frekuent';
+import { formatDateForFrekuent, getMadridTodayRange, getFrekuentRevenueMachines, getFrekuentSalesByProduct } from '@/lib/frekuent';
+import { previousMadridMonthRange } from '@/lib/documentation/calculations';
 import { generateFrekuentId } from '@/lib/machine-id-utils';
 import { supabase, supabaseAdmin } from '@/lib/supabase-helpers';
 
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
     let selectedMachines: MachineRow[] = [];
     let revenueMachines: Awaited<ReturnType<typeof getFrekuentRevenueMachines>> = [];
 
-    const range = madridCurrentMonthRange();
+    const range = body.period === 'previous_month' ? previousMadridMonthRange() : body.period === 'daily' ? getMadridTodayRange() : madridCurrentMonthRange();
     const frekuentIds = new Set<number>(directProviderIds);
 
     if (frekuentIds.size === 0) {

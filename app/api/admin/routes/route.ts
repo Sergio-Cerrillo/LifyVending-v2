@@ -531,3 +531,42 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await requireRouteUser(request);
+    if ('error' in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    if (auth.profile.role !== 'admin') {
+      return NextResponse.json({ error: 'Solo admin puede eliminar rutas' }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const routeId = typeof body?.routeId === 'string' ? body.routeId.trim() : '';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(routeId)) {
+      return NextResponse.json({ error: 'Selecciona una ruta válida' }, { status: 400 });
+    }
+
+    // Las claves foráneas eliminan en cascada las asignaciones y los eventos de
+    // esta ruta. Las máquinas y el perfil del reponedor no se eliminan.
+    const { data: deleted, error } = await supabaseAdmin
+      .from('replenishment_routes' as any)
+      .delete()
+      .eq('id', routeId)
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      console.error('[ADMIN-ROUTES] Error eliminando ruta:', error);
+      return NextResponse.json({ error: 'No se pudo eliminar la ruta. Vuelve a intentarlo.' }, { status: 500 });
+    }
+    if (!deleted) {
+      return NextResponse.json({ error: 'La ruta ya no existe' }, { status: 404 });
+    }
+    return NextResponse.json({ success: true, routeId: deleted.id });
+  } catch (error) {
+    console.error('[ADMIN-ROUTES] Error eliminando ruta:', error);
+    return NextResponse.json({ error: 'No se pudo eliminar la ruta. Vuelve a intentarlo.' }, { status: 500 });
+  }
+}

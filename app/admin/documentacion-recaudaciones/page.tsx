@@ -1,6 +1,8 @@
 'use client';
 
 import Image from 'next/image';
+import { simpleMachineCommission, productCommission } from '@/lib/documentation/calculations';
+import { useDocumentationCatalog } from '@/hooks/use-documentation-catalog';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Building2,
@@ -38,6 +40,7 @@ interface MachineRevenue {
   providerMachineId?: string | null;
   daily: { total: number; card?: number; cash?: number; updatedAt: string | null };
   monthly: { total: number; card?: number; cash?: number; updatedAt: string | null };
+  previous_month?: { total: number; card?: number; cash?: number; updatedAt: string | null } | null;
 }
 
 interface RevenueData {
@@ -47,7 +50,8 @@ interface RevenueData {
   lastUpdate: string | null;
 }
 
-type Period = 'daily' | 'monthly';
+type Period = 'daily' | 'monthly' | 'previous_month';
+const periodLabel = (period: Period) => period === 'previous_month' ? 'Mes anterior' : period === 'monthly' ? 'Este mes' : 'Hoy';
 type SimpleDocumentMode = 'default' | 'custom';
 type InvoiceType = 'A' | 'B';
 
@@ -167,6 +171,7 @@ interface CompleteAggregatedProductRow extends AggregatedProductSalesRow {
   payableUnits: number;
   difference: number;
   commissionAmount: number;
+  fixedPerBottle: number | null;
 }
 
 const productPriceCatalog: Record<string, { priceWithVat: number; saleWithoutVat: number; purchaseWithoutVat: number }> = {
@@ -240,6 +245,7 @@ function normalizeCatalogProduct(value: string) {
 
 function getProductPricing(productName: string, catalog = productPriceCatalog) {
   const normalized = normalizeCatalogProduct(productName);
+  if (!normalized) return { priceWithVat: 0, saleWithoutVat: 0, purchaseWithoutVat: 0, matched: false };
   const exact = catalog[normalized];
   if (exact) return { ...exact, matched: true };
 
@@ -362,6 +368,12 @@ export default function RevenueDocumentationPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [period, setPeriod] = useState<Period>('monthly');
+  const [previousMachines, setPreviousMachines] = useState<MachineRevenue[] | null>(null);
+  const [previousLoading, setPreviousLoading] = useState(false);
+  const [previousError, setPreviousError] = useState<string | null>(null);
+  const [previousWarnings, setPreviousWarnings] = useState<string[]>([]);
+  const [previousRange, setPreviousRange] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [machinePercentages, setMachinePercentages] = useState<Record<string, { hidden: string; payment: string }>>({});
   const [documentDate, setDocumentDate] = useState(todayInputValue());
   const [clientName, setClientName] = useState('');
   const [clientFiscalDataEnabled, setClientFiscalDataEnabled] = useState(false);
@@ -429,14 +441,43 @@ export default function RevenueDocumentationPage() {
     loadRevenue();
   }, []);
 
+  async function loadPreviousMonth() {
+    setPreviousLoading(true);
+    setPreviousError(null);
+    try {
+      const { data } = await withTimeout(supabase.auth.getSession(), 10_000);
+      if (!data.session) throw new Error('Sesión expirada');
+      const response = await fetchWithTimeout('/api/admin/documentation/revenue', { headers: { Authorization: `Bearer ${data.session.access_token}` } }, 120_000);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudo consultar el mes anterior.');
+      setPreviousMachines(result.machines);
+      setPreviousWarnings(result.warnings || []);
+      setPreviousRange(result.range);
+    } catch (err) { setPreviousError(err instanceof Error ? err.message : 'No se pudo consultar el mes anterior.'); }
+    finally { setPreviousLoading(false); }
+  }
+  useEffect(() => {
+    if (period === 'previous_month' && previousMachines === null && !previousLoading && !previousError) void loadPreviousMonth();
+  }, [period, previousMachines, previousLoading, previousError]);
+  const activeMachines = period === 'previous_month' ? previousMachines || [] : machines;
+  const machineRevenue = (machine: MachineRevenue) => machine[period]?.total ?? 0;
+  const percentagesFor = (id: string) => machinePercentages[id] || { hidden: '0', payment: commissionPercent };
+  const breakdownFor = (machine: MachineRevenue) => {
+    const percentages = percentagesFor(machine.id);
+    return simpleMachineCommission(machineRevenue(machine), Number(percentages.hidden), Number(percentages.payment));
+  };
+  function updateMachinePercentage(id: string, field: 'hidden' | 'payment', value: string) {
+    setMachinePercentages(current => ({ ...current, [id]: { ...(current[id] || { hidden: '0', payment: commissionPercent }), [field]: value } }));
+  }
+
   const sortedMachines = useMemo(() => (
-    [...machines].sort((a, b) => {
-      const aTotal = a[period].total || 0;
-      const bTotal = b[period].total || 0;
+    [...activeMachines].sort((a, b) => {
+      const aTotal = a[period]?.total || 0;
+      const bTotal = b[period]?.total || 0;
       if (bTotal !== aTotal) return bTotal - aTotal;
       return a.name.localeCompare(b.name, 'es');
     })
-  ), [machines, period]);
+  ), [activeMachines, period]);
 
   const filteredMachines = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -450,16 +491,17 @@ export default function RevenueDocumentationPage() {
   }, [query, sortedMachines]);
 
   const selectedMachines = useMemo(
-    () => machines.filter((machine) => selectedIds.has(machine.id)),
-    [machines, selectedIds],
+    () => activeMachines.filter((machine) => selectedIds.has(machine.id)),
+    [activeMachines, selectedIds],
   );
 
-  const realRevenue = selectedMachines.reduce((sum, machine) => sum + (machine[period].total || 0), 0);
-  const selectedMonthlyRevenue = selectedMachines.reduce((sum, machine) => sum + (machine.monthly.total || 0), 0);
+  const realRevenue = selectedMachines.reduce((sum, machine) => sum + machineRevenue(machine), 0);
   const parsedCommissionPercent = Number(commissionPercent) || 0;
   const parsedManualBase = manualBaseAmount.trim() === '' ? null : Number(manualBaseAmount);
   const parsedIva = Number(ivaPercent) || 0;
-  const calculatedCommission = round2(realRevenue * (parsedCommissionPercent / 100));
+  const visibleRevenue = round2(selectedMachines.reduce((sum, machine) => sum + breakdownFor(machine).visible, 0));
+  const selectedMonthlyRevenue = visibleRevenue;
+  const calculatedCommission = round2(selectedMachines.reduce((sum, machine) => sum + breakdownFor(machine).commission, 0));
   const baseAmount = round2(customBaseEnabled && parsedManualBase !== null && Number.isFinite(parsedManualBase) ? parsedManualBase : calculatedCommission);
   const ivaAmount = round2(baseAmount * (parsedIva / 100));
   const totalAmount = round2(baseAmount + ivaAmount);
@@ -467,7 +509,7 @@ export default function RevenueDocumentationPage() {
   const customIvaAmount = invoiceType === 'A' ? round2(customRowsSubtotal * (parsedIva / 100)) : 0;
   const customTotalAmount = round2(customRowsSubtotal + customIvaAmount);
   const productExpenseAmount = parseNumberValue(productExpense);
-  const customBenefit = round2(realRevenue - productExpenseAmount);
+  const customBenefit = round2(visibleRevenue - productExpenseAmount);
   const customBenefitCommission = round2(customBenefit * (parsedCommissionPercent / 100));
 
   function toggleMachine(machineId: string) {
@@ -480,10 +522,14 @@ export default function RevenueDocumentationPage() {
   }
 
   function selectVisible() {
-    setSelectedIds(new Set(filteredMachines.map((machine) => machine.id)));
+    setSelectedIds(new Set(filteredMachines.filter(machine => period !== 'previous_month' || machine.previous_month != null).map((machine) => machine.id)));
   }
 
   function printDocument() {
+    if (period === 'previous_month' && (previousLoading || previousError || selectedMachines.some(machine => !machine.previous_month))) {
+      toast.error('Espera a cargar el mes anterior y selecciona solo máquinas con datos.');
+      return;
+    }
     if (!clientName.trim()) {
       toast.error('Falta el cliente', { description: 'Rellena el nombre del cliente antes de generar el PDF.' });
       return;
@@ -542,7 +588,7 @@ export default function RevenueDocumentationPage() {
       water: { label: 'Botellas de agua', keyword: 'LANJARON', matchMode: 'product_name' as ProductSalesMatchMode },
     }[preset];
     const machineId = presetMachineIds[preset];
-    const selectedPresetMachine = machines.find((machine) => machine.id === machineId);
+    const selectedPresetMachine = activeMachines.find((machine) => machine.id === machineId);
     const unitCommission = parseNumberValue(presetUnitCommissions[preset]);
 
     if (!machineId) {
@@ -575,6 +621,7 @@ export default function RevenueDocumentationPage() {
           machineNames: selectedPresetMachine?.name ? [selectedPresetMachine.name] : [],
           keywords: [config.keyword],
           matchModes: [config.matchMode],
+          period,
         }),
       }, 45_000);
       const payload = await response.json() as ProductSalesImportResponse;
@@ -653,8 +700,14 @@ export default function RevenueDocumentationPage() {
   }
 
   return (
-    <div className="space-y-6 px-3 py-4 print:p-0 sm:px-0 sm:py-0">
+    <div className="documentation-page min-w-0 space-y-6 px-3 py-4 print:p-0 sm:px-0 sm:py-0">
       <style jsx global>{`
+        .documentation-page { overflow-wrap: anywhere; }
+        .documentation-page button:not([role="switch"]) { white-space: normal; height: auto; min-height: 2.5rem; line-height: 1.25; }
+        .documentation-page button svg { flex-shrink: 0; }
+        .documentation-page input, .documentation-page textarea, .documentation-page select { min-width: 0; max-width: 100%; }
+        .documentation-page .grid > * { min-width: 0; }
+        .documentation-page [data-slot="card"], .documentation-page [data-slot="card-content"], .documentation-page [data-slot="card-header"] { min-width: 0; }
         @media print {
           body * {
             visibility: hidden !important;
@@ -726,7 +779,7 @@ export default function RevenueDocumentationPage() {
       </section>
 
       <Tabs defaultValue="simple" className="print:block">
-        <TabsList className="grid h-14 w-full grid-cols-2 rounded-2xl bg-zinc-100 p-1 print:hidden">
+        <TabsList className="grid h-auto min-h-14 w-full grid-cols-2 rounded-2xl bg-zinc-100 p-1 print:hidden">
           <TabsTrigger value="simple" className="rounded-xl text-sm font-black data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm sm:text-base">
             Recaudación simple
           </TabsTrigger>
@@ -735,9 +788,9 @@ export default function RevenueDocumentationPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="simple" className="mt-5">
-      <section className="grid gap-5 print:block xl:grid-cols-[minmax(0,1fr)_29rem]">
-        <div className="space-y-5 print:hidden">
+        <TabsContent forceMount value="simple" className="mt-5 data-[state=inactive]:hidden print:block">
+      <section className="grid gap-5 print:block 2xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]">
+        <div className="min-w-0 space-y-5 print:hidden">
           <Card className="border-zinc-200 bg-white shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl font-black text-zinc-900">
@@ -761,7 +814,7 @@ export default function RevenueDocumentationPage() {
                   type="single"
                   value={simpleDocumentMode}
                   onValueChange={(value) => value && setSimpleDocumentMode(value as SimpleDocumentMode)}
-                  className="grid h-12 grid-cols-2 rounded-xl bg-white p-1"
+                  className="grid h-auto grid-cols-1 rounded-xl bg-white p-1 sm:grid-cols-2"
                 >
                   <ToggleGroupItem value="default" className="rounded-lg font-black data-[state=on]:bg-emerald-600 data-[state=on]:text-white">
                     Predeterminado
@@ -808,7 +861,7 @@ export default function RevenueDocumentationPage() {
                     type="single"
                     value={period}
                     onValueChange={(value) => value && setPeriod(value as Period)}
-                    className="grid h-12 grid-cols-2 rounded-xl bg-zinc-100 p-1"
+                    className="grid h-auto grid-cols-3 rounded-xl bg-zinc-100 p-1"
                   >
                     <ToggleGroupItem value="daily" className="rounded-lg font-black data-[state=on]:bg-white data-[state=on]:text-emerald-700">
                       Hoy
@@ -816,10 +869,18 @@ export default function RevenueDocumentationPage() {
                     <ToggleGroupItem value="monthly" className="rounded-lg font-black data-[state=on]:bg-white data-[state=on]:text-emerald-700">
                       Este mes
                     </ToggleGroupItem>
+                    <ToggleGroupItem value="previous_month" className="min-h-10 rounded-lg text-xs font-black data-[state=on]:bg-white data-[state=on]:text-emerald-700 sm:text-sm">Mes anterior</ToggleGroupItem>
                   </ToggleGroup>
+                  {period === 'previous_month' && <div className="space-y-2 text-xs" aria-live="polite">
+                    {previousLoading && <p>Consultando el mes anterior en Frekuent y Televend…</p>}
+                    {previousRange && <p>{formatDateInput(previousRange.startDate.slice(0, 10))} — {formatDateInput(previousRange.endDate.slice(0, 10))}</p>}
+                    {previousError && <p role="alert" className="text-red-700">{previousError}</p>}
+                    {previousWarnings.map(warning => <p key={warning} className="text-amber-800">{warning}</p>)}
+                    <Button type="button" size="sm" variant="outline" disabled={previousLoading} onClick={loadPreviousMonth}>Volver a consultar mes anterior</Button>
+                  </div>}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="commissionPercent">% comisión sobre facturación real</Label>
+                  <Label htmlFor="commissionPercent">% comisión por defecto (sobre recaudación ajustada)</Label>
                   <Input
                     id="commissionPercent"
                     type="number"
@@ -988,7 +1049,7 @@ export default function RevenueDocumentationPage() {
                     <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
                       <div className="grid gap-2 md:grid-cols-3">
                         <div className="space-y-1">
-                          <Label className="text-[10px] font-black uppercase text-zinc-500">Recaudación mensual seleccionada</Label>
+                          <Label className="text-[10px] font-black uppercase text-zinc-500">Recaudación ajustada del periodo</Label>
                           <div className="flex h-11 items-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-black text-zinc-900">
                             {formatCurrency(selectedMonthlyRevenue)}
                           </div>
@@ -1140,14 +1201,20 @@ export default function RevenueDocumentationPage() {
                   No hay máquinas para este filtro.
                 </div>
               ) : (
-                <div className="grid gap-3 lg:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   {filteredMachines.map((machine) => {
                     const selected = selectedIds.has(machine.id);
-                    const amount = machine[period].total || 0;
+                    const amount = machineRevenue(machine);
+                    const unavailable = period === 'previous_month' && machine.previous_month == null;
+                    const percentages = percentagesFor(machine.id);
+                    const breakdown = breakdownFor(machine);
 
                     return (
+                      <div key={machine.id} className={`min-w-0 rounded-2xl border bg-white shadow-sm ${selected ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-zinc-200'}`}>
                       <button
-                        key={machine.id}
+                        disabled={unavailable}
+                        aria-pressed={selected}
+                        aria-label={`Seleccionar ${machine.name}`}
                         type="button"
                         onClick={() => toggleMachine(machine.id)}
                         className={`w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition ${selected ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-zinc-200 hover:border-emerald-200'}`}
@@ -1161,14 +1228,26 @@ export default function RevenueDocumentationPage() {
                               <Badge variant="outline" className={providerClass(machine.source)}>
                                 {providerLabel(machine.source)}
                               </Badge>
-                              <Badge variant="outline">{period === 'monthly' ? 'Este mes' : 'Hoy'}</Badge>
+                              <Badge variant="outline">{periodLabel(period)}</Badge>
                             </div>
                             <h3 className="break-words text-base font-black leading-tight text-zinc-900">{machine.name}</h3>
                             <p className="mt-1 break-words text-sm font-semibold text-zinc-500">{machine.location || 'Sin ubicación'}</p>
-                            <p className="mt-3 text-2xl font-black text-emerald-700">{formatCurrency(amount)}</p>
+                            <p className="mt-3 text-2xl font-black text-emerald-700">{unavailable ? 'Sin datos del mes' : formatCurrency(amount)}</p>
                           </div>
                         </div>
                       </button>
+                      {selected && !unavailable && <div className="space-y-3 border-t border-zinc-100 p-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="min-w-0 space-y-1"><Label htmlFor={`hide-${machine.id}`}>Oculto (%)</Label><Input id={`hide-${machine.id}`} type="number" min="0" max="100" step="0.01" value={percentages.hidden} onChange={event => updateMachinePercentage(machine.id, 'hidden', event.target.value)} /></div>
+                          <div className="min-w-0 space-y-1"><Label htmlFor={`pay-${machine.id}`}>Comisión (%)</Label><Input id={`pay-${machine.id}`} type="number" min="0" max="100" step="0.01" value={percentages.payment} onChange={event => updateMachinePercentage(machine.id, 'payment', event.target.value)} /></div>
+                        </div>
+                        <div className="rounded-xl bg-zinc-50 p-3 text-sm space-y-1">
+                          <SummaryLine label="Descuento oculto" value={`−${formatCurrency(breakdown.hidden)}`} />
+                          <SummaryLine label="Recaudación ajustada" value={formatCurrency(breakdown.visible)} strong />
+                          <SummaryLine label="Comisión a pagar" value={formatCurrency(breakdown.commission)} strong />
+                        </div>
+                      </div>}
+                      </div>
                     );
                   })}
                 </div>
@@ -1177,7 +1256,7 @@ export default function RevenueDocumentationPage() {
           </Card>
         </div>
 
-        <aside className="space-y-4 xl:sticky xl:top-24 xl:h-fit">
+        <aside className="min-w-0 space-y-4">
           <Card className="border-zinc-200 bg-white shadow-sm print:hidden">
             <CardHeader>
               <CardTitle className="text-xl font-black text-zinc-900">Resumen previo</CardTitle>
@@ -1187,6 +1266,7 @@ export default function RevenueDocumentationPage() {
               <SummaryLine label="Modo" value={simpleDocumentMode === 'custom' ? 'Personalizado' : 'Predeterminado'} />
               <SummaryLine label="Máquinas seleccionadas" value={String(selectedMachines.length)} />
               <SummaryLine label="Facturación real" value={formatCurrency(realRevenue)} />
+              <SummaryLine label="Tras porcentaje oculto" value={formatCurrency(visibleRevenue)} />
               {simpleDocumentMode === 'custom' ? (
                 <>
                   <SummaryLine label="Subtotal filas" value={formatCurrency(customRowsSubtotal)} strong />
@@ -1194,7 +1274,7 @@ export default function RevenueDocumentationPage() {
                 </>
               ) : (
                 <>
-                  <SummaryLine label={`Comisión ${parsedCommissionPercent}%`} value={formatCurrency(calculatedCommission)} />
+                  <SummaryLine label="Comisión por máquina" value={formatCurrency(calculatedCommission)} />
                   <SummaryLine label="Base imponible PDF" value={formatCurrency(baseAmount)} strong />
                   <SummaryLine label={`IVA ${parsedIva}%`} value={formatCurrency(ivaAmount)} />
                 </>
@@ -1232,7 +1312,7 @@ export default function RevenueDocumentationPage() {
               ivaAmount={ivaAmount}
               totalAmount={totalAmount}
               selectedMachines={selectedMachines}
-              realRevenue={realRevenue}
+              realRevenue={visibleRevenue}
               period={period}
             />
           )}
@@ -1240,7 +1320,7 @@ export default function RevenueDocumentationPage() {
       </section>
         </TabsContent>
 
-        <TabsContent value="complete" className="mt-5">
+        <TabsContent forceMount value="complete" className="mt-5 data-[state=inactive]:hidden print:block">
           <CompleteRevenueDocumentation
             machines={machines.filter((machine) => machine.source === 'televend')}
             loading={loading}
@@ -1338,9 +1418,11 @@ function PresetProductCard({
 function PriceEditorInput({
   value,
   onValueChange,
+  ariaLabel,
 }: {
   value: number;
   onValueChange: (value: string) => void;
+  ariaLabel?: string;
 }) {
   const [draft, setDraft] = useState(Number.isFinite(value) ? String(value) : '0');
 
@@ -1362,6 +1444,7 @@ function PriceEditorInput({
     <Input
       type="text"
       inputMode="decimal"
+      aria-label={ariaLabel}
       value={draft}
       onChange={(event) => handleChange(event.target.value)}
       className="h-10 rounded-xl font-black"
@@ -1493,12 +1576,12 @@ function CommissionDocument({
             </div>
             <div className="flex justify-between gap-3">
               <span>Periodo</span>
-              <span className="font-black text-zinc-900">{period === 'monthly' ? 'Este mes' : 'Hoy'}</span>
+              <span className="font-black text-zinc-900">{periodLabel(period)}</span>
             </div>
           </div>
         </section>
 
-        <footer className="absolute bottom-14 left-8 right-8 text-center text-sm font-black print:bottom-[26mm] print:left-[20mm] print:right-[20mm]">
+        <footer className="mt-10 text-center text-xs font-black print:absolute print:bottom-[26mm] print:left-[20mm] print:right-[20mm]">
           {company.footer}
         </footer>
       </article>
@@ -1532,7 +1615,7 @@ function CustomCommissionDocument({
       </div>
 
       <article id="commission-document" className="relative mx-auto min-h-[720px] w-full max-w-[794px] overflow-hidden bg-white px-6 py-10 text-zinc-950 print:min-h-[297mm] print:w-[210mm] print:max-w-none print:px-[16mm] print:py-[18mm] sm:px-12">
-        <header className="grid grid-cols-[1fr_auto] items-start gap-6">
+        <header className="grid grid-cols-1 items-start gap-6 sm:grid-cols-[1fr_auto] print:grid-cols-[1fr_auto]">
           <div className="text-sm font-semibold leading-6">
             <p className="font-black">{company.name}</p>
             <p className="font-black">CIF: {company.cif}</p>
@@ -1556,15 +1639,15 @@ function CustomCommissionDocument({
           <p className="text-lg font-black">Cliente: {clientName || 'Nombre del cliente'}</p>
         </section>
 
-        <section className="mt-12 overflow-hidden border border-zinc-200">
-          <div className="grid grid-cols-[1fr_7rem_7rem_8rem] border-b-4 border-white text-sm font-black uppercase">
+        <section className="mt-12 overflow-x-auto border border-zinc-200 print:overflow-visible">
+          <div className="grid min-w-[36rem] grid-cols-[minmax(0,1fr)_7rem_7rem_8rem] print:min-w-0 border-b-4 border-white text-sm font-black uppercase">
             <div className="bg-cyan-100 px-4 py-4 text-center">Descripción</div>
             <div className="bg-zinc-900 px-3 py-4 text-center text-white">Ventas</div>
             <div className="bg-zinc-900 px-3 py-4 text-center text-white">Comisión</div>
             <div className="bg-zinc-900 px-3 py-4 text-center text-white">Importe</div>
           </div>
 
-          <div className="grid grid-cols-[1fr_7rem_7rem_8rem] bg-zinc-100 text-sm">
+          <div className="grid min-w-[36rem] grid-cols-[minmax(0,1fr)_7rem_7rem_8rem] bg-zinc-100 text-sm print:min-w-0">
             {rows.map((row) => (
               <div key={row.id} className="contents">
                 <div className="border-b border-white px-4 py-4 text-base font-semibold">
@@ -1631,27 +1714,29 @@ function CompleteRevenueDocumentation({
   const [hiddenProducts, setHiddenProducts] = useState<Set<string>>(new Set());
   const [priceEditorOpen, setPriceEditorOpen] = useState(false);
   const [priceSearch, setPriceSearch] = useState('');
-  const [editableCatalog, setEditableCatalog] = useState(productPriceCatalog);
+  const { catalog: editableCatalog, setCatalog: setEditableCatalog, ready: catalogReady, saving: catalogSaving, dirty: catalogDirty, error: catalogError, load: reloadCatalog, save: saveCatalog } = useDocumentationCatalog(productPriceCatalog);
+  const [editingTable, setEditingTable] = useState(false);
 
   const parsedCommission = Number(commissionPercent) || 0;
   const parsedIva = Number(ivaPercent) || 0;
   const rows = useMemo(() => aggregateMachineCsvs(machineInputs), [machineInputs]);
 
   const calculatedRows = useMemo<CompleteAggregatedProductRow[]>(() => rows.map((row) => {
-    const testUnits = Math.min(row.soldUnits, Math.max(0, testUnitsByProduct[row.id] ?? row.failedUnits ?? 0));
-    const payableUnits = Math.max(0, row.soldUnits - testUnits);
-    const difference = round2(row.saleWithoutVatFixed - row.purchaseWithoutVat);
-    const commissionAmount = round2(Math.max(0, difference) * payableUnits * (parsedCommission / 100));
+    const soldUnits = row.soldUnits;
+    const fixedPerBottle = editableCatalog[row.id]?.fixedPerBottle ?? null;
+    const { testUnits, payableUnits, difference, commissionAmount } = productCommission(soldUnits, testUnitsByProduct[row.id] ?? row.failedUnits ?? 0, row.saleWithoutVatFixed, row.purchaseWithoutVat, parsedCommission, fixedPerBottle);
 
     return {
       ...row,
+      soldUnits,
+      fixedPerBottle,
       highlighted: highlightedProducts.has(row.id),
       testUnits,
       payableUnits,
       difference,
       commissionAmount,
     };
-  }), [rows, testUnitsByProduct, highlightedProducts, parsedCommission]);
+  }), [rows, testUnitsByProduct, highlightedProducts, parsedCommission, editableCatalog]);
 
   const visibleRows = useMemo(() => calculatedRows.filter((row) => !hiddenProducts.has(row.id)), [calculatedRows, hiddenProducts]);
   const totals = visibleRows.reduce((acc, row) => ({
@@ -1663,7 +1748,15 @@ function CompleteRevenueDocumentation({
   const completeBaseAmount = round2(totals.commission / (1 + (parsedIva / 100)));
   const ivaAmount = round2(totals.commission - completeBaseAmount);
   const totalWithIva = round2(totals.commission);
-  const missingPriceRows = visibleRows.filter((row) => !row.catalogMatched || row.priceWithVat <= 0 || row.saleWithoutVatFixed <= 0 || row.purchaseWithoutVat <= 0);
+  const missingPriceRows = visibleRows.filter((row) => row.fixedPerBottle === null && (!row.catalogMatched || row.priceWithVat <= 0 || row.saleWithoutVatFixed <= 0 || row.purchaseWithoutVat < 0));
+  useEffect(() => {
+    if (!catalogReady) return;
+    setMachineInputs(current => current.map(machine => ({ ...machine, importedRows: machine.importedRows.map(row => {
+      const price = getProductPricing(row.productName, editableCatalog);
+      return { ...row, priceWithVat: price.priceWithVat, saleWithoutVatFixed: price.saleWithoutVat, purchaseWithoutVat: price.purchaseWithoutVat, catalogMatched: price.matched };
+    }) })));
+  }, [editableCatalog, catalogReady]);
+
   const filteredCatalogEntries = useMemo(() => {
     const q = normalizeCatalogProduct(priceSearch);
     return Object.entries(editableCatalog)
@@ -1725,6 +1818,29 @@ function CompleteRevenueDocumentation({
     }
   }
 
+  function updateFixedCommission(rowId: string, fixedPerBottle: number | null) {
+    const row = calculatedRows.find(item => item.id === rowId);
+    if (!row) return;
+    setEditableCatalog(current => ({ ...current, [rowId]: {
+      ...(current[rowId] || { priceWithVat: row.priceWithVat, saleWithoutVat: row.saleWithoutVatFixed, purchaseWithoutVat: row.purchaseWithoutVat }),
+      fixedPerBottle,
+    } }));
+  }
+
+  function updateMachineProductUnits(machineId: string, rowId: string, value: string) {
+    const units = Math.max(0, Math.floor(parseNumberValue(value)));
+    setMachineInputs(current => current.map(machine => {
+      if (machine.id !== machineId) return machine;
+      let updated = false;
+      return { ...machine, importedRows: machine.importedRows.map(row => {
+        if (normalizeCatalogProduct(row.productName) !== rowId) return row;
+        const soldUnits = updated ? 0 : units;
+        updated = true;
+        return { ...row, soldUnits };
+      }) };
+    }));
+  }
+
   function updateTestUnits(rowId: string, value: string) {
     const parsed = value.trim() === '' ? undefined : Math.max(0, Number(value) || 0);
     setTestUnitsByProduct((current) => ({ ...current, [rowId]: parsed }));
@@ -1741,6 +1857,7 @@ function CompleteRevenueDocumentation({
     setEditableCatalog((current) => ({
       ...current,
       [rowId]: {
+        ...current[rowId],
         priceWithVat: field === 'priceWithVat' ? parsed : current[rowId]?.priceWithVat ?? currentRow?.priceWithVat ?? 0,
         saleWithoutVat: field === 'saleWithoutVatFixed' ? parsed : current[rowId]?.saleWithoutVat ?? currentRow?.saleWithoutVatFixed ?? 0,
         purchaseWithoutVat: field === 'purchaseWithoutVat' ? parsed : current[rowId]?.purchaseWithoutVat ?? currentRow?.purchaseWithoutVat ?? 0,
@@ -1781,7 +1898,10 @@ function CompleteRevenueDocumentation({
     });
   }
 
-  function printCompleteDocument() {
+  async function printCompleteDocument() {
+    if (!catalogReady || catalogError || catalogDirty) {
+      try { await saveCatalog(); } catch { toast.error('No se pudieron guardar los precios. Revisa el aviso del catálogo.'); return; }
+    }
     if (!clientName.trim()) {
       toast.error('Falta el cliente', { description: 'Rellena el nombre del cliente antes de generar el PDF.' });
       return;
@@ -1861,8 +1981,8 @@ function CompleteRevenueDocumentation({
   }
 
   return (
-    <section className="grid gap-5 print:block xl:grid-cols-[minmax(0,1fr)_32rem]">
-      <div className="space-y-5 print:hidden">
+    <section className="grid gap-5 print:block grid-cols-1">
+      <div className="min-w-0 space-y-5 print:hidden">
         <Card className="border-zinc-200 bg-white shadow-sm">
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1878,6 +1998,10 @@ function CompleteRevenueDocumentation({
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm" aria-live="polite">
+              <div className="min-w-0 flex-1"><p className="font-semibold">{catalogSaving ? 'Guardando precios…' : !catalogReady ? 'Catálogo pendiente de cargar' : catalogDirty ? 'Cambios pendientes de guardar' : 'Precios guardados en la plataforma'}</p>{catalogError && <p role="alert" className="mt-1 break-words text-red-700">{catalogError}</p>}</div>
+              {!catalogReady ? <Button type="button" variant="outline" onClick={reloadCatalog}>Reintentar carga</Button> : <Button type="button" variant="outline" disabled={catalogSaving || !catalogDirty} onClick={() => { void saveCatalog().catch(() => {}); }}>Guardar precios</Button>}
+            </div>
             {missingPriceRows.length > 0 && (
               <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
                 Hay {missingPriceRows.length} producto(s) sin precio. No se podrá generar el PDF hasta completar el catálogo.
@@ -2012,7 +2136,8 @@ function CompleteRevenueDocumentation({
           <Card className="border-zinc-200 bg-white shadow-sm">
             <CardHeader>
               <CardTitle className="text-xl font-black text-zinc-900">Ajuste por producto</CardTitle>
-              <CardDescription>Añade pruebas por producto, destaca líneas o excluye productos del documento.</CardDescription>
+              <CardDescription>Ajusta precios y pruebas. Puedes sustituir el porcentaje sobre margen por una comisión fija por botella.</CardDescription>
+              <Button type="button" variant="outline" onClick={() => setEditingTable(current => !current)} className="w-fit">{editingTable ? 'Cerrar edición del cuadro' : 'Editar casillas en el cuadro'}</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -2025,7 +2150,7 @@ function CompleteRevenueDocumentation({
                           <p className="break-words font-black text-zinc-900">{row.productName}</p>
                           <p className="mt-1 text-xs font-semibold text-zinc-500">
                             Real: {row.soldUnits} · Pruebas: {row.testUnits} · Aplicables: {row.payableUnits}
-                            {(!row.catalogMatched || row.priceWithVat <= 0 || row.saleWithoutVatFixed <= 0 || row.purchaseWithoutVat <= 0) && <span className="ml-2 font-black text-red-600">Precio incompleto</span>}
+                            {missingPriceRows.some(missing => missing.id === row.id) && <span className="ml-2 font-black text-red-600">Precio incompleto</span>}
                             {isHidden && <span className="ml-2 font-black text-zinc-700">Excluido</span>}
                           </p>
                         </div>
@@ -2035,7 +2160,12 @@ function CompleteRevenueDocumentation({
                         </div>
                       </div>
 
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[7rem_7rem_7rem_7rem_1fr] lg:items-end">
+                      <div className="flex flex-wrap items-center gap-3 rounded-xl bg-zinc-50 p-3">
+                        <Switch id={`fixed-${row.id}`} checked={row.fixedPerBottle !== null} onCheckedChange={checked => updateFixedCommission(row.id, checked ? 0.5 : null)} />
+                        <Label htmlFor={`fixed-${row.id}`}>Comisión fija por botella</Label>
+                        {row.fixedPerBottle !== null && <div className="flex items-center gap-2"><PriceEditorInput value={row.fixedPerBottle} onValueChange={value => updateFixedCommission(row.id, Math.max(0, parseNumberValue(value)))} /><span className="shrink-0 text-sm">€ por botella</span></div>}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                         <div className="space-y-1">
                           <Label className="text-[10px] font-black uppercase text-zinc-500">€ venta</Label>
                           <PriceEditorInput
@@ -2068,7 +2198,7 @@ function CompleteRevenueDocumentation({
                             className="h-10 rounded-xl font-black"
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-2 lg:flex lg:justify-end">
+                        <div className="flex flex-wrap gap-2 sm:col-span-2 2xl:col-span-4">
                           <Button type="button" variant={row.highlighted ? 'default' : 'outline'} onClick={() => toggleHighlight(row.id)} className="h-10 rounded-xl font-black">
                             Destacar
                           </Button>
@@ -2086,7 +2216,7 @@ function CompleteRevenueDocumentation({
         )}
       </div>
 
-      <aside className="space-y-4 xl:sticky xl:top-24 xl:h-fit">
+      <aside className="min-w-0 space-y-4">
         <Card className="border-zinc-200 bg-white shadow-sm print:hidden">
           <CardHeader>
             <CardTitle className="text-xl font-black text-zinc-900">Resumen completo</CardTitle>
@@ -2121,6 +2251,11 @@ function CompleteRevenueDocumentation({
           ivaAmount={ivaAmount}
           totalWithIva={totalWithIva}
           commissionPercent={parsedCommission}
+          editing={editingTable}
+          onPriceChange={updateCompleteProductPrice}
+          onTestsChange={updateTestUnits}
+          onUnitsChange={updateMachineProductUnits}
+          onFixedChange={(id, value) => updateFixedCommission(id, Math.max(0, parseNumberValue(value)))}
         />
       </aside>
 
@@ -2209,6 +2344,11 @@ function CompleteDocumentPreview({
   ivaAmount,
   totalWithIva,
   commissionPercent,
+  editing = false,
+  onPriceChange,
+  onTestsChange,
+  onUnitsChange,
+  onFixedChange,
 }: {
   clientName: string;
   documentDate: string;
@@ -2219,6 +2359,11 @@ function CompleteDocumentPreview({
   ivaAmount: number;
   totalWithIva: number;
   commissionPercent: number;
+  editing?: boolean;
+  onPriceChange?: (rowId: string, field: 'priceWithVat' | 'saleWithoutVatFixed' | 'purchaseWithoutVat', value: string) => void;
+  onTestsChange?: (rowId: string, value: string) => void;
+  onUnitsChange?: (machineId: string, rowId: string, value: string) => void;
+  onFixedChange?: (rowId: string, value: string) => void;
 }) {
   const baseAmount = round2(totals.commission / (1 + (ivaPercent / 100)));
 
@@ -2226,6 +2371,7 @@ function CompleteDocumentPreview({
     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm print:rounded-none print:border-0 print:shadow-none">
       <div className="border-b border-zinc-100 p-4 print:hidden">
         <p className="text-sm font-black uppercase text-zinc-500">Vista previa PDF completo</p>
+        {editing && <p className="mt-2 text-sm text-emerald-700">Edita unidades, pruebas y precios directamente. Los totales se recalculan; los precios se guardan en el catálogo.</p>}
       </div>
       <article id="complete-document" className="mx-auto min-h-[720px] w-full max-w-[1120px] bg-white p-5 text-zinc-950 print:min-h-[297mm] print:w-[210mm] print:max-w-none print:p-[6mm]">
         <header className="mb-2 flex items-start justify-between gap-3">
@@ -2240,16 +2386,17 @@ function CompleteDocumentPreview({
         </header>
 
         <div className="mb-2 grid grid-cols-3 gap-1.5 text-[10px] font-black print:text-[7px]">
-          <div className="rounded bg-zinc-100 px-2 py-1">Comisión: {commissionPercent}%</div>
+          <div className="rounded bg-zinc-100 px-2 py-1">Comisión: {commissionPercent}%{rows.some(row => row.fixedPerBottle !== null) ? ' · salvo filas por botella' : ''}</div>
           <div className="rounded bg-zinc-100 px-2 py-1">Pruebas: {totals.testUnits}</div>
           <div className="rounded bg-zinc-100 px-2 py-1">Aplicables: {totals.payableUnits}</div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[11px] print:text-[6.3px]">
+        <p className="mb-2 text-xs text-zinc-500 print:hidden">Desplaza el cuadro horizontalmente para ver todas las columnas.</p>
+        <div className="max-w-full overflow-x-auto print:overflow-visible">
+          <table className="w-full min-w-[850px] border-collapse text-[11px] print:min-w-0 print:text-[6.3px]">
             <thead>
               <tr>
-                <th className="border border-zinc-300 px-1 py-1 text-left" style={{ backgroundColor: '#ffff00' }}>Productos</th>
+                <th className="min-w-32 border border-zinc-300 px-1 py-1 text-left print:min-w-0" style={{ backgroundColor: '#ffff00' }}>Productos</th>
                 {machineInputs.filter((machine) => machine.importedRows.length > 0).map((machine) => (
                   <th key={machine.id} className="border border-zinc-300 px-1 py-1 text-right" style={{ backgroundColor: '#ff9900' }}>
                     {machine.name || 'MAQ.'}
@@ -2261,8 +2408,8 @@ function CompleteDocumentPreview({
                 <th className="border border-zinc-300 px-1 py-1 text-right" style={{ backgroundColor: '#00e5ef' }}>€ venta</th>
                 <th className="border border-zinc-300 px-1 py-1 text-right" style={{ backgroundColor: '#00e5ef' }}>€ sin IVA</th>
                 <th className="border border-zinc-300 px-1 py-1 text-right" style={{ backgroundColor: '#00e5ef' }}>€ compra</th>
-                <th className="border border-zinc-300 px-1 py-1 text-right">Dif.</th>
-                <th className="border border-zinc-300 px-1 py-1 text-right">% {clientName || 'Cliente'}</th>
+                <th className="border border-zinc-300 px-1 py-1 text-right">Margen / fijo</th>
+                <th className="border border-zinc-300 px-1 py-1 text-right">Comisión {clientName || 'Cliente'}</th>
               </tr>
             </thead>
             <tbody>
@@ -2271,16 +2418,16 @@ function CompleteDocumentPreview({
                   <td className="border border-zinc-300 px-1 py-0.5 font-semibold">{row.productName}</td>
                   {machineInputs.filter((machine) => machine.importedRows.length > 0).map((machine) => (
                     <td key={machine.id} className="border border-zinc-300 px-1 py-0.5 text-right">
-                      {row.machineUnits[machine.id] || 0}
+                      <EditableDocumentNumber editing={editing} value={row.machineUnits[machine.id] || 0} onChange={value => onUnitsChange?.(machine.id, row.id, value)} label={`Unidades ${row.productName} · ${machine.name}`} />
                     </td>
                   ))}
                   <td className="border border-zinc-300 px-1 py-0.5 text-right">{row.soldUnits}</td>
-                  <td className="border border-zinc-300 px-1 py-0.5 text-right">{row.testUnits}</td>
+                  <td className="border border-zinc-300 px-1 py-0.5 text-right"><EditableDocumentNumber editing={editing} value={row.testUnits} onChange={value => onTestsChange?.(row.id, value)} label={`Pruebas ${row.productName}`} /></td>
                   <td className="border border-zinc-300 px-1 py-0.5 text-right font-black">{row.payableUnits}</td>
-                  <td className="border border-zinc-300 px-1 py-0.5 text-right">{formatCurrency(row.priceWithVat)}</td>
-                  <td className="border border-zinc-300 px-1 py-0.5 text-right">{formatCurrency(row.saleWithoutVatFixed)}</td>
-                  <td className="border border-zinc-300 px-1 py-0.5 text-right">{formatCurrency(row.purchaseWithoutVat)}</td>
-                  <td className="border border-zinc-300 px-1 py-0.5 text-right">{formatCurrency(row.difference)}</td>
+                  <td className="border border-zinc-300 px-1 py-0.5 text-right"><EditableDocumentNumber editing={editing} value={row.priceWithVat} currency onChange={value => onPriceChange?.(row.id, 'priceWithVat', value)} label={`Precio de venta ${row.productName}`} /></td>
+                  <td className="border border-zinc-300 px-1 py-0.5 text-right"><EditableDocumentNumber editing={editing} value={row.saleWithoutVatFixed} currency onChange={value => onPriceChange?.(row.id, 'saleWithoutVatFixed', value)} label={`Venta sin IVA ${row.productName}`} /></td>
+                  <td className="border border-zinc-300 px-1 py-0.5 text-right"><EditableDocumentNumber editing={editing} value={row.purchaseWithoutVat} currency onChange={value => onPriceChange?.(row.id, 'purchaseWithoutVat', value)} label={`Precio de compra ${row.productName}`} /></td>
+                  <td className="border border-zinc-300 px-1 py-0.5 text-right">{row.fixedPerBottle === null ? formatCurrency(row.difference) : <><EditableDocumentNumber editing={editing} value={row.fixedPerBottle} currency onChange={value => onFixedChange?.(row.id, value)} label={`Comisión fija ${row.productName}`} /> <span>por botella</span></>}</td>
                   <td className="border border-zinc-300 px-1 py-0.5 text-right font-black">{formatCurrency(row.commissionAmount)}</td>
                 </tr>
               ))}
@@ -2305,4 +2452,13 @@ function CompleteDocumentPreview({
       </article>
     </div>
   );
+}
+
+function EditableDocumentNumber({ value, editing, currency = false, onChange, label }: {
+  value: number; editing: boolean; currency?: boolean; onChange: (value: string) => void; label: string;
+}) {
+  return <>
+    {editing && <span className="block min-w-20 print:hidden"><PriceEditorInput value={value} onValueChange={onChange} ariaLabel={label} /></span>}
+    <span className={editing ? 'hidden print:inline' : ''}>{currency ? formatCurrency(value) : value}</span>
+  </>;
 }

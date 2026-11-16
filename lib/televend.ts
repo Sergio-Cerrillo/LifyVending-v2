@@ -626,6 +626,16 @@ async function getTelevendMachines(): Promise<TelevendMachineRow[]> {
   });
 }
 
+// Identificadores del catálogo, sin consultar productos ni modificar stock.
+export async function getTelevendMachineOptions() {
+  const machines = await getTelevendMachines();
+  return machines.map(machine => ({
+    value: Math.round(numberFromUnknown(machine.id)),
+    label: stringFromUnknown(machine.caption) || '',
+    clientName: stringFromUnknown(machine.client?.caption),
+  })).filter(machine => machine.value > 0 && machine.label);
+}
+
 async function getTelevendMachinistMachinesMap() {
   const machines = new Map<number, TelevendMachinistMachineRow>();
   const pageSize = 200;

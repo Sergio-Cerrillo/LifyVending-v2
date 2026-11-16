@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, ClipboardList, Loader2, MapPin, MoreVertical, PackageCheck, Pencil, Plus, Route, Search, SlidersHorizontal, UserRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, ClipboardList, Loader2, MapPin, MoreVertical, PackageCheck, Pencil, Plus, Route, Search, SlidersHorizontal, Trash2, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -36,6 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWithTimeout } from '@/lib/client-timeouts';
 import { getFreshAccessToken } from '@/lib/auth-session';
 import { cn } from '@/lib/utils';
+import { RouteMachineMissingStock } from '@/components/admin/route-machine-missing-stock';
 
 type Urgency = 'empty' | 'critical' | 'normal' | 'ok' | 'unknown';
 type RouteMachineStatus = 'pending' | 'done';
@@ -146,16 +148,23 @@ function getUrgencySortValue(urgency: Urgency) {
 }
 
 function formatDate(value: string) {
+  if (!value) return 'Sin fecha';
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha';
+
   return new Intl.DateTimeFormat('es-ES', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(new Date(`${value}T12:00:00`));
+  }).format(date);
 }
 
 export default function RouteManagementPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [routeToDelete, setRouteToDelete] = useState<ReplenishmentRoute | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'reponedor'>('reponedor');
@@ -362,6 +371,33 @@ export default function RouteManagementPage() {
     }
   }
 
+  async function deleteRoute() {
+    if (!routeToDelete || deleting || userRole !== 'admin') return;
+    const routeId = routeToDelete.id;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Sesión no disponible');
+      const response = await fetchWithTimeout('/api/admin/routes', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routeId }),
+      }, 30_000);
+      const data = await response.json();
+      // Un 404 también confirma que la ruta ya no existe y debe salir de la lista.
+      if (!response.ok && response.status !== 404) throw new Error(data.error || 'No se pudo eliminar la ruta');
+      setRoutes(current => current.filter(route => route.id !== routeId));
+      if (selectedRouteId === routeId) setSelectedRouteId(null);
+      if (routeDraft.routeId === routeId) setEditDialogOpen(false);
+      setRouteToDelete(null);
+      toast.success(response.status === 404 ? 'La ruta ya estaba eliminada' : 'Ruta eliminada');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar la ruta';
+      setDeleteError(message);
+    } finally { setDeleting(false); }
+  }
+
   async function updateMachineStatus(routeMachineId: string, status: RouteMachineStatus) {
     const previousRoutes = routes;
     setRoutes((currentRoutes) => currentRoutes.map((route) => {
@@ -469,6 +505,28 @@ export default function RouteManagementPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-3 py-3 sm:px-0 sm:py-0">
+      {userRole === 'admin' && (
+        <AlertDialog open={!!routeToDelete} onOpenChange={open => { if (!open && !deleting) { setRouteToDelete(null); setDeleteError(null); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar ruta</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Quieres eliminar «{routeToDelete?.name}»{routeToDelete ? ` del ${formatDate(routeToDelete.scheduledDate)}` : ''}?
+                Se borrarán la ruta, las asignaciones de sus máquinas y su historial de actividad.
+                Las máquinas y el reponedor se conservarán. Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {deleteError && <p role="alert" className="text-sm text-red-700">{deleteError}</p>}
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction disabled={deleting} className="bg-red-600 text-white hover:bg-red-700"
+                onClick={event => { event.preventDefault(); void deleteRoute(); }}>
+                {deleting ? 'Eliminando…' : 'Eliminar ruta'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
       <div className="overflow-hidden rounded-[1.6rem] border border-zinc-200 bg-white shadow-sm">
         <div className="bg-linear-to-br from-zinc-950 via-zinc-900 to-emerald-950 p-4 text-white sm:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -878,7 +936,7 @@ export default function RouteManagementPage() {
                   </div>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-56">
-                  {userRole === 'admin' && (
+                  {userRole === 'admin' && <>
                     <Button
                       type="button"
                       variant="outline"
@@ -888,7 +946,13 @@ export default function RouteManagementPage() {
                       <Pencil className="mr-2 h-4 w-4" />
                       Editar ruta
                     </Button>
-                  )}
+                    <Button type="button" variant="outline" disabled={deleting}
+                      className="h-11 rounded-2xl border-red-200 bg-white font-black text-red-700 hover:bg-red-50 hover:text-red-800"
+                      onClick={() => { setDeleteError(null); setRouteToDelete(selectedRoute); }}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar ruta
+                    </Button>
+                  </>}
                   <div className="rounded-2xl bg-zinc-100 p-1">
                     <div className="flex items-center justify-between px-2 py-1 text-xs font-black text-zinc-600">
                       <span>Progreso</span>
@@ -945,12 +1009,13 @@ export default function RouteManagementPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 pl-3 sm:flex sm:shrink-0 sm:pl-0">
+                    <div className="grid grid-cols-2 gap-2 pl-3 sm:w-72 sm:shrink-0 sm:pl-0">
+                      <RouteMachineMissingStock routeMachineId={routeMachine.id} machineName={routeMachine.machine.name} />
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="outline"
-                            className="col-span-2 h-12 rounded-2xl bg-white font-black text-zinc-950 shadow-sm sm:col-span-1"
+                            className="col-span-2 h-12 rounded-2xl bg-white font-black text-zinc-950 shadow-sm"
                           >
                             <MoreVertical className="mr-2 h-5 w-5" />
                             Reposición
