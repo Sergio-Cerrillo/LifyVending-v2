@@ -7,6 +7,7 @@ import { Footer } from "@/components/footer"
 import { PublicMotion, ScrollProgress } from "@/components/public-scroll-effects"
 import { PublicIntro } from "@/components/public-intro"
 import { EnvironmentStory } from "@/components/environment-story"
+import { RecoveryRedirect } from "@/components/recovery-redirect"
 import "./public-site.css"
 import "./experiences.css"
 import "./hero-visual.css"
@@ -16,6 +17,7 @@ import "./vending-startup.css"
 export default function Home() {
   return (
     <main className="public-site public-home" data-intro="pending">
+      <RecoveryRedirect />
       <PublicMotion />
       <ScrollProgress />
       <Navigation />

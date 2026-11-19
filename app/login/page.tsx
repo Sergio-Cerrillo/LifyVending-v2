@@ -280,6 +280,7 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
+          <Link href="/recuperar-contrasena" className="login-back">¿Has olvidado tu contraseña?</Link>
           <div className="login-status" role="status" aria-live="polite">
             {accessGranted ? "Acceso validado. Abriendo tu panel." : ""}
           </div>
